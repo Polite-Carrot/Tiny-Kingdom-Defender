@@ -109,8 +109,8 @@ export function preLevel(game: Game, level: LevelDef): void {
         return `<img src="${towerThumb(t)}" style="width:50px;height:50px;${ok ? '' : 'filter:grayscale(1);opacity:.35'}" alt="${t}"/>`;
       }).join('')}</div>
       <div class="hero-pick"></div>
-      <div class="stack" style="margin-top:12px"></div>
-      <div class="actions"><button class="btn big start">${icon('play')} Start</button></div>`;
+      <div class="footer"><div class="stack"></div>
+      <div class="actions"><button class="btn big start">${icon('play')} Start</button></div></div>`;
     const heroPick = $(m, '.hero-pick');
     if (meta.featureUnlocked('hero') && !level.modifier?.noHero && meta.d.unlocks.heroes.length > 1) {
       heroPick.innerHTML = `<h3 style="margin:10px 0 4px;font-size:15px">Hero</h3><div class="seg">${meta.d.unlocks.heroes.map((id) => `<button data-h="${id}" class="${meta.d.selectedHero === id ? 'on' : ''}" style="display:flex;align-items:center;gap:4px"><img src="${heroThumb(id)}" style="width:30px;height:30px"/>${HEROES[id].name}</button>`).join('')}</div>`;
@@ -132,7 +132,7 @@ export function preLevel(game: Game, level: LevelDef): void {
       h.close();
       game.startLevel(level, game.pendingStartGoldMult);
     };
-  }, { onClose: () => undefined });
+  }, { wide: true });
 }
 
 // --- Results ----------------------------------------------------------------------------------

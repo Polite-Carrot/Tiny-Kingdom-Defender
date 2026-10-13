@@ -75,6 +75,7 @@ button * { pointer-events: none; }
 .pill { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 6px; border-radius: 20px; background: rgba(30,22,50,.72);
   color: #fff; font-weight: 900; font-size: 18px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); backdrop-filter: blur(4px); }
 .pill .ico { width: 30px; height: 30px; display: grid; place-items: center; }
+.ico { display: inline-block; width: 1.25em; height: 1.25em; vertical-align: middle; flex: none; line-height: 0; }
 .ico svg { width: 100%; height: 100%; display: block; }
 .dot { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; border-radius: 50%; background: var(--red); border: 2px solid #fff; box-shadow: 0 2px 0 rgba(0,0,0,.25); display: none; animation: dotPop 1.4s ease-in-out infinite; }
 .dot.on { display: block; }
@@ -113,12 +114,12 @@ button * { pointer-events: none; }
 body.landscape .title-screen .menu-main { flex-direction: row; align-items: flex-end; justify-content: space-between; padding: 0 calc(var(--sar) + 18px) calc(var(--sab) + 16px) calc(var(--sal) + 18px); }
 body.landscape .title-screen .menu-side { max-width: 300px; justify-content: flex-start; }
 body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
-.version { position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 4px); font-size: 11px; color: rgba(255,255,255,.55); padding: 6px; }
+.version { background: transparent; position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 4px); font-size: 11px; color: rgba(255,255,255,.55); padding: 6px; }
 
 /* ---------- World map ---------- */
 .map-screen { background: rgba(20, 14, 34, .25); }
 .chapter-tabs { display: flex; gap: 6px; justify-content: center; padding: 4px 12px; flex-wrap: wrap; }
-.chapter-tab { min-height: 44px; padding: 6px 14px; border-radius: 14px; font-weight: 900; font-size: 15px; background: rgba(255,255,255,.7); color: var(--ink); box-shadow: 0 3px 0 rgba(0,0,0,.2); }
+.chapter-tab { min-height: 44px; padding: 6px 11px; border-radius: 14px; font-weight: 900; font-size: 15px; background: rgba(255,255,255,.7); color: var(--ink); box-shadow: 0 3px 0 rgba(0,0,0,.2); }
 .chapter-tab.on { background: var(--gold); color: #5a3a00; }
 .chapter-tab.locked { opacity: .5; }
 .map-board { position: relative; flex: 1; margin: 8px calc(var(--sar) + 12px) calc(var(--sab) + 12px) calc(var(--sal) + 12px); border-radius: 26px; overflow: hidden;
@@ -130,6 +131,7 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
   box-shadow: inset 0 -5px 0 var(--blue-d), 0 4px 0 rgba(0,0,0,.3), 0 0 0 4px rgba(255,255,255,.85); text-shadow: 0 2px 0 rgba(0,0,0,.3); }
 .node-btn.done { background: var(--green); box-shadow: inset 0 -5px 0 var(--green-d), 0 4px 0 rgba(0,0,0,.3), 0 0 0 4px rgba(255,255,255,.85); }
 .node-btn.boss { background: var(--red); box-shadow: inset 0 -5px 0 var(--red-d), 0 4px 0 rgba(0,0,0,.3), 0 0 0 4px #ffd84a; }
+.node-btn.locked .lockico { filter: brightness(0) invert(1); opacity: .85; }
 .node-btn.locked { background: #8b8698; box-shadow: inset 0 -5px 0 #67627a, 0 4px 0 rgba(0,0,0,.3), 0 0 0 4px rgba(255,255,255,.5); }
 .node-btn.current { animation: nodePulse 1.2s ease-in-out infinite; }
 @keyframes nodePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
@@ -152,6 +154,8 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 .modal .ribbon.lose { background: var(--red); box-shadow: inset 0 -5px 0 var(--red-d); }
 .modal .ribbon.purple { background: var(--purple); box-shadow: inset 0 -5px 0 var(--purple-d); }
 .modal-close { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,.15); color: #fff; font-size: 20px; font-weight: 900; z-index: 2; }
+.modal .footer { position: sticky; bottom: -18px; margin: 10px -18px -18px; padding: 10px 18px 16px; background: var(--paper); border-radius: 0 0 24px 24px; z-index: 3; box-shadow: 0 -8px 12px -8px rgba(0,0,0,.15); display: flex; flex-direction: column; gap: 10px; }
+.modal .footer .actions { margin-top: 0; }
 .modal .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .modal .stack { display: flex; flex-direction: column; gap: 10px; }
 

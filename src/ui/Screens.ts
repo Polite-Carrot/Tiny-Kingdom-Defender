@@ -213,7 +213,7 @@ export class MapScreen {
       const starHtml = unlocked ? [0, 1, 2].map((k) => icon(k < stars ? 'star' : 'starEmpty')).join('') : '';
       html += `<div class="map-node" style="grid-row:${row + 1};grid-column:${col + 1}">
         ${boss ? `<span class="node-skull">${ICONS.skull}</span>` : ''}
-        <button class="node-btn ${cls}" data-g="${g}">${unlocked ? g + 1 : ICONS.lock.replace('<svg', '<svg style="width:26px;height:26px"')}</button>
+        <button class="node-btn ${cls}" data-g="${g}">${unlocked ? g + 1 : `<span class="lockico" style="display:inline-block;width:26px;height:26px">${ICONS.lock}</span>`}</button>
         <div class="node-stars">${starHtml}</div></div>`;
     }
     nodes.innerHTML = html;
