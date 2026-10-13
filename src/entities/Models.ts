@@ -1,11 +1,11 @@
 // All game models, built procedurally from primitives. Forward is +Z.
 
 import * as THREE from 'three';
-import { ModelBuilder } from './ModelBuilder';
-import type { TowerId } from '../data/towers';
+import { ModelBuilder, mergeTransformed } from './ModelBuilder';
+import { MAX_TIER, BRANCH_TIER, materialFor, starsOf, type TowerId } from '../data/towers';
 import type { EnemyId } from '../data/enemies';
 import type { HeroId } from '../data/heroes';
-import type { ChapterTheme } from '../data/levels';
+import type { PropType } from '../data/themes';
 
 const cache = new Map<string, THREE.BufferGeometry>();
 function cached(key: string, fn: () => THREE.BufferGeometry): THREE.BufferGeometry {
@@ -17,15 +17,14 @@ function cached(key: string, fn: () => THREE.BufferGeometry): THREE.BufferGeomet
   return g;
 }
 
-const STONE = '#c9c1b3';
-const STONE_D = '#a39a8b';
 const WOOD = '#9a6a3f';
 const WOOD_D = '#74492a';
 const ROOF = '#d9573f';
-const METAL = '#5d6470';
 const GOLD = '#f2c94c';
 
 // --- Towers -------------------------------------------------------------------
+// Every tier is a new building material (data/towers.ts TIER_MATERIALS) and adds ornaments:
+// tier 2+ roof, 3+ flag, 4+ banners, 6+ trim bands, 8+ floating gem, 9+ spikes, 10 halo.
 
 export interface TowerModel {
   base: THREE.BufferGeometry;
@@ -33,133 +32,231 @@ export interface TowerModel {
   headY: number;
 }
 
-function stoneBase(b: ModelBuilder, h: number, r = 0.42) {
-  b.cyl(r, r + 0.06, 0.16, 8, STONE_D, { y: 0.08 });
-  b.cyl(r - 0.05, r, h, 8, STONE, { y: 0.16 + h / 2 });
-  // Brick band.
-  b.cyl(r - 0.02, r - 0.02, 0.06, 8, STONE_D, { y: 0.16 + h * 0.55 });
+interface Mat {
+  body: THREE.Color;
+  trim: THREE.Color;
+  roof: THREE.Color;
+  accent: THREE.Color;
+  /** Glowing variant of the accent for gems/halos. */
+  glow: THREE.Color;
 }
 
-export function towerModel(id: TowerId, tier: number, branch: number): TowerModel {
-  const key = `${id}-${tier}-${branch}`;
-  const base = cached(`tb-${key}`, () => buildTowerBase(id, tier, branch));
+function matFor(tier: number): Mat {
+  const m = materialFor(tier);
+  return {
+    body: new THREE.Color(m.body),
+    trim: new THREE.Color(m.trim),
+    roof: new THREE.Color(m.roof),
+    accent: new THREE.Color(m.accent),
+    glow: new THREE.Color(m.accent).multiplyScalar(m.glow),
+  };
+}
+
+const headYCache = new Map<string, number>();
+
+export function towerModel(id: TowerId, level: number, branch: number): TowerModel {
+  const tier = Math.min(level, MAX_TIER);
+  const stars = Math.min(5, starsOf(level));
+  const key = `${id}-${tier}-${branch}-${stars}`;
+  const base = cached(`tb-${key}`, () => {
+    const r = buildTowerBase(id, tier, branch);
+    if (stars > 0) {
+      // Star levels: little golden stars orbiting above the tower.
+      const b = new ModelBuilder();
+      for (let i = 0; i < stars; i++) {
+        const a = (i / stars) * Math.PI * 2;
+        b.octa(0.07, new THREE.Color('#fff2a8').multiplyScalar(1.8), { x: Math.cos(a) * 0.42, y: r.headY + 0.75, z: Math.sin(a) * 0.42, sy: 1.4 });
+      }
+      const merged = mergeTransformed([{ geo: r.geo, x: 0, y: 0, z: 0, ry: 0, s: 1 }, { geo: b.build(), x: 0, y: 0, z: 0, ry: 0, s: 1 }]);
+      merged.computeVertexNormals();
+      r.geo = merged;
+    }
+    headYCache.set(key, r.headY);
+    return r.geo;
+  });
   const head = cached(`th-${key}`, () => buildTowerHead(id, tier, branch));
-  return { base, head, headY: towerHeadY(id, tier) };
+  return { base, head, headY: headYCache.get(key) ?? 1 };
 }
 
-function towerHeadY(id: TowerId, tier: number): number {
-  switch (id) {
-    case 'archer': return 0.75 + tier * 0.12;
-    case 'cannon': return 0.55 + tier * 0.06;
-    case 'frost': return 0.85 + tier * 0.1;
-    case 'lightning': return 1.0 + tier * 0.12;
+/** Plinth: wooden logs at tier 1, cut stone from tier 2. */
+function plinth(b: ModelBuilder, tier: number, m: Mat, r = 0.44) {
+  if (tier === 1) {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      b.cyl(0.07, 0.08, 0.18, 5, i % 2 ? WOOD : WOOD_D, { x: Math.cos(a) * (r - 0.06), y: 0.09, z: Math.sin(a) * (r - 0.06) });
+    }
+    b.cyl(r - 0.02, r, 0.08, 8, WOOD_D, { y: 0.04 });
+    return;
   }
+  b.cyl(r, r + 0.06, 0.16, 8, m.trim, { y: 0.08 });
 }
 
-function buildTowerBase(id: TowerId, tier: number, branch: number): THREE.BufferGeometry {
+/** Ornaments shared by all tower types. `top` = y of the roof tip, `rad` = body radius. */
+function ornaments(b: ModelBuilder, tier: number, m: Mat, top: number, rad: number, bodyTop: number) {
+  if (tier >= 3) {
+    b.cyl(0.015, 0.015, 0.36, 4, WOOD_D, { y: top + 0.14 });
+    b.box(0.22, 0.12, 0.02, m.accent, { x: 0.11, y: top + 0.26 });
+  }
+  if (tier >= 4) {
+    for (const sx of [-1, 1]) b.box(0.13, 0.26, 0.02, m.roof, { x: sx * (rad * 0.55), y: bodyTop - 0.18, z: rad + 0.015 });
+  }
+  if (tier >= 6) {
+    b.torus(rad + 0.01, 0.025, 4, 12, m.accent, { y: bodyTop - 0.02, rx: Math.PI / 2 });
+    b.torus(rad + 0.03, 0.025, 4, 12, m.accent, { y: 0.2, rx: Math.PI / 2 });
+  }
+  if (tier >= 8) b.octa(0.09, m.glow, { y: top + 0.55, sy: 1.5 });
+  if (tier >= 9) {
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      b.cone(0.05, 0.22, 4, m.accent, { x: Math.cos(a) * (rad + 0.02), y: bodyTop + 0.08, z: Math.sin(a) * (rad + 0.02) });
+    }
+  }
+  if (tier >= 10) b.torus(0.32, 0.03, 4, 18, m.glow, { y: top + 0.55, rx: Math.PI / 2 });
+}
+
+function buildTowerBase(id: TowerId, tier: number, branch: number): { geo: THREE.BufferGeometry; headY: number } {
   const b = new ModelBuilder();
-  const t = Math.min(tier, 4);
+  const t = Math.min(tier, MAX_TIER);
+  const m = matFor(t);
+  const grow = 0.035 * (t - 1);
+  let headY = 1;
   switch (id) {
     case 'archer': {
-      const h = 0.45 + t * 0.12;
-      stoneBase(b, h * 0.6, 0.38);
-      // Wooden lookout.
-      const top = 0.16 + h * 0.6;
-      for (const [x, z] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) b.box(0.07, h * 0.6, 0.07, WOOD_D, { x, y: top + h * 0.3, z });
-      b.box(0.66, 0.06, 0.66, WOOD, { y: top + h * 0.6 });
-      for (const [x, z, w, d] of [[0, 0.31, 0.66, 0.05], [0, -0.31, 0.66, 0.05], [0.31, 0, 0.05, 0.66], [-0.31, 0, 0.05, 0.66]]) b.box(w, 0.14, d, WOOD_D, { x, y: top + h * 0.6 + 0.09, z });
-      // Roof.
-      const roofY = top + h * 0.6 + 0.45;
-      if (t >= 2) for (const [x, z] of [[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]]) b.box(0.05, 0.36, 0.05, WOOD_D, { x, y: roofY - 0.2, z });
-      if (t >= 2) b.cone(0.5, 0.36, 4, branch === 0 ? '#3f7d4e' : ROOF, { y: roofY + 0.14, ry: Math.PI / 4 });
-      if (t >= 3) {
-        b.cyl(0.015, 0.015, 0.4, 4, WOOD_D, { y: roofY + 0.5 });
-        b.box(0.22, 0.12, 0.02, branch === 1 ? '#3f6fd1' : '#e8c547', { x: 0.11, y: roofY + 0.62 });
+      plinth(b, t, m, 0.4);
+      const h = 0.5 + grow;
+      const top = 0.16 + h;
+      if (t === 1) {
+        // Wooden lookout on stilts.
+        for (const [x, z] of [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]]) b.box(0.08, h + 0.1, 0.08, WOOD_D, { x, y: (h + 0.1) / 2 + 0.05, z });
+        b.box(0.18, 0.05, 0.6, WOOD, { x: 0, y: h * 0.5, rx: 0, ry: 0, rz: 0.6 });
+      } else {
+        b.cyl(0.3, 0.36, h, 8, m.body, { y: 0.16 + h / 2 });
+        b.cyl(0.33, 0.33, 0.05, 8, m.trim, { y: 0.16 + h * 0.5 });
       }
-      if (t >= 4 && branch === 0) b.cone(0.18, 0.5, 4, '#2f5f3c', { y: roofY + 0.45, ry: Math.PI / 4 });
-      if (t >= 4 && branch === 1) for (let i = 0; i < 3; i++) b.box(0.18, 0.18, 0.04, '#e0d2b0', { x: Math.cos(i * 2.1) * 0.42, y: top + 0.25, z: Math.sin(i * 2.1) * 0.42, ry: -i * 2.1 });
+      b.box(0.68, 0.07, 0.68, t === 1 ? WOOD : m.trim, { y: top });
+      for (const [x, z, w, d] of [[0, 0.32, 0.68, 0.05], [0, -0.32, 0.68, 0.05], [0.32, 0, 0.05, 0.68], [-0.32, 0, 0.05, 0.68]]) b.box(w, 0.14, d, t === 1 ? WOOD_D : m.body, { x, y: top + 0.1, z });
+      let roofTop = top + 0.1;
+      if (t >= 2) {
+        const roofY = top + 0.48;
+        for (const [x, z] of [[-0.29, -0.29], [0.29, -0.29], [-0.29, 0.29], [0.29, 0.29]]) b.box(0.05, 0.36, 0.05, m.trim, { x, y: roofY - 0.2, z });
+        b.cone(0.52, 0.36, 4, branch === 0 ? '#3f7d4e' : m.roof, { y: roofY + 0.14, ry: Math.PI / 4 });
+        roofTop = roofY + 0.32;
+      }
+      if (t > BRANCH_TIER && branch === 0) {
+        b.cone(0.17, 0.55, 4, m.roof, { y: roofTop + 0.2, ry: Math.PI / 4 });
+        roofTop += 0.4;
+      }
+      if (t > BRANCH_TIER && branch === 1) for (let i = 0; i < 3; i++) b.box(0.2, 0.2, 0.04, m.accent, { x: Math.cos(i * 2.1) * 0.43, y: top - 0.15, z: Math.sin(i * 2.1) * 0.43, ry: -i * 2.1 });
+      ornaments(b, t, m, roofTop, 0.33, top);
+      headY = top + 0.05;
       break;
     }
     case 'cannon': {
-      const h = 0.22 + t * 0.06;
-      b.cyl(0.46, 0.5, 0.14, 8, STONE_D, { y: 0.07 });
-      b.cyl(0.42, 0.46, h, 8, t >= 4 && branch === 0 ? '#8d8478' : STONE, { y: 0.14 + h / 2 });
-      // Crenellations.
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        b.box(0.14, 0.14, 0.1, STONE_D, { x: Math.cos(a) * 0.4, y: 0.14 + h + 0.07, z: Math.sin(a) * 0.4, ry: -a });
+      plinth(b, t, m, 0.48);
+      const h = 0.26 + grow * 0.8;
+      if (t === 1) {
+        // Log palisade ring.
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          b.cyl(0.06, 0.07, h + 0.12, 5, i % 2 ? WOOD : WOOD_D, { x: Math.cos(a) * 0.4, y: 0.08 + (h + 0.12) / 2, z: Math.sin(a) * 0.4 });
+        }
+        b.cyl(0.36, 0.36, 0.06, 10, WOOD, { y: 0.14 + h * 0.6 });
+      } else {
+        const big = t > BRANCH_TIER && branch === 0;
+        b.cyl(0.42, 0.46, h, 10, m.body, { y: 0.14 + h / 2, sx: big ? 1.08 : 1, sz: big ? 1.08 : 1 });
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          b.box(0.14, 0.14, 0.1, m.trim, { x: Math.cos(a) * 0.4, y: 0.14 + h + 0.07, z: Math.sin(a) * 0.4, ry: -a });
+        }
       }
       if (t >= 2) b.box(0.2, 0.12, 0.2, WOOD, { x: 0.3, y: 0.2 + h, z: -0.25 });
       if (t >= 3) for (let i = 0; i < 3; i++) b.ball(0.07, 0, '#333740', { x: -0.28 + i * 0.08, y: 0.22 + h, z: -0.3 });
-      if (t >= 4 && branch === 1) b.torus(0.44, 0.04, 4, 12, METAL, { y: 0.14 + h * 0.6, rx: Math.PI / 2 });
+      if (t > BRANCH_TIER && branch === 1) b.torus(0.45, 0.04, 4, 12, m.accent, { y: 0.14 + h * 0.6, rx: Math.PI / 2 });
+      ornaments(b, t, m, 0.3 + h, 0.44, 0.14 + h);
+      headY = 0.16 + h * 0.75;
       break;
     }
     case 'frost': {
-      const h = 0.5 + t * 0.1;
-      stoneBase(b, h, 0.36);
-      b.cyl(0.42, 0.3, 0.12, 8, '#e6f4fb', { y: 0.16 + h + 0.06 });
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + 0.4;
-        b.octa(0.08 + t * 0.012, '#9fdcf5', { x: Math.cos(a) * 0.33, y: 0.16 + h + 0.12, z: Math.sin(a) * 0.33, sy: 2 });
+      plinth(b, t, m, 0.38);
+      const h = 0.55 + grow;
+      if (t === 1) {
+        for (const [x, z] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) b.box(0.08, h, 0.08, WOOD_D, { x, y: h / 2 + 0.08, z });
+        b.box(0.5, 0.06, 0.5, WOOD, { y: h + 0.08 });
+      } else {
+        b.cyl(0.29, 0.35, h, 8, m.body, { y: 0.16 + h / 2 });
+        b.cyl(0.33, 0.33, 0.06, 8, m.trim, { y: 0.16 + h * 0.55 });
+        b.cyl(0.42, 0.3, 0.12, 8, m.trim, { y: 0.16 + h + 0.06 });
       }
-      if (t >= 3) b.cone(0.1, 0.4, 5, '#bfe9fb', { x: 0.36, y: 0.35, z: 0.2, rz: -0.3 });
-      if (t >= 4 && branch === 1) b.torus(0.5, 0.05, 4, 12, '#dff6ff', { y: 0.4, rx: Math.PI / 2 });
+      const n = 2 + Math.floor(t / 2);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + 0.4;
+        b.octa(0.08 + t * 0.008, t >= 8 ? m.glow : '#9fdcf5', { x: Math.cos(a) * 0.33, y: 0.16 + h + 0.14, z: Math.sin(a) * 0.33, sy: 2 });
+      }
+      if (t > BRANCH_TIER && branch === 1) b.torus(0.52, 0.05, 4, 14, '#dff6ff', { y: 0.4, rx: Math.PI / 2 });
+      ornaments(b, t, m, 0.16 + h + 0.4, 0.33, 0.16 + h);
+      headY = 0.9 + grow;
       break;
     }
     case 'lightning': {
-      const h = 0.4 + t * 0.12;
-      b.cyl(0.4, 0.46, 0.18, 6, '#4a4f5c', { y: 0.09 });
-      b.cyl(0.18, 0.3, h, 6, METAL, { y: 0.18 + h / 2 });
-      const rings = 1 + Math.min(t, 3);
-      for (let i = 0; i < rings; i++) b.torus(0.24 - i * 0.03, 0.035, 4, 10, '#d48a3a', { y: 0.3 + (i * h) / rings, rx: Math.PI / 2 });
+      plinth(b, t, m, 0.44);
+      const h = 0.48 + grow * 1.2;
+      b.cyl(0.18, 0.3, h, 6, t === 1 ? WOOD : m.body, { y: 0.18 + h / 2 });
+      const rings = 1 + Math.min(t, 6);
+      for (let i = 0; i < rings; i++) b.torus(0.24 - i * 0.02, 0.035, 4, 10, t >= 6 ? m.accent : '#d48a3a', { y: 0.3 + (i * h) / rings, rx: Math.PI / 2 });
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2;
-        b.box(0.06, 0.4, 0.06, '#3c414c', { x: Math.cos(a) * 0.32, y: 0.3, z: Math.sin(a) * 0.32, rz: Math.cos(a) * 0.3, rx: -Math.sin(a) * 0.3 });
+        b.box(0.06, 0.4, 0.06, m.trim, { x: Math.cos(a) * 0.32, y: 0.3, z: Math.sin(a) * 0.32, rz: Math.cos(a) * 0.3, rx: -Math.sin(a) * 0.3 });
       }
       b.cyl(0.05, 0.08, 0.35, 5, '#d48a3a', { y: 0.18 + h + 0.17 });
-      if (t >= 4 && branch === 0) for (let i = 0; i < 3; i++) b.cyl(0.03, 0.04, 0.5, 4, '#d48a3a', { x: Math.cos(i * 2.1) * 0.3, y: 0.55 + h * 0.5, z: Math.sin(i * 2.1) * 0.3 });
+      if (t > BRANCH_TIER && branch === 0) for (let i = 0; i < 3; i++) b.cyl(0.03, 0.04, 0.5, 4, m.accent, { x: Math.cos(i * 2.1) * 0.3, y: 0.55 + h * 0.5, z: Math.sin(i * 2.1) * 0.3 });
+      ornaments(b, t, m, 0.18 + h + 0.55, 0.26, 0.18 + h * 0.7);
+      headY = 0.2 + h + 0.38;
       break;
     }
   }
-  return b.build();
+  return { geo: b.build(), headY };
 }
 
 function buildTowerHead(id: TowerId, tier: number, branch: number): THREE.BufferGeometry {
   const b = new ModelBuilder();
-  const t = Math.min(tier, 4);
+  const t = Math.min(tier, MAX_TIER);
+  const m = matFor(t);
+  const spec = t > BRANCH_TIER;
   switch (id) {
     case 'archer': {
-      // Archer figure with bow.
-      b.cyl(0.08, 0.1, 0.2, 6, t >= 4 && branch === 0 ? '#2f5f3c' : '#4f8f45', { y: 0.1 });
+      b.cyl(0.08, 0.1, 0.2, 6, spec && branch === 0 ? '#2f5f3c' : t >= 5 ? m.roof : '#4f8f45', { y: 0.1 });
       b.ball(0.08, 0, '#f1c9a0', { y: 0.27 });
-      b.cone(0.1, 0.14, 6, '#3d7a37', { y: 0.37 });
-      b.torus(0.14, 0.015, 3, 8, WOOD_D, { z: 0.12, y: 0.16, ry: Math.PI / 2, sx: 1, sy: 1.4 });
-      if (t >= 4 && branch === 1) b.box(0.06, 0.06, 0.25, WOOD, { x: 0.12, y: 0.15, z: 0.05 });
+      b.cone(0.1, 0.14, 6, t >= 5 ? m.trim : '#3d7a37', { y: 0.37 });
+      b.torus(0.14, 0.015, 3, 8, t >= 6 ? m.accent : WOOD_D, { z: 0.12, y: 0.16, ry: Math.PI / 2, sx: 1, sy: 1.4 });
+      if (spec && branch === 1) b.box(0.06, 0.06, 0.25, WOOD, { x: 0.12, y: 0.15, z: 0.05 });
       break;
     }
     case 'cannon': {
-      const big = t >= 4 && branch === 0;
-      const len = 0.42 + t * 0.04 + (big ? 0.1 : 0);
-      const r = 0.1 + t * 0.012 + (big ? 0.05 : 0);
-      b.box(0.36, 0.12, 0.4, WOOD, { y: 0.06 });
-      b.cyl(r, r * 1.2, len, 8, '#3a3f49', { y: 0.2, z: 0.12, rx: Math.PI / 2 - 0.35 });
-      b.torus(r * 1.15, 0.025, 4, 8, GOLD, { y: 0.2 + Math.cos(Math.PI / 2 - 0.35) * len * 0.45, z: 0.12 + len * 0.45 * Math.sin(Math.PI / 2 - 0.35) });
+      const big = spec && branch === 0;
+      const len = 0.42 + t * 0.02 + (big ? 0.1 : 0);
+      const r = 0.1 + t * 0.006 + (big ? 0.05 : 0);
+      const barrel = t >= 4 ? m.trim : '#3a3f49';
+      b.box(0.36, 0.12, 0.4, t === 1 ? WOOD_D : WOOD, { y: 0.06 });
+      b.cyl(r, r * 1.2, len, 8, barrel, { y: 0.2, z: 0.12, rx: Math.PI / 2 - 0.35 });
+      b.torus(r * 1.15, 0.025, 4, 8, m.accent, { y: 0.2 + Math.cos(Math.PI / 2 - 0.35) * len * 0.45, z: 0.12 + len * 0.45 * Math.sin(Math.PI / 2 - 0.35) });
       for (const x of [-0.17, 0.17]) b.cyl(0.09, 0.09, 0.04, 8, WOOD_D, { x, y: 0.08, rz: Math.PI / 2 });
-      if (t >= 4 && branch === 1) b.cyl(r * 0.8, r, len * 0.9, 6, '#3a3f49', { x: 0.14, y: 0.18, z: 0.1, rx: Math.PI / 2 - 0.35 });
+      if (spec && branch === 1) b.cyl(r * 0.8, r, len * 0.9, 6, barrel, { x: 0.14, y: 0.18, z: 0.1, rx: Math.PI / 2 - 0.35 });
       break;
     }
     case 'frost': {
-      const big = 0.18 + t * 0.03;
-      b.octa(big, t >= 4 && branch === 1 ? '#e6f9ff' : '#7fd0f0', { y: big * 1.4, sy: 1.6 });
+      const big = 0.16 + t * 0.012;
+      const ice = t >= 8 ? m.glow : spec && branch === 1 ? '#e6f9ff' : '#7fd0f0';
+      b.octa(big, ice, { y: big * 1.4, sy: 1.6 });
       b.octa(big * 0.45, '#d8f4ff', { y: big * 1.4 + 0.02, x: big * 0.9, sy: 1.5 });
       b.octa(big * 0.45, '#d8f4ff', { y: big * 1.4 + 0.02, x: -big * 0.9, sy: 1.5 });
-      if (t >= 4 && branch === 0) b.octa(big * 0.5, '#5ab8e6', { y: big * 3, sy: 1.8 });
+      if (spec && branch === 0) b.octa(big * 0.5, '#5ab8e6', { y: big * 3, sy: 1.8 });
       break;
     }
     case 'lightning': {
-      const r = 0.12 + t * 0.025;
-      b.ball(r, 1, t >= 4 && branch === 1 ? '#ffd76a' : '#c8a6ff', { y: r });
+      const r = 0.11 + t * 0.012;
+      b.ball(r, 1, t >= 7 ? m.glow : spec && branch === 1 ? '#ffd76a' : '#c8a6ff', { y: r });
       b.torus(r * 1.4, 0.02, 3, 10, '#ffe9a8', { y: r, rx: 1.2 });
+      if (t >= 5) b.torus(r * 1.6, 0.018, 3, 10, m.accent, { y: r, rx: -0.8, ry: 1 });
       break;
     }
   }
@@ -372,7 +469,7 @@ export function padModel(): THREE.BufferGeometry {
   });
 }
 
-export function propModel(type: ChapterTheme['props'][number]): THREE.BufferGeometry {
+export function propModel(type: PropType): THREE.BufferGeometry {
   return cached(`prop-${type}`, () => {
     const b = new ModelBuilder();
     switch (type) {

@@ -2,8 +2,9 @@
 
 import type { TowerId } from '../data/towers';
 import type { HeroId } from '../data/heroes';
+import type { BaseSnapshot } from '../game/Run';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'tkd_save';
 export const BACKUP_KEY = 'tkd_save_backup';
 export const CORRUPT_KEY = 'tkd_save_corrupt';
@@ -37,9 +38,11 @@ export interface SaveData {
   version: number;
   coins: number;
   shards: number;
-  levels: Record<string, LevelRecord>;
+  /** The persistent kingdom (null until founded). */
+  base: BaseSnapshot | null;
+  progress: { bestWave: number; bestCheckpoint: number; retreats: number; checkpointsPaid: number };
   towerLevels: Record<TowerId, number>;
-  meta: { castleHp: number; startGold: number; heroPower: number };
+  meta: { castleHp: number; warChest: number; heroPower: number };
   unlocks: { lightning: boolean; heroes: HeroId[] };
   selectedHero: HeroId;
   cosmetics: { owned: string[]; castle: string; trail: string };
@@ -49,9 +52,7 @@ export interface SaveData {
   daily: { lastClaimDay: string | null; streak: number };
   missions: { day: string; list: MissionState[] };
   ads: { removeAds: boolean; shopBundleDay: string; shopBundleCount: number; winsSinceInterstitial: number };
-  endless: { bestWave: number; milestonesPaid: number };
-  weekly: { week: string; cleared: boolean; bestStars: number };
-  stats: { kills: number; wins: number; losses: number; coinsEarned: number; playTime: number };
+  stats: { kills: number; wavesCleared: number; coinsEarned: number; playTime: number };
   tutorial: { done: boolean; hintsSeen: string[] };
   firstLaunch: number;
 }
@@ -61,9 +62,10 @@ export function defaultSave(now = Date.now()): SaveData {
     version: SAVE_VERSION,
     coins: 0,
     shards: 0,
-    levels: {},
+    base: null,
+    progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0 },
     towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0 },
-    meta: { castleHp: 0, startGold: 0, heroPower: 0 },
+    meta: { castleHp: 0, warChest: 0, heroPower: 0 },
     unlocks: { lightning: false, heroes: ['ranger'] },
     selectedHero: 'ranger',
     cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none' },
@@ -73,9 +75,7 @@ export function defaultSave(now = Date.now()): SaveData {
     daily: { lastClaimDay: null, streak: 0 },
     missions: { day: '', list: [] },
     ads: { removeAds: false, shopBundleDay: '', shopBundleCount: 0, winsSinceInterstitial: 0 },
-    endless: { bestWave: 0, milestonesPaid: 0 },
-    weekly: { week: '', cleared: false, bestStars: 0 },
-    stats: { kills: 0, wins: 0, losses: 0, coinsEarned: 0, playTime: 0 },
+    stats: { kills: 0, wavesCleared: 0, coinsEarned: 0, playTime: 0 },
     tutorial: { done: false, hintsSeen: [] },
     firstLaunch: now,
   };
@@ -103,6 +103,25 @@ export const MIGRATIONS: Record<number, (d: AnyObj) => AnyObj> = {
     weekly: d.weekly ?? { week: '', cleared: false, bestStars: 0 },
     version: 3,
   }),
+  // v3 was the 60-level campaign. v4 is one persistent kingdom: campaign records are dropped
+  // (players are compensated with coins per level won), "startGold" became "warChest".
+  3: (d) => {
+    const levels = (d.levels ?? {}) as Record<string, LevelRecord>;
+    const won = Object.values(levels).filter((l) => l && l.wins > 0).length;
+    const { levels: _l, endless: _e, weekly: _w, ...rest } = d;
+    void _l; void _e; void _w;
+    const meta = { castleHp: d.meta?.castleHp ?? 0, warChest: d.meta?.startGold ?? 0, heroPower: d.meta?.heroPower ?? 0 };
+    return {
+      ...rest,
+      meta,
+      coins: (Number(d.coins) || 0) + won * 25,
+      base: null,
+      progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0 },
+      stats: { kills: d.stats?.kills ?? 0, wavesCleared: 0, coinsEarned: d.stats?.coinsEarned ?? 0, playTime: d.stats?.playTime ?? 0 },
+      tutorial: { done: false, hintsSeen: [] },
+      version: 4,
+    };
+  },
 };
 
 /** Fills in any missing keys from defaults (shallow per top-level section). */
@@ -114,7 +133,7 @@ function withDefaults(d: AnyObj): SaveData {
     if (v === undefined || v === null) continue;
     if (typeof def[k] === 'object' && !Array.isArray(def[k]) && def[k] !== null && typeof v === 'object' && !Array.isArray(v)) {
       out[k] = { ...def[k], ...v };
-    } else if (typeof def[k] === typeof v || def[k] === null) {
+    } else if (typeof def[k] === typeof v || (def[k] === null && typeof v === 'object')) {
       out[k] = v;
     }
   }

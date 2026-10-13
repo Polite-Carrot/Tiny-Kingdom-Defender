@@ -2,16 +2,12 @@
 
 import { el, $, fmt, fmtTime } from './dom';
 import { icon, ICONS } from './icons';
-import { towerThumb, enemyThumb, heroThumb, thumb } from './Thumbnails';
+import { towerThumb, heroThumb, thumb } from './Thumbnails';
 import type { Game } from '../game/Game';
-import type { Battle, BattleResult } from '../game/Battle';
-import { buildCampaignLevel, weekKey, type LevelDef } from '../game/Levels';
-import { waveSummary } from '../game/WaveComposer';
-import { CHAPTERS, TOTAL_LEVELS, FEATURE_UNLOCK_LEVEL, LEVELS_PER_CHAPTER } from '../data/levels';
-import { ENEMIES, type EnemyId } from '../data/enemies';
+import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, type TowerId } from '../data/towers';
 import { HEROES, HERO_ORDER } from '../data/heroes';
-import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, TREASURY, DAILY_LOGIN, RUN_ECONOMY } from '../data/economy';
+import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
 import { summarise } from '../analytics/Analytics';
 import type { RewardedPlacement } from '../data/ads';
 import type { ChestReward, MetaUpgradeKey } from '../game/Meta';
@@ -70,171 +66,70 @@ function currencyBar(game: Game): string {
 
 const costHtml = (n: number, gem = false) => `<span class="cost">${icon(gem ? 'gem' : 'coin')}${n}</span>`;
 
-// --- Pre-level ---------------------------------------------------------------------------
+// --- Checkpoint -----------------------------------------------------------------------------
 
-export function preLevelCampaign(game: Game, g: number): void {
-  preLevel(game, buildCampaignLevel(g));
-}
-
-export function endlessIntro(game: Game, level: LevelDef): void {
-  preLevel(game, level);
-}
-
-export function preLevel(game: Game, level: LevelDef): void {
-  const { meta } = game.s;
-  game.pendingStartGoldMult = 1;
-  game.s.ui.modal((m, h) => {
-    const enemies = new Map<EnemyId, number>();
-    const waves = level.endlessWave ? [0, 1, 2, 3, 4].map((n) => level.endlessWave!(n)) : level.waves;
-    for (const w of waves) for (const s of waveSummary(w)) enemies.set(s.enemy, (enemies.get(s.enemy) ?? 0) + s.count);
-    const idx = level.kind === 'campaign' ? level.globalIndex : 999;
-    const towers = level.kind === 'campaign' ? meta.towersFor(idx) : meta.towersFor(999);
-    const allowed = level.modifier?.allowedTowers;
-    const theme = CHAPTERS[level.chapter].theme;
-    let subtitle = '';
-    if (level.kind === 'campaign') subtitle = `${theme.name} · Level ${level.globalIndex + 1}${level.isBoss ? ' · <b style="color:#b8382c">BOSS</b>' : ''}`;
-    else if (level.kind === 'weekly') subtitle = `<b>${level.modifier?.description}</b><br/>Resets weekly · First clear: ${icon('coin')}180 + ${icon('gem')}6`;
-    else subtitle = `Survive as long as you can! Best: wave ${meta.d.endless.bestWave}. Coins every 5 waves.`;
-    const stars = level.kind === 'campaign' ? meta.stars(level.globalIndex) : 0;
-    m.innerHTML = `
-      <div class="ribbon ${level.isBoss ? 'lose' : ''}">${level.name}</div>
-      <div style="text-align:center" class="muted">${subtitle}</div>
-      ${level.kind === 'campaign' ? `<div class="stars-big" style="margin:8px 0 0">${[0, 1, 2].map((k) => icon(k < stars ? 'star' : 'starEmpty', 'pop')).join('')}</div>` : ''}
-      <h3 style="margin:10px 0 4px;font-size:15px">Enemies${level.endlessWave ? '' : ` · ${level.waves.length} waves`}</h3>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${[...enemies.keys()].map((e) => `<div title="${ENEMIES[e].name}" style="text-align:center;width:58px;font-size:10px;font-weight:800">
-          <img src="${enemyThumb(e)}" style="width:50px;height:50px;${ENEMIES[e].boss ? 'filter:drop-shadow(0 0 6px #ef5b4c)' : ''}" alt=""/><br/>${ENEMIES[e].name}</div>`).join('')}</div>
-      <h3 style="margin:10px 0 4px;font-size:15px">Towers</h3>
-      <div style="display:flex;gap:6px">${TOWER_ORDER.map((t) => {
-        const ok = towers.includes(t) && (!allowed || allowed.includes(t));
-        return `<img src="${towerThumb(t)}" style="width:50px;height:50px;${ok ? '' : 'filter:grayscale(1);opacity:.35'}" alt="${t}"/>`;
-      }).join('')}</div>
-      <div class="hero-pick"></div>
-      <div class="footer"><div class="stack"></div>
-      <div class="actions"><button class="btn big start">${icon('play')} Start</button></div></div>`;
-    const heroPick = $(m, '.hero-pick');
-    if (meta.featureUnlocked('hero') && !level.modifier?.noHero && meta.d.unlocks.heroes.length > 1) {
-      heroPick.innerHTML = `<h3 style="margin:10px 0 4px;font-size:15px">Hero</h3><div class="seg">${meta.d.unlocks.heroes.map((id) => `<button data-h="${id}" class="${meta.d.selectedHero === id ? 'on' : ''}" style="display:flex;align-items:center;gap:4px"><img src="${heroThumb(id)}" style="width:30px;height:30px"/>${HEROES[id].name}</button>`).join('')}</div>`;
-      heroPick.querySelectorAll<HTMLButtonElement>('[data-h]').forEach((b) => (b.onclick = () => {
-        meta.selectHero(b.dataset.h as typeof meta.d.selectedHero);
-        heroPick.querySelectorAll('[data-h]').forEach((x) => x.classList.toggle('on', x === b));
-      }));
-    }
-    const stack = $(m, '.stack');
-    if (meta.levelsCompleted() >= 1) {
-      const gold = Math.round((RUN_ECONOMY.startingGold + meta.metaBonuses().startGoldBonus) * 0.5);
-      const ad = adButton(game, 'prelevel_gold', `Start with +50% gold`, `+${gold} gold this battle`, (b) => {
-        game.pendingStartGoldMult = 1.5;
-        markUsed(b, `+50% gold ready!`);
-      });
-      stack.append(ad);
-    }
-    $(m, '.start').onclick = () => {
-      h.close();
-      game.startLevel(level, game.pendingStartGoldMult);
-    };
-  }, { wide: true });
-}
-
-// --- Results ----------------------------------------------------------------------------------
-
-export function results(game: Game, r: BattleResult): void {
-  const { meta, ui, audio } = game.s;
-  const run = r.run;
-  const beforeCompleted = meta.levelsCompleted();
-  let coins = 0;
-  let shards = 0;
-  let starBonus = 0;
-  let milestoneChest = false;
-  let newBest = false;
-  if (r.level.kind === 'campaign') {
-    const rew = meta.levelReward(r.level.globalIndex, r.won, r.stars);
-    const rec = meta.recordLevel(r.level.globalIndex, r.won, r.stars, r.hpFrac);
-    milestoneChest = rec.milestoneChest;
-    coins = rew.total;
-    starBonus = rew.starBonus;
-    meta.earn(coins, r.won ? 'level_win' : 'level_loss');
-  } else if (r.level.kind === 'weekly') {
-    const wr = meta.weeklyReward(weekKey(new Date()), r.won, r.stars);
-    coins = wr.coins;
-    shards = wr.shards;
-  } else {
-    newBest = meta.recordEndless(r.waveReached);
-  }
-  const afterCompleted = meta.levelsCompleted();
-  const unlockedNow = (Object.keys(FEATURE_UNLOCK_LEVEL) as (keyof typeof FEATURE_UNLOCK_LEVEL)[])
-    .filter((f) => FEATURE_UNLOCK_LEVEL[f] > beforeCompleted && FEATURE_UNLOCK_LEVEL[f] <= afterCompleted);
-  const featureNames: Partial<Record<keyof typeof FEATURE_UNLOCK_LEVEL, string>> = {
-    hero: 'Hero', shop: 'Upgrade Shop', missions: 'Daily Missions', dailyLogin: 'Daily Rewards', reinforcements: 'Reinforcements',
-    endless: 'Endless Siege', weekly: 'Weekly Challenge', heroes: 'New Heroes', treasury: 'Treasury', chests: 'Chests', specialisation: 'Tower Specialisations',
-  };
-  const unlockLines = unlockedNow.map((f) => featureNames[f]).filter(Boolean);
-  if (r.level.kind === 'campaign' && r.won && afterCompleted === UNLOCKS.lightning.requiresLevel && !meta.d.unlocks.lightning) unlockLines.push('Lightning Tower (in the Shop)');
-
-  const isEndless = r.level.kind === 'endless';
-  const won = r.won || isEndless;
+export function checkpoint(game: Game, wave: number, coins: number, firstTime: boolean, after: () => void | Promise<void>): void {
+  const b = game.battle;
+  if (!b) return;
+  const { meta, audio, ui } = game.s;
+  b.paused = true;
+  audio.play('victory');
   ui.modal((m, h) => {
-    const ribbon = isEndless ? 'Siege Over' : r.won ? 'Victory!' : 'Defeat';
     m.innerHTML = `
-      <div class="ribbon ${won ? 'win' : 'lose'}">${ribbon}</div>
-      ${!isEndless ? `<div class="stars-big">${[0, 1, 2].map((k) => icon(k < r.stars ? 'star' : 'starEmpty', k === 1 ? 'mid' : '')).join('')}</div>` : ''}
-      ${isEndless ? `<div class="reward-row">${icon('trophy')} Wave ${r.waveReached}${newBest ? ' <span style="color:#37933b;font-size:16px">NEW BEST!</span>' : ''}</div>` : ''}
+      <div class="ribbon win">Checkpoint reached!</div>
+      <div class="reward-row">⚑ Wave ${wave}</div>
+      <div class="muted" style="text-align:center">If the castle falls, you'll regroup here. Your towers and gold are always kept.</div>
       <div class="stat-grid">
-        <div>${run.stats.kills}<small>DEFEATED</small></div>
-        <div>${isEndless ? r.waveReached : `${Math.min(r.waveReached, run.totalWaves)}/${run.totalWaves}`}<small>WAVES</small></div>
-        <div>${r.hpLeft}<small>CASTLE HP</small></div>
+        <div>${b.run.towers.length}<small>TOWERS</small></div>
+        <div>${b.run.unlockedSpots.size}<small>PADS</small></div>
+        <div>${meta.bestWave()}<small>BEST WAVE</small></div>
       </div>
-      <div class="reward-row coins-row">${icon('coin')}<span class="amt">+${coins}</span>${shards ? ` ${icon('gem')}+${shards}` : ''}</div>
-      ${starBonus ? `<div class="muted" style="text-align:center">includes +${starBonus} star bonus</div>` : ''}
-      ${isEndless ? `<div class="muted" style="text-align:center">Milestone coins were paid during the siege.</div>` : ''}
-      ${milestoneChest ? `<div style="text-align:center;font-weight:900;margin-top:6px">${icon('chest')} Milestone chest earned! Open it from the menu.</div>` : ''}
-      ${unlockLines.length ? `<div style="text-align:center;font-weight:900;margin-top:6px;color:#6f43c8">✨ Unlocked: ${unlockLines.join(', ')}</div>` : ''}
-      ${!r.won && !isEndless && meta.hasAffordableUpgrade() ? `<div class="muted" style="text-align:center;margin-top:6px">Tip: stronger towers await in the Shop!</div>` : ''}
+      <div class="reward-row coins-row">${icon('coin')}<span class="amt">+${coins}</span></div>
+      ${firstTime ? `<div style="text-align:center;font-weight:900">${icon('chest')} Milestone chest earned! Open it from the menu.</div>` : `<div class="muted" style="text-align:center">Reached before: reduced checkpoint reward.</div>`}
       <div class="stack ad-slot" style="margin-top:10px"></div>
-      <div class="actions"></div>`;
-    // Animate stars.
-    m.querySelectorAll('.stars-big .ico').forEach((s, i) => {
-      setTimeout(() => {
-        s.classList.add('pop');
-        if (i < r.stars) audio.play('star');
-      }, 350 + i * 300);
-    });
-    // Double coins (rewarded).
-    if (coins > 0) {
-      const ad = adButton(game, 'level_end_double', `Double your coins`, `+${coins} more coins`, (b) => {
-        meta.earn(coins, 'ad_level_double');
-        $(m, '.coins-row .amt').textContent = `+${coins * 2}`;
-        markUsed(b, `Coins doubled! +${coins}`);
-        flyCoins(game, b, coins);
+      <div class="actions"><button class="btn big go">${icon('play')} Onward</button></div>`;
+    const extra = coins * (AD_REWARDS.checkpointMult - 1);
+    $(m, '.ad-slot').append(adButton(game, 'checkpoint_double', 'Double the checkpoint coins', `+${extra} more coins`, (btn) => {
+      meta.earn(extra, 'ad_checkpoint_double');
+      $(m, '.coins-row .amt').textContent = `+${coins + extra}`;
+      markUsed(btn, `Coins doubled! +${extra}`);
+      flyCoins(game, btn, extra);
+    }));
+    $(m, '.go').onclick = () => h.close();
+  }, {
+    closable: false,
+    onClose: () => {
+      void Promise.resolve(after()).then(() => {
+        if (game.battle === b && !game.s.ui.modalOpen) b.paused = false;
       });
-      $(m, '.ad-slot').append(ad);
-    }
-    const actions = $(m, '.actions');
-    const go = (fn: () => void) => {
+    },
+  });
+}
+
+// --- Castle fallen ------------------------------------------------------------------------------
+
+export function fallen(game: Game, fromWave: number, toWave: number): void {
+  const b = game.battle;
+  if (!b) return;
+  const { meta, ui } = game.s;
+  ui.modal((m, h) => {
+    m.innerHTML = `
+      <div class="ribbon lose">The castle has fallen</div>
+      <div class="reward-row">${icon('castle')} Wave ${fromWave + 1}</div>
+      <div style="text-align:center;font-weight:800">Your army regroups at the last checkpoint: <b>wave ${toWave + 1}</b>.</div>
+      <div class="muted" style="text-align:center;margin-top:6px">Every tower, upgrade and piece of gold is kept. Rebuild, upgrade, and push further!</div>
+      ${meta.hasAffordableUpgrade() ? `<div class="muted" style="text-align:center;margin-top:6px">Tip: you can afford a permanent upgrade in the Shop.</div>` : ''}
+      <div class="actions">
+        ${meta.featureUnlocked('shop') ? `<button class="btn gold shopbtn">${icon('shop')} Shop</button>` : ''}
+        <button class="btn big regroup">Regroup</button>
+      </div>`;
+    m.querySelector<HTMLButtonElement>('.shopbtn')?.addEventListener('click', () => shop(game));
+    $(m, '.regroup').onclick = () => {
       h.close();
-      void game.afterResults(r, fn);
+      b.applyMeta();
+      b.retreat();
+      ui.banner('Regrouped', `Wave ${toWave + 1}: tap Resume when ready`);
     };
-    const mapBtn = el('button', 'btn wood', `${icon('map')} Map`);
-    mapBtn.onclick = () => go(() => (r.level.kind === 'campaign' ? game.goMap(r.level.chapter) : game.goTitle()));
-    actions.append(mapBtn);
-    if (r.level.kind === 'campaign' && r.won && r.level.globalIndex + 1 < TOTAL_LEVELS) {
-      const next = el('button', 'btn', `Next ${icon('play')}`);
-      next.onclick = () => go(() => {
-        const n = r.level.globalIndex + 1;
-        game.goMap(Math.floor(n / LEVELS_PER_CHAPTER));
-        preLevelCampaign(game, n);
-      });
-      actions.append(next);
-    } else if (!r.won || isEndless) {
-      const retry = el('button', 'btn blue', `${icon('restart')} Retry`);
-      retry.onclick = () => go(() => game.startLevel(r.level, 1));
-      actions.append(retry);
-    }
-    if (r.level.kind === 'campaign' && r.won && r.level.globalIndex + 1 === TOTAL_LEVELS) {
-      const done = el('div', '', `<div style="text-align:center;font-weight:900;margin-top:8px">🏆 You saved every kingdom! Try Endless Siege.</div>`);
-      m.append(done);
-    }
-    const coinsEl = $(m, '.coins-row');
-    setTimeout(() => coins > 0 && flyCoins(game, coinsEl, coins), 900);
   }, { closable: false });
 }
 
@@ -270,14 +165,13 @@ export function pause(game: Game, onClose: () => void): void {
   game.s.ui.modal((m, h) => {
     m.innerHTML = `
       <div class="ribbon">Paused</div>
-      <div class="muted" style="text-align:center;margin-bottom:10px">${b.level.name}</div>
+      <div class="muted" style="text-align:center;margin-bottom:10px">Wave ${Math.max(1, b.run.waveIndex)} · progress is saved at the start of every wave</div>
       <div class="stack">
         <button class="btn big resume">${icon('play')} Resume</button>
         <div class="setting"><label>Music</label><input type="range" min="0" max="1" step="0.05" class="music"/></div>
         <div class="setting"><label>Sound FX</label><input type="range" min="0" max="1" step="0.05" class="sfx"/></div>
         <div class="actions" style="margin-top:4px">
-          <button class="btn blue restart">${icon('restart')} Restart</button>
-          <button class="btn red quit">${icon('home')} Quit</button>
+          <button class="btn wood menu">${icon('home')} Main menu</button>
         </div>
       </div>`;
     const st = game.s.save.data.settings;
@@ -294,23 +188,16 @@ export function pause(game: Game, onClose: () => void): void {
       game.applySettings();
     };
     $(m, '.resume').onclick = () => h.close();
-    $(m, '.restart').onclick = () => {
+    $(m, '.menu').onclick = () => {
       h.close();
-      game.s.analytics.track('level_end', { level: b.level.id, kind: b.level.kind, result: 'quit', stars: 0, wave_reached: b.run.waveIndex, duration: Math.round(b.run.time), castle_hp: b.run.castleHp });
-      game.startLevel(b.level, 1);
-    };
-    $(m, '.quit').onclick = () => {
-      h.close();
-      game.s.analytics.track('level_end', { level: b.level.id, kind: b.level.kind, result: 'quit', stars: 0, wave_reached: b.run.waveIndex, duration: Math.round(b.run.time), castle_hp: b.run.castleHp });
-      if (b.level.kind === 'campaign') game.goMap(b.level.chapter);
-      else game.goTitle();
+      game.goTitle();
     };
   }, { onClose });
 }
 
 // --- Shop ----------------------------------------------------------------------------------------
 
-export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free' = 'towers'): void {
+export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free' = 'towers', onClose?: () => void): void {
   const { meta } = game.s;
   let current = tab;
   game.s.ui.modal((m) => {
@@ -326,10 +213,10 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
           let btn = '';
           if (locked) {
             const can = meta.canUnlockLightning();
-            btn = can ? `<button class="btn small gold" data-unlock="lightning">Unlock ${costHtml(UNLOCKS.lightning.cost)}</button>` : `<button class="btn small disabled" disabled>Lv ${UNLOCKS.lightning.requiresLevel}</button>`;
+            btn = can ? `<button class="btn small gold" data-unlock="lightning">Unlock ${costHtml(UNLOCKS.lightning.cost)}</button>` : `<button class="btn small disabled" disabled>Wave ${UNLOCKS.lightning.requiresWave}</button>`;
           } else if (cost === null) btn = `<button class="btn small gold disabled" disabled>MAX</button>`;
           else btn = `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-tower="${t}">${costHtml(cost)}</button>`;
-          return `<div class="list-item"><div class="thumb"><img src="${towerThumb(t, Math.min(3, 1 + Math.floor(lvl / 4)))}" alt=""/></div>
+          return `<div class="list-item"><div class="thumb"><img src="${towerThumb(t, Math.min(10, 1 + Math.floor(lvl / 2)))}" alt=""/></div>
             <div class="body"><div class="name">${def.name} ${locked ? icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px;display:inline-block"') : `<span class="muted">Lv ${lvl}</span>`}</div>
             <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : `+${Math.round(lvl * TOWER_META.damagePerLevel * 100)}% damage · +${Math.round(lvl * TOWER_META.rangePerLevel * 100)}% range`}</div>
             <div class="levelpips">${Array.from({ length: TOWER_META.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div></div>${btn}</div>`;
@@ -339,7 +226,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
           const def = META_UPGRADES[k];
           const lvl = d.meta[k];
           const cost = meta.metaUpgradeCost(k);
-          const ic = k === 'castleHp' ? 'heart' : k === 'startGold' ? 'coin' : 'sword';
+          const ic = k === 'castleHp' ? 'heart' : k === 'warChest' ? 'coin' : 'sword';
           const btn = cost === null ? `<button class="btn small gold disabled" disabled>MAX</button>` : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-meta="${k}">${costHtml(cost)}</button>`;
           return `<div class="list-item"><div class="thumb">${icon(ic as 'heart').replace('class="ico ', 'class="ico " style="width:36px;height:36px"')}</div>
             <div class="body"><div class="name">${def.name} <span class="muted">Lv ${lvl}</span></div><div class="desc">${def.description}</div>
@@ -419,7 +306,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
       }
     };
     render();
-  });
+  }, { onClose });
 }
 
 // --- Heroes ----------------------------------------------------------------------------------------
@@ -691,10 +578,10 @@ export function debug(game: Game): void {
           <h3>Ads per placement</h3><table><tr><th>Placement</th><th>Offer</th><th>Click</th><th>✓</th><th>Skip</th><th>Fail</th></tr>${adRows}</table>
           <h3>Coins earned by source</h3><table>${src}</table>
           <h3>Coins spent by sink</h3><table>${sink}</table>
-          <h3>Win rate by level</h3><table><tr><th>Level</th><th>Plays</th><th>Wins</th><th>Rate</th></tr>${lv}</table>
+          <h3>Checkpoint rate by segment</h3><table><tr><th>Waves</th><th>Pushes</th><th>Reached ⚑</th><th>Rate</th></tr>${lv}</table>
           <h3>Recent events</h3><pre>${events.slice(-30).reverse().map((e) => `${(e.t / 1000).toFixed(1)}s ${e.name} ${JSON.stringify(e.params)}`).join('\n')}</pre>
           <h3>Cheats (testing)</h3>
-          <div class="actions"><button class="btn small gold coins">+1000 coins</button><button class="btn small blue unlock">Unlock all levels</button><button class="btn small treasury">Treasury +8h</button><button class="btn small chest">Chest ready</button><button class="btn small daily">Next day</button><button class="btn small blue auto">Autoplay battle</button></div>
+          <div class="actions"><button class="btn small gold coins">+1000 coins</button><button class="btn small blue unlock">+10 waves</button><button class="btn small gold gold5k">+5000 gold</button><button class="btn small treasury">Treasury +8h</button><button class="btn small chest">Chest ready</button><button class="btn small daily">Next day</button><button class="btn small blue auto">Autoplay battle</button></div>
         </div>`;
       $(m, '.coins').onclick = () => {
         meta.earn(1000, 'debug');
@@ -702,12 +589,22 @@ export function debug(game: Game): void {
         render();
       };
       $(m, '.unlock').onclick = () => {
-        for (let i = 0; i < TOTAL_LEVELS; i++) {
-          const id = `L${i + 1}`;
-          meta.d.levels[id] ??= { stars: 1, wins: 1, plays: 1, bestHp: 0.5 };
-        }
+        const d = meta.d;
+        const base = game.battle ? game.battle.run.snapshot(game.battle.run.isQuiet() ? undefined : game.battle.run.currentWave) : d.base;
+        if (!base) return game.s.ui.toast('Found your kingdom first');
+        base.wave += 10;
+        base.checkpoint = Math.floor(base.wave / 10) * 10;
+        d.base = base;
+        d.progress.bestWave = Math.max(d.progress.bestWave, base.wave);
         meta.commit();
-        game.s.ui.toast('All levels unlocked');
+        game.s.ui.closeModals();
+        if (game.battle) game.enterKingdom();
+        game.s.ui.toast(`Jumped to wave ${base.wave + 1}`);
+      };
+      $(m, '.gold5k').onclick = () => {
+        if (!game.battle) return game.s.ui.toast('Open your kingdom first');
+        game.battle.run.addGold(5000, false);
+        game.battle.persist(true, game.battle.run.isQuiet() ? undefined : game.battle.run.currentWave);
       };
       $(m, '.treasury').onclick = () => {
         meta.d.treasury.lastCollect -= 8 * 3600000;

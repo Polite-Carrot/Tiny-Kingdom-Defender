@@ -1,6 +1,6 @@
 // All audio is synthesised with the Web Audio API: SFX voices and a tiny step-sequencer for music.
 
-import { CHAPTERS } from '../data/levels';
+import { THEMES } from '../data/themes';
 
 export type SfxName =
   | 'arrow' | 'cannon' | 'frost' | 'lightning' | 'hit' | 'death' | 'bossDeath' | 'leak' | 'coin' | 'build' | 'upgrade'
@@ -276,12 +276,12 @@ export class AudioSystem {
     let bpm = 92;
     let wave: OscillatorType = 'triangle';
     let drums = false;
-    const chap = CHAPTERS.find((c) => c.theme.id === track);
+    const chap = THEMES.find((c) => c.id === track);
     if (chap) {
-      root = chap.theme.music.root;
-      scale = chap.theme.music.scale;
-      bpm = chap.theme.music.bpm;
-      wave = chap.theme.music.wave;
+      root = chap.music.root;
+      scale = chap.music.scale;
+      bpm = chap.music.bpm;
+      wave = chap.music.wave;
       drums = true;
     }
     const deg = (d: number) => {

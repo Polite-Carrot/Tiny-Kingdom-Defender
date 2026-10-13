@@ -2,30 +2,68 @@
 // driven both by the 3D game and by the headless balance simulator.
 
 import { ENEMIES, ENEMY_RULES, type EnemyDef, type EnemyId } from '../data/enemies';
-import { TOWERS, TOWER_RULES, towerStats, totalInvested, type TowerDef, type TowerId, type TowerStats, type TargetMode, type DamageType } from '../data/towers';
+import {
+  TOWERS, TOWER_RULES, MAX_LEVEL, BRANCH_TIER, towerStats, totalInvested, upgradeCost,
+  type TowerDef, type TowerId, type TowerStats, type TargetMode, type DamageType,
+} from '../data/towers';
 import { HEROES, REINFORCEMENT, type HeroDef, type HeroId } from '../data/heroes';
-import { RUN_ECONOMY, TOWER_META, AD_REWARDS, ENDLESS } from '../data/economy';
-import { CHAPTERS } from '../data/levels';
+import { TOWER_META, AD_REWARDS } from '../data/economy';
+import { SIEGE, ROADS } from '../data/base';
 import { Emitter } from '../core/Emitter';
 import { Random } from '../core/Random';
-import { LevelMap, type PathPoint } from './LevelMap';
-import type { LevelDef } from './Levels';
+import type { LevelMap, PathPoint } from './LevelMap';
+import { kingdomMap, siegeWave, clearLandCost, checkpointOf, ageOf, initialSpots, hpMultFor, goldScaleAt } from './Siege';
 import type { WaveDef } from './WaveComposer';
 
 export interface MetaBonuses {
   towerLevels: Record<TowerId, number>;
   castleHpBonus: number;
-  startGoldBonus: number;
+  /** Extra kill gold as a fraction (0.1 = +10%). */
+  goldBonus: number;
   heroPower: number;
   heroId: HeroId | null;
 }
 
+/** Persisted state of the kingdom (saved at wave starts and whenever the field is quiet). */
+export interface SnapshotTower {
+  spot: number;
+  type: TowerId;
+  tier: number;
+  branch: number;
+  mode: TargetMode;
+  kills: number;
+}
+
+export interface BaseSnapshot {
+  /** Wave index to start next. */
+  wave: number;
+  /** Last checkpoint actually reached (waves cleared); falling sends you back here. */
+  checkpoint: number;
+  gold: number;
+  castleHp: number;
+  towers: SnapshotTower[];
+  /** Unlocked build pads. */
+  spots: number[];
+  padsCleared: number;
+  /** Once-per-checkpoint-segment ad rewards already used. */
+  reviveUsed: boolean;
+  reinforcementsUsed: boolean;
+  goldRushUsed: boolean;
+  goldRushWaves: number;
+}
+
+export function newKingdom(): BaseSnapshot {
+  return {
+    wave: 0, checkpoint: 0, gold: SIEGE.startingGold, castleHp: -1, towers: [], spots: initialSpots(), padsCleared: 0,
+    reviveUsed: false, reinforcementsUsed: false, goldRushUsed: false, goldRushWaves: 0,
+  };
+}
+
 export interface RunConfig {
-  level: LevelDef;
+  snapshot: BaseSnapshot;
   meta: MetaBonuses;
+  /** Tower types usable now (mutable: grows as unlocks happen). */
   availableTowers: TowerId[];
-  allowSpecialisation: boolean;
-  startGoldMult?: number;
   /** Whether the revive offer is possible (ads available, not headless). */
   reviveAvailable?: boolean;
   seed?: number;
@@ -136,7 +174,7 @@ export interface Ally {
   attackAnim: number;
 }
 
-export type RunState = 'prep' | 'playing' | 'reviveOffer' | 'won' | 'lost';
+export type RunState = 'prep' | 'playing' | 'reviveOffer' | 'lost';
 
 export interface RunStats {
   kills: number;
@@ -176,9 +214,15 @@ export type RunEvents = {
   towerSold: { tower: Tower; refund: number };
   reviveOffer: void;
   revived: void;
-  victory: { stars: number };
   defeat: void;
-  milestone: { wave: number };
+  /** The castle fell: fell back to `toWave`, keeping towers and gold. */
+  retreat: { fromWave: number; toWave: number };
+  /** Reached a checkpoint (wave count cleared, multiple of checkpointEvery). */
+  checkpoint: { wave: number };
+  ageChange: { age: number; wave: number };
+  roadOpened: { road: number };
+  landCleared: { spot: number; cost: number };
+  goldRush: { waves: number };
   earlyCall: { gold: number };
 };
 
@@ -204,15 +248,22 @@ export class Run {
   state: RunState = 'prep';
   gold: number;
   castleHp: number;
-  readonly castleMaxHp: number;
+  castleMaxHp: number;
   time = 0;
   /** Index of the next wave to start. */
   waveIndex = 0;
-  readonly totalWaves: number;
+  readonly totalWaves = Infinity;
   /** Countdown until the next wave auto-starts (-1 when not counting). */
   nextWaveTimer = -1;
   reviveUsed = false;
   reinforcementsUsed = false;
+  goldRushUsed = false;
+  /** Waves left (including the current one) with Gold Rush active. */
+  goldRushWaves = 0;
+  readonly unlockedSpots: Set<number>;
+  padsCleared: number;
+  /** Last checkpoint reached (number of waves cleared). */
+  lastCheckpoint: number;
 
   private spawnQueue: SpawnEntry[] = [];
   private waveRemaining = new Map<number, number>();
@@ -220,28 +271,36 @@ export class Run {
   private nextId = 1;
   private rng: Random;
   private tmp: PathPoint = { x: 0, z: 0, dx: 0, dz: 0 };
-  private readonly endless: boolean;
-  private readonly speedMult: number;
-  private readonly extraArmor: number;
-  private readonly waveGoldMult: number;
 
   constructor(public readonly config: RunConfig) {
-    const lvl = config.level;
-    const chapter = CHAPTERS[lvl.chapter];
-    this.map = new LevelMap(lvl.layout, lvl.buildSpots, lvl.seed, chapter.theme.props);
-    this.rng = new Random(config.seed ?? lvl.seed);
-    this.endless = lvl.kind === 'endless';
-    this.totalWaves = this.endless ? Infinity : lvl.waves.length;
-    const mod = lvl.modifier;
-    this.speedMult = mod?.enemySpeedMult ?? 1;
-    this.extraArmor = mod?.extraArmor ?? 0;
-    this.waveGoldMult = mod?.waveGoldMult ?? 1;
-    const chapterBonus = lvl.kind === 'endless' ? 0 : chapter.startGoldBonus;
-    this.gold = Math.round((RUN_ECONOMY.startingGold + chapterBonus + config.meta.startGoldBonus) * (mod?.startGoldMult ?? 1) * (config.startGoldMult ?? 1));
-    this.castleMaxHp = Math.max(1, Math.round((RUN_ECONOMY.castleHp + config.meta.castleHpBonus) * (mod?.castleHpMult ?? 1)));
-    this.castleHp = this.castleMaxHp;
+    const snap = config.snapshot;
+    this.map = kingdomMap();
+    this.rng = new Random(config.seed ?? 12345 + snap.wave);
+    this.waveIndex = snap.wave;
+    this.gold = snap.gold;
+    this.castleMaxHp = this.maxHpFor(config.meta);
+    this.castleHp = snap.castleHp > 0 ? Math.min(snap.castleHp, this.castleMaxHp) : this.castleMaxHp;
+    this.unlockedSpots = new Set(snap.spots);
+    this.padsCleared = snap.padsCleared;
+    this.lastCheckpoint = Math.min(snap.checkpoint ?? checkpointOf(snap.wave), snap.wave);
+    this.reviveUsed = snap.reviveUsed;
+    this.reinforcementsUsed = snap.reinforcementsUsed;
+    this.goldRushUsed = snap.goldRushUsed;
+    this.goldRushWaves = snap.goldRushWaves;
+    for (const st of snap.towers) {
+      const def = TOWERS[st.type];
+      const s = this.map.buildSpots[st.spot];
+      if (!def || !s || this.towerAt(st.spot)) continue;
+      const tier = Math.max(1, Math.min(MAX_LEVEL, st.tier));
+      const branch = tier > BRANCH_TIER ? Math.max(0, Math.min(1, st.branch)) : -1;
+      this.unlockedSpots.add(st.spot);
+      this.towers.push({
+        id: this.nextId++, def, spot: st.spot, x: s.x, z: s.z, tier, branch, stats: this.computeStats(def, tier, branch),
+        cooldown: 0.2, targetMode: st.mode ?? TOWER_RULES.defaultTargetMode, invested: totalInvested(def, tier), kills: st.kills ?? 0, aim: 0, lastFire: -10,
+      });
+    }
 
-    const heroId = mod?.noHero ? null : config.meta.heroId;
+    const heroId = config.meta.heroId;
     if (heroId) {
       const def = HEROES[heroId];
       const p = this.defaultHeroPosition();
@@ -255,12 +314,65 @@ export class Run {
     }
   }
 
+  private maxHpFor(meta: MetaBonuses): number {
+    return Math.max(1, Math.round(SIEGE.castleHp + meta.castleHpBonus));
+  }
+
+  /** Re-applies permanent upgrades bought mid-siege (tower levels, castle HP...). */
+  applyMeta(meta: MetaBonuses): void {
+    this.config.meta = meta;
+    const newMax = this.maxHpFor(meta);
+    this.castleHp = Math.min(newMax, this.castleHp + Math.max(0, newMax - this.castleMaxHp));
+    this.castleMaxHp = newMax;
+    for (const t of this.towers) t.stats = this.computeStats(t.def, t.tier, t.branch);
+    if (this.hero) {
+      const power = 1 + meta.heroPower;
+      const frac = this.hero.hp / this.hero.maxHp;
+      this.hero.maxHp = this.hero.def.hp * power;
+      this.hero.hp = this.hero.maxHp * frac;
+      this.hero.damage = this.hero.def.damage * power;
+    }
+  }
+
+  /** Persistable state. `wave` = the wave to start when resuming. */
+  snapshot(wave = this.waveIndex): BaseSnapshot {
+    return {
+      wave,
+      checkpoint: this.lastCheckpoint,
+      gold: Math.floor(this.gold),
+      castleHp: this.castleHp,
+      towers: this.towers.map((t) => ({ spot: t.spot, type: t.def.id, tier: t.tier, branch: t.branch, mode: t.targetMode, kills: t.kills })),
+      spots: [...this.unlockedSpots],
+      padsCleared: this.padsCleared,
+      reviveUsed: this.reviveUsed,
+      reinforcementsUsed: this.reinforcementsUsed,
+      goldRushUsed: this.goldRushUsed,
+      goldRushWaves: this.goldRushWaves,
+    };
+  }
+
+  /** No enemies on the field or waiting to spawn. */
+  isQuiet(): boolean {
+    return this.spawnQueue.length === 0 && this.aliveCount() === 0;
+  }
+
+  /** Wave currently being fought (or the last one fought). */
+  get currentWave(): number {
+    return Math.max(0, this.waveIndex - 1);
+  }
+
   // --- Queries ---------------------------------------------------------------
 
   waveDef(n: number): WaveDef | null {
-    const lvl = this.config.level;
-    if (lvl.endlessWave) return lvl.endlessWave(n);
-    return lvl.waves[n] ?? null;
+    return siegeWave(n);
+  }
+
+  isSpotUnlocked(spot: number): boolean {
+    return this.unlockedSpots.has(spot);
+  }
+
+  clearLandCost(): number {
+    return clearLandCost(this.padsCleared);
   }
 
   towerAt(spot: number): Tower | undefined {
@@ -272,9 +384,8 @@ export class Run {
   }
 
   upgradeCost(t: Tower): number | null {
-    if (t.tier >= 4) return null;
-    if (t.tier === 3 && !this.config.allowSpecialisation) return null;
-    return t.def.upgradeCosts[t.tier - 1];
+    if (t.tier >= MAX_LEVEL) return null;
+    return upgradeCost(t.def, t.tier);
   }
 
   sellValue(t: Tower): number {
@@ -282,8 +393,6 @@ export class Run {
   }
 
   isTowerAvailable(id: TowerId): boolean {
-    const allowed = this.config.level.modifier?.allowedTowers;
-    if (allowed && !allowed.includes(id)) return false;
     return this.config.availableTowers.includes(id);
   }
 
@@ -297,12 +406,6 @@ export class Run {
     };
   }
 
-  stars(): number {
-    const f = this.castleHp / this.castleMaxHp;
-    const th = RUN_ECONOMY.starThresholds;
-    return f >= th[2] ? 3 : f >= th[1] ? 2 : 1;
-  }
-
   aliveCount(): number {
     let n = 0;
     for (const e of this.enemies) if (e.alive) n++;
@@ -312,7 +415,7 @@ export class Run {
   /** Gold the player would get for calling the next wave now. */
   earlyCallBonus(): number {
     if (this.nextWaveTimer <= 0) return 0;
-    return Math.min(RUN_ECONOMY.earlyCallMaxGold, Math.round(this.nextWaveTimer * RUN_ECONOMY.earlyCallGoldPerSecond));
+    return Math.min(SIEGE.earlyCallMaxGold, Math.round(this.nextWaveTimer * SIEGE.earlyCallGoldPerSecond));
   }
 
   // --- Commands --------------------------------------------------------------
@@ -320,7 +423,7 @@ export class Run {
   build(spot: number, id: TowerId): Tower | null {
     if (this.state !== 'prep' && this.state !== 'playing') return null;
     const s = this.map.buildSpots[spot];
-    if (!s || this.towerAt(spot) || !this.isTowerAvailable(id)) return null;
+    if (!s || this.towerAt(spot) || !this.isTowerAvailable(id) || !this.unlockedSpots.has(spot)) return null;
     const def = TOWERS[id];
     if (this.gold < def.cost) return null;
     this.addGold(-def.cost);
@@ -338,10 +441,10 @@ export class Run {
   upgrade(t: Tower, branch = -1): boolean {
     const cost = this.upgradeCost(t);
     if (cost === null || this.gold < cost) return false;
-    if (t.tier === 3 && branch < 0) return false;
+    if (t.tier === BRANCH_TIER && branch < 0) return false;
     this.addGold(-cost);
     t.tier++;
-    if (t.tier === 4) t.branch = branch;
+    if (t.tier === BRANCH_TIER + 1) t.branch = branch;
     t.invested = totalInvested(t.def, t.tier);
     t.stats = this.computeStats(t.def, t.tier, t.branch);
     this.stats.upgrades++;
@@ -362,6 +465,58 @@ export class Run {
     t.targetMode = mode;
   }
 
+  /** Spend gold to clear land and unlock a build pad. */
+  clearLand(spot: number): boolean {
+    if (this.unlockedSpots.has(spot) || !this.map.buildSpots[spot]) return false;
+    const cost = this.clearLandCost();
+    if (this.gold < cost) return false;
+    this.addGold(-cost);
+    this.unlockedSpots.add(spot);
+    this.padsCleared++;
+    this.events.emit('landCleared', { spot, cost });
+    return true;
+  }
+
+  /** Gold Rush (rewarded ad): kill gold multiplied for the next few waves. Once per checkpoint segment. */
+  activateGoldRush(): boolean {
+    if (this.goldRushUsed) return false;
+    this.goldRushUsed = true;
+    // If a wave is running it counts as the first of the rush.
+    this.goldRushWaves = SIEGE.goldRushWaves + (this.state === 'playing' && !this.isQuiet() ? 0 : 1);
+    this.events.emit('goldRush', { waves: SIEGE.goldRushWaves });
+    return true;
+  }
+
+  /** The castle fell and no revive: fall back to the last checkpoint with towers and gold intact. */
+  retreat(): number {
+    const from = this.currentWave;
+    const to = this.lastCheckpoint;
+    for (const e of this.enemies) {
+      e.alive = false;
+      e.flash = -1;
+    }
+    for (const p of this.projectiles) p.active = false;
+    this.spawnQueue.length = 0;
+    this.waveRemaining.clear();
+    this.waveSpawnDone.clear();
+    this.waveIndex = to;
+    this.nextWaveTimer = -1;
+    this.castleHp = this.castleMaxHp;
+    this.reviveUsed = false;
+    this.reinforcementsUsed = false;
+    this.goldRushUsed = false;
+    this.goldRushWaves = 0;
+    this.ally.active = false;
+    if (this.hero) {
+      this.hero.dead = false;
+      this.hero.hp = this.hero.maxHp;
+      this.hero.abilityCd = 0;
+    }
+    this.state = 'prep';
+    this.events.emit('retreat', { fromWave: from, toWave: to });
+    return to;
+  }
+
   /** Starts the first wave or calls the next wave early. */
   callNextWave(): boolean {
     if (this.state === 'prep') {
@@ -369,7 +524,7 @@ export class Run {
       this.startWave();
       return true;
     }
-    if (this.state !== 'playing' || this.nextWaveTimer < 0 || this.waveIndex >= this.totalWaves) return false;
+    if (this.state !== 'playing' || this.nextWaveTimer < 0) return false;
     const bonus = this.earlyCallBonus();
     if (bonus > 0) this.addGold(bonus);
     this.stats.earlyCalls++;
@@ -381,7 +536,7 @@ export class Run {
   moveHero(x: number, z: number): void {
     const h = this.hero;
     if (!h || h.dead) return;
-    const lim = 6.4;
+    const lim = (this.map.size - 1) / 2 + 0.4;
     h.tx = Math.max(-lim, Math.min(lim, x));
     h.tz = Math.max(-lim, Math.min(lim, z));
   }
@@ -428,8 +583,11 @@ export class Run {
   summonReinforcements(): boolean {
     if (this.reinforcementsUsed || this.state !== 'playing') return false;
     this.reinforcementsUsed = true;
-    // Stand on the path halfway between spawn and castle of the busiest path.
-    const p = this.map.pointAt(0, this.map.paths[0].length * 0.62, this.tmp);
+    // Stand beside the road with the most enemies on it.
+    const counts = this.map.paths.map(() => 0);
+    for (const e of this.enemies) if (e.alive) counts[e.path]++;
+    const road = counts.indexOf(Math.max(...counts));
+    const p = this.map.pointAt(road, this.map.paths[road].length * 0.62, this.tmp);
     this.ally.active = true;
     this.ally.x = p.x + p.dz * 0.6;
     this.ally.z = p.z - p.dx * 0.6;
@@ -454,7 +612,6 @@ export class Run {
 
   declineRevive(): void {
     if (this.state !== 'reviveOffer') return;
-    this.reviveUsed = true;
     this.lose();
   }
 
@@ -490,6 +647,11 @@ export class Run {
     if (!wave) return;
     this.waveIndex++;
     this.nextWaveTimer = -1;
+    if (n > 0 && this.goldRushWaves > 0) this.goldRushWaves--;
+    if (n > 0 && n % SIEGE.ageEvery === 0) this.events.emit('ageChange', { age: ageOf(n), wave: n });
+    ROADS.forEach((r, i) => {
+      if (r.openWave === n && n > 0) this.events.emit('roadOpened', { road: i });
+    });
     let total = 0;
     for (const g of wave.groups) {
       for (let i = 0; i < g.count; i++) {
@@ -520,10 +682,9 @@ export class Run {
   }
 
   private updateWaveTimer(dt: number): void {
-    if (this.waveIndex >= this.totalWaves) return;
     const lastWave = this.waveIndex - 1;
     if (this.nextWaveTimer < 0) {
-      if (this.waveSpawnDone.get(lastWave)) this.nextWaveTimer = RUN_ECONOMY.waveGap;
+      if (this.waveSpawnDone.get(lastWave)) this.nextWaveTimer = SIEGE.waveGap;
       return;
     }
     this.nextWaveTimer -= dt;
@@ -547,7 +708,7 @@ export class Run {
       abilityTimer: def.heal ? def.heal.interval * this.rng.range(0.5, 1) : 0,
       summonTimer: def.boss?.summonInterval ?? 0,
       chargeTimer: def.boss?.chargeInterval ?? 0,
-      immuneTimer: 0, immuneIdx: 0, wave, bountyMult: goldMult, armorBonus: this.extraArmor, speedMult: this.speedMult, frozen: false,
+      immuneTimer: 0, immuneIdx: 0, wave, bountyMult: goldMult, armorBonus: 0, speedMult: 1, frozen: false,
       phase: this.rng.next() * Math.PI * 2,
     } satisfies Partial<Enemy>);
     this.placeEnemy(e);
@@ -658,7 +819,7 @@ export class Run {
     this.events.emit('castleHit', { damage: dmg, hp: this.castleHp });
     this.decWave(e.wave);
     if (this.castleHp <= 0) {
-      if (this.config.reviveAvailable && !this.reviveUsed && !this.endless) {
+      if (this.config.reviveAvailable && !this.reviveUsed) {
         this.state = 'reviveOffer';
         this.events.emit('reviveOffer', undefined);
       } else {
@@ -680,15 +841,18 @@ export class Run {
     for (const [w, n] of this.waveRemaining) {
       if (n <= 0 && this.waveSpawnDone.get(w)) {
         this.waveRemaining.delete(w);
-        const gold = Math.round((RUN_ECONOMY.waveClearBase + RUN_ECONOMY.waveClearPerWave * w) * this.waveGoldMult);
+        const gold = Math.round((SIEGE.waveClearBase + SIEGE.waveClearPerWave * w) * goldScaleAt(w));
         this.addGold(gold);
         this.events.emit('waveCleared', { index: w, gold });
-        if (this.endless && (w + 1) % ENDLESS.milestoneEvery === 0) this.events.emit('milestone', { wave: w + 1 });
+        if ((w + 1) % SIEGE.checkpointEvery === 0 && w + 1 > this.lastCheckpoint) {
+          this.lastCheckpoint = w + 1;
+          // A new checkpoint segment: once-per-segment ad rewards are available again.
+          this.reviveUsed = false;
+          this.reinforcementsUsed = false;
+          this.goldRushUsed = false;
+          this.events.emit('checkpoint', { wave: w + 1 });
+        }
       }
-    }
-    if (!this.endless && this.waveIndex >= this.totalWaves && this.spawnQueue.length === 0 && this.aliveCount() === 0 && this.castleHp > 0) {
-      this.state = 'won';
-      this.events.emit('victory', { stars: this.stars() });
     }
   }
 
@@ -727,7 +891,8 @@ export class Run {
     e.alive = false;
     e.hp = 0;
     e.flash = 0.6; // death animation timer (counts down to -1 before reuse)
-    const bounty = reward ? Math.round(e.def.bounty * e.bountyMult) : 0;
+    const rush = this.goldRushWaves > 0 ? SIEGE.goldRushMult : 1;
+    const bounty = reward ? Math.round(e.def.bounty * e.bountyMult * rush * goldScaleAt(e.wave) * (1 + this.config.meta.goldBonus)) : 0;
     if (reward) {
       this.stats.kills++;
       if (e.def.flying) this.stats.flyingKills++;
@@ -1019,7 +1184,7 @@ export class Run {
     a.attackAnim = 0.3;
     a.facing = Math.atan2(target.x - a.x, target.z - a.z);
     this.events.emit('allyAttack', { ally: a, target });
-    const scale = this.config.level.kind === 'campaign' ? CHAPTERS[this.config.level.chapter].hpMult : 1.5;
+    const scale = Math.max(1, hpMultFor(this.currentWave) * 0.6);
     this.launch('champion', a.x, 1.0, a.z, target, 16, REINFORCEMENT.damage * scale, 'magic', REINFORCEMENT.splash, -2, {});
   }
 }

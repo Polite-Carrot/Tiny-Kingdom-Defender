@@ -4,15 +4,14 @@
 import type { SaveSystem, SaveData } from '../core/Save';
 import type { Analytics } from '../analytics/Analytics';
 import {
-  metaCost, TOWER_META, META_UPGRADES, UNLOCKS, LEVEL_REWARDS, TREASURY, CHESTS, DAILY_LOGIN, AD_REWARDS, HERO_UNLOCK_COST,
-  COSMETICS, ENDLESS,
+  metaCost, TOWER_META, META_UPGRADES, UNLOCKS, TREASURY, CHESTS, DAILY_LOGIN, AD_REWARDS, HERO_UNLOCK_COST, COSMETICS,
 } from '../data/economy';
 import { MISSION_POOL, MISSIONS_PER_DAY, type MissionDef, type MissionStat } from '../data/missions';
-import { TOTAL_LEVELS, TOWER_UNLOCK_LEVEL, FEATURE_UNLOCK_LEVEL, WEEKLY } from '../data/levels';
+import { TOWER_UNLOCK_WAVE, UNLOCK_WAVE } from '../data/base';
 import { HEROES, type HeroId } from '../data/heroes';
 import type { TowerId } from '../data/towers';
 import { Random, hashString } from '../core/Random';
-import { levelId } from './Levels';
+import { checkpointCoins, waveCoins } from './Siege';
 import type { MetaBonuses } from './Run';
 
 export function dayKey(d = new Date()): string {
@@ -63,34 +62,20 @@ export class Meta {
 
   // --- Progress -------------------------------------------------------------------
 
-  /** Number of campaign levels won (contiguous from the start). */
-  levelsCompleted(): number {
-    let n = 0;
-    while (n < TOTAL_LEVELS && (this.d.levels[levelId(n)]?.wins ?? 0) > 0) n++;
-    return n;
+  /** Highest number of waves ever cleared. */
+  bestWave(): number {
+    return this.d.progress.bestWave;
   }
 
-  isLevelUnlocked(i: number): boolean {
-    return i === 0 || (this.d.levels[levelId(i - 1)]?.wins ?? 0) > 0;
+  featureUnlocked(f: keyof typeof UNLOCK_WAVE): boolean {
+    return this.bestWave() >= UNLOCK_WAVE[f];
   }
 
-  stars(i: number): number {
-    return this.d.levels[levelId(i)]?.stars ?? 0;
-  }
-
-  totalStars(): number {
-    return Object.values(this.d.levels).reduce((a, l) => a + l.stars, 0);
-  }
-
-  featureUnlocked(f: keyof typeof FEATURE_UNLOCK_LEVEL): boolean {
-    return this.levelsCompleted() >= FEATURE_UNLOCK_LEVEL[f];
-  }
-
-  /** Towers usable in a given campaign level (onboarding gating + purchases). */
-  towersFor(globalIndex: number): TowerId[] {
+  /** Tower types usable now (unlock waves + Lightning purchase). */
+  towersAvailable(): TowerId[] {
     return (['archer', 'cannon', 'frost', 'lightning'] as TowerId[]).filter((t) => {
       if (t === 'lightning' && !this.d.unlocks.lightning) return false;
-      return TOWER_UNLOCK_LEVEL[t] <= globalIndex;
+      return TOWER_UNLOCK_WAVE[t] <= this.bestWave();
     });
   }
 
@@ -98,43 +83,36 @@ export class Meta {
     return {
       towerLevels: { ...this.d.towerLevels },
       castleHpBonus: this.d.meta.castleHp * META_UPGRADES.castleHp.perLevel,
-      startGoldBonus: this.d.meta.startGold * META_UPGRADES.startGold.perLevel,
+      goldBonus: this.d.meta.warChest * META_UPGRADES.warChest.perLevel,
       heroPower: this.d.meta.heroPower * META_UPGRADES.heroPower.perLevel,
-      heroId: this.featureUnlocked('hero') ? this.d.selectedHero : null,
+      heroId: this.d.selectedHero,
     };
   }
 
-  /** Coins for finishing a campaign level. Star bonus only for new stars. */
-  levelReward(globalIndex: number, won: boolean, stars: number): { base: number; starBonus: number; total: number } {
-    const winAmount = Math.round(LEVEL_REWARDS.winBase + LEVEL_REWARDS.winPerLevel * globalIndex);
-    if (!won) {
-      const base = Math.round(winAmount * LEVEL_REWARDS.lossFraction);
-      return { base, starBonus: 0, total: base };
-    }
-    const prev = this.stars(globalIndex);
-    const starBonus = Math.max(0, stars - prev) * LEVEL_REWARDS.perStar;
-    return { base: winAmount, starBonus, total: winAmount + starBonus };
+  /** A wave was cleared: pays coins, tracks the best wave. Returns coins paid. */
+  recordWaveCleared(waveIndex: number): number {
+    const cleared = waveIndex + 1;
+    this.d.stats.wavesCleared++;
+    if (cleared > this.d.progress.bestWave) this.d.progress.bestWave = cleared;
+    const coins = waveCoins(waveIndex);
+    this.d.coins += coins;
+    this.d.stats.coinsEarned += coins;
+    // Batched analytics: one coins_earned event per wave keeps the log readable.
+    this.analytics.track('coins_earned', { amount: coins, source: 'wave_clear', balance: this.d.coins });
+    return coins;
   }
 
-  /** Records a campaign result. Returns whether a milestone chest was earned. */
-  recordLevel(globalIndex: number, won: boolean, stars: number, hpFrac: number): { milestoneChest: boolean; firstClear: boolean } {
-    const id = levelId(globalIndex);
-    const rec = (this.d.levels[id] ??= { stars: 0, wins: 0, plays: 0, bestHp: 0 });
-    const firstClear = won && rec.wins === 0;
-    rec.plays++;
-    if (won) {
-      rec.wins++;
-      rec.stars = Math.max(rec.stars, stars);
-      rec.bestHp = Math.max(rec.bestHp, hpFrac);
-      this.d.stats.wins++;
-    } else this.d.stats.losses++;
-    let milestoneChest = false;
-    if (firstClear && (globalIndex + 1) % LEVEL_REWARDS.chapterChestLevelInterval === 0) {
+  /** Reached checkpoint `wave` (a multiple of 10). First visit pays full coins and a milestone chest. */
+  recordCheckpoint(wave: number): { coins: number; firstTime: boolean } {
+    const firstTime = wave > this.d.progress.checkpointsPaid;
+    const coins = checkpointCoins(wave, firstTime);
+    if (firstTime) {
+      this.d.progress.checkpointsPaid = wave;
       this.d.chest.pendingMilestone++;
-      milestoneChest = true;
     }
-    this.commit();
-    return { milestoneChest, firstClear };
+    this.d.progress.bestCheckpoint = Math.max(this.d.progress.bestCheckpoint, wave);
+    this.earn(coins, firstTime ? 'checkpoint' : 'checkpoint_repeat');
+    return { coins, firstTime };
   }
 
   // --- Upgrades -------------------------------------------------------------------
@@ -169,7 +147,7 @@ export class Meta {
   }
 
   canUnlockLightning(): boolean {
-    return !this.d.unlocks.lightning && this.levelsCompleted() >= UNLOCKS.lightning.requiresLevel;
+    return !this.d.unlocks.lightning && this.bestWave() >= UNLOCKS.lightning.requiresWave;
   }
 
   unlockLightning(): boolean {
@@ -248,7 +226,7 @@ export class Meta {
   // --- Treasury -------------------------------------------------------------------
 
   treasuryRate(): number {
-    return TREASURY.coinsPerHour + TREASURY.coinsPerHourPerLevel * this.levelsCompleted();
+    return TREASURY.coinsPerHour + TREASURY.coinsPerHourPerWave * this.bestWave();
   }
 
   treasuryAmount(now = Date.now()): number {
@@ -403,37 +381,6 @@ export class Meta {
     this.d.ads.shopBundleCount++;
     this.earn(AD_REWARDS.shopBundleCoins, 'ad_shop_bundle');
     return AD_REWARDS.shopBundleCoins;
-  }
-
-  // --- Endless / weekly -----------------------------------------------------------
-
-  endlessMilestoneCoins(milestone: number): number {
-    return ENDLESS.milestoneBase + milestone * ENDLESS.milestoneGrowth;
-  }
-
-  recordEndless(wave: number): boolean {
-    const best = wave > this.d.endless.bestWave;
-    if (best) this.d.endless.bestWave = wave;
-    this.commit();
-    return best;
-  }
-
-  weeklyReward(week: string, won: boolean, stars: number): { coins: number; shards: number } {
-    if (this.d.weekly.week !== week) this.d.weekly = { week, cleared: false, bestStars: 0 };
-    let coins = 0;
-    let shards = 0;
-    if (won && !this.d.weekly.cleared) {
-      coins = WEEKLY.rewardCoins;
-      shards = WEEKLY.rewardShards;
-      this.d.weekly.cleared = true;
-      this.d.shards += shards;
-    } else if (!won) {
-      coins = Math.round(WEEKLY.rewardCoins * LEVEL_REWARDS.lossFraction * 0.5);
-    }
-    this.d.weekly.bestStars = Math.max(this.d.weekly.bestStars, won ? stars : 0);
-    this.earn(coins, 'weekly');
-    this.commit();
-    return { coins, shards };
   }
 
   // --- Notifications (red dots) --------------------------------------------------------

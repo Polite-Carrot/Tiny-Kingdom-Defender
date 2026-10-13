@@ -2,7 +2,7 @@
 
 import { HINTS, type HintId } from '../data/onboarding';
 import { ENEMIES, type EnemyId } from '../data/enemies';
-import { TOWERS } from '../data/towers';
+import { TOWERS, BRANCH_TIER } from '../data/towers';
 import type { Services } from './Services';
 import type { Battle } from './Battle';
 import type { Hud } from '../ui/Hud';
@@ -25,8 +25,9 @@ export class Tutorial {
     }));
   }
 
-  private get level(): number {
-    return this.battle.level.globalIndex;
+  /** True while the kingdom is brand new (first few waves of the first game). */
+  private get fresh(): boolean {
+    return this.s.meta.bestWave() < 3 && this.battle.run.waveIndex < 3;
   }
 
   private seen(id: string): boolean {
@@ -99,6 +100,10 @@ export class Tutorial {
     this.done('new_frost');
   }
 
+  onLandCleared(): void {
+    this.done('clear_land');
+  }
+
   onUpgraded(): void {
     this.flags.upgraded = true;
     this.done('upgrade_btn');
@@ -131,7 +136,7 @@ export class Tutorial {
     const run = this.battle.run;
     const now = performance.now();
     if (this.active && this.activeUntil && now > this.activeUntil) this.done();
-    if (this.s.ui.modalOpen || this.battle.ended) {
+    if (this.s.ui.modalOpen || run.state === 'lost') {
       if (this.active) {
         this.s.ui.clearHint();
         this.active = null;
@@ -151,11 +156,11 @@ export class Tutorial {
       }
       return;
     }
-    const L = this.level;
     const mode = this.hud.mode;
+    const w = run.waveIndex;
 
-    // Level 1: building and waves.
-    if (L === 0) {
+    // A new kingdom: building and waves.
+    if (this.fresh) {
       if (run.state === 'prep' && run.towers.length === 0 && mode === 'none' && !this.seen('build_spot')) {
         const sp = run.map.buildSpots[this.bestFreeSpot()];
         if (sp) return this.show('build_spot', HINTS.build_spot, this.world(sp.x, 0.2, sp.z), 'above');
@@ -187,8 +192,8 @@ export class Tutorial {
       }
     }
 
-    // Level 2: the hero.
-    if (L >= 1 && run.hero && !run.hero.dead) {
+    // After the first wave: the hero.
+    if (w >= 1 && run.hero && !run.hero.dead) {
       if (!this.seen('hero_tap') && !this.flags.heroSelected && mode === 'none') {
         const h = run.hero;
         return this.show('hero_tap', HINTS.hero_tap, () => this.battle.view.project(h.x, 1.1, h.z), 'above');
@@ -198,15 +203,30 @@ export class Tutorial {
       }
     }
     if (mode === 'build') {
-      if (L >= 1 && run.isTowerAvailable('cannon') && !this.seen('new_cannon')) return this.show('new_cannon', HINTS.new_cannon, null, 'free', 6000);
-      if (L >= 2 && run.isTowerAvailable('frost') && !this.seen('new_frost')) return this.show('new_frost', HINTS.new_frost, null, 'free', 6000);
+      if (run.isTowerAvailable('cannon') && !this.seen('new_cannon')) return this.show('new_cannon', HINTS.new_cannon, null, 'free', 6000);
+      if (run.isTowerAvailable('frost') && !this.seen('new_frost')) return this.show('new_frost', HINTS.new_frost, null, 'free', 6000);
     }
-    if (mode === 'tower' && run.config.allowSpecialisation && !this.seen('specialise') && run.towers.some((t) => t.tier === 3)) {
+    if (mode === 'tower' && !this.seen('materials') && run.towers.some((t) => t.tier === 2)) {
+      return this.show('materials', HINTS.materials, null, 'free', 7000);
+    }
+    if (mode === 'tower' && !this.seen('specialise') && run.towers.some((t) => t.tier === BRANCH_TIER)) {
       const anchor = this.hud.rectOf('upgrade');
       if (anchor) return this.show('specialise', HINTS.specialise, () => this.hud.rectOf('upgrade'), 'above', 7000);
     }
-    if (L >= 1 && run.state === 'playing' && run.waveIndex >= 2 && !this.seen('speed') && this.battle.speed === 1) {
+    if (w >= 3 && run.state === 'playing' && !this.seen('speed') && this.battle.speed === 1) {
       return this.show('speed', HINTS.speed, () => this.hud.rectOf('speed'), 'above', 4000);
+    }
+    if (w >= 6 && w < 10 && run.state === 'playing' && !this.seen('checkpoint')) {
+      return this.show('checkpoint', HINTS.checkpoint, null, 'free', 7000);
+    }
+    // No free pads left: point at the cheapest overgrown land next to a road.
+    if (mode === 'none' && !this.seen('clear_land') && run.gold >= run.clearLandCost() && run.towers.length >= 3) {
+      const free = run.map.buildSpots.some((sp) => run.isSpotUnlocked(sp.index) && !run.towerAt(sp.index));
+      if (!free) {
+        const locked = run.map.buildSpots.filter((sp) => !run.isSpotUnlocked(sp.index))
+          .sort((a, b) => run.map.spotCoverage(b, 0) - run.map.spotCoverage(a, 0))[0];
+        if (locked) return this.show('clear_land', HINTS.clear_land, this.world(locked.x, 0.3, locked.z), 'above', 9000);
+      }
     }
 
     // New enemy introductions (any level).

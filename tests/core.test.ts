@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { SaveSystem, migrate, SAVE_KEY, BACKUP_KEY, SAVE_VERSION, type StorageLike } from '../src/core/Save';
 import { evaluateInterstitial, type InterstitialState } from '../src/ads/AdManager';
 import { metaCost } from '../src/data/economy';
-import { buildCampaignLevel, buildWeeklyLevel, buildEndlessLevel, weekKey, allCampaignLevels } from '../src/game/Levels';
-import { LevelMap } from '../src/game/LevelMap';
-import { Run } from '../src/game/Run';
+import { Run, newKingdom, type MetaBonuses } from '../src/game/Run';
 import { Meta } from '../src/game/Meta';
-import { CHAPTERS } from '../src/data/levels';
+import { siegeWave, openRoads, ageOf, kingdomMap, clearLandCost, initialSpots, checkpointCoins } from '../src/game/Siege';
+import { ROADS, LAND, WAVE_COMPOSER } from '../src/data/base';
+import { TOWERS, towerStats, upgradeCost, levelName, MAX_TIER, MAX_LEVEL } from '../src/data/towers';
 import type { Analytics } from '../src/analytics/Analytics';
 
 function mem(init: Record<string, string> = {}): StorageLike & { m: Map<string, string> } {
@@ -15,16 +15,25 @@ function mem(init: Record<string, string> = {}): StorageLike & { m: Map<string, 
 }
 
 const nullAnalytics: Analytics = { track: () => {}, sessionEvents: () => [] };
+const noMeta: MetaBonuses = { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0 }, castleHpBonus: 0, goldBonus: 0, heroPower: 0, heroId: null };
 
 describe('save system', () => {
-  it('migrates a v1 save to the current version', () => {
+  it('migrates a v1 save all the way to the current version', () => {
     const d = migrate({ version: 1, gold: 123, stars: { L1: 3, L2: 1 } });
     expect(d.version).toBe(SAVE_VERSION);
-    expect(d.coins).toBe(123);
-    expect(d.levels.L1.stars).toBe(3);
-    expect(d.levels.L2.wins).toBe(1);
+    // v3 -> v4 compensates 25 coins per campaign level won.
+    expect(d.coins).toBe(123 + 2 * 25);
+    expect(d.base).toBeNull();
     expect(d.cosmetics.castle).toBe('castle_default');
-    expect(d.endless.bestWave).toBe(0);
+  });
+
+  it('migrates a v3 campaign save to the kingdom format', () => {
+    const d = migrate({ version: 3, coins: 10, levels: { L1: { stars: 3, wins: 2, plays: 2, bestHp: 1 } }, meta: { castleHp: 2, startGold: 3, heroPower: 1 }, endless: {}, weekly: {} });
+    expect(d.meta.warChest).toBe(3);
+    expect(d.meta.castleHp).toBe(2);
+    expect(d.coins).toBe(35);
+    expect((d as unknown as Record<string, unknown>).levels).toBeUndefined();
+    expect(d.progress.bestWave).toBe(0);
   });
 
   it('falls back to the backup when the main save is corrupt', () => {
@@ -33,7 +42,7 @@ describe('save system', () => {
     a.data.coins = 42;
     a.save();
     a.data.coins = 50;
-    a.save(); // backup now holds coins=42
+    a.save();
     storage.setItem(SAVE_KEY, '{not json');
     const b = new SaveSystem(storage);
     expect(b.recovered).toBe('backup');
@@ -41,68 +50,66 @@ describe('save system', () => {
   });
 
   it('resets when both main and backup are corrupt', () => {
-    const storage = mem({ [SAVE_KEY]: '[[[', [BACKUP_KEY]: 'nope' });
-    const s = new SaveSystem(storage);
+    const s = new SaveSystem(mem({ [SAVE_KEY]: '[[[', [BACKUP_KEY]: 'nope' }));
     expect(s.recovered).toBe('reset');
     expect(s.data.coins).toBe(0);
   });
 
-  it('round-trips progress', () => {
+  it('round-trips the kingdom', () => {
     const storage = mem();
     const a = new SaveSystem(storage);
-    a.data.levels.L1 = { stars: 2, wins: 1, plays: 2, bestHp: 0.7 };
+    const run = new Run({ snapshot: newKingdom(), meta: noMeta, availableTowers: ['archer'] });
+    run.build([...run.unlockedSpots][0], 'archer');
+    a.data.base = run.snapshot();
     a.save();
     const b = new SaveSystem(storage);
-    expect(b.data.levels.L1.stars).toBe(2);
+    expect(b.data.base?.towers).toHaveLength(1);
+    expect(b.data.base?.towers[0].type).toBe('archer');
   });
 });
 
 describe('interstitial rules', () => {
   const base: InterstitialState = {
-    winsSinceLast: 3, levelsCompleted: 10, sessionSeconds: 600, secondsSinceRewarded: Infinity, result: 'win', reviveOffered: false, removeAds: false,
+    winsSinceLast: 2, levelsCompleted: 40, sessionSeconds: 600, secondsSinceRewarded: Infinity, result: 'win', reviveOffered: false, removeAds: false,
   };
   it('shows when all rules pass', () => expect(evaluateInterstitial(base).show).toBe(true));
   it('never after a loss', () => expect(evaluateInterstitial({ ...base, result: 'loss' }).show).toBe(false));
-  it('never in the first 5 levels', () => expect(evaluateInterstitial({ ...base, levelsCompleted: 4 }).show).toBe(false));
+  it('never early in the game', () => expect(evaluateInterstitial({ ...base, levelsCompleted: 20 }).show).toBe(false));
   it('never in the first 3 minutes', () => expect(evaluateInterstitial({ ...base, sessionSeconds: 120 }).show).toBe(false));
   it('skips after a recent rewarded ad', () => expect(evaluateInterstitial({ ...base, secondsSinceRewarded: 60 }).show).toBe(false));
-  it('never after a revive offer', () => expect(evaluateInterstitial({ ...base, reviveOffered: true }).show).toBe(false));
-  it('only every 3rd win', () => expect(evaluateInterstitial({ ...base, winsSinceLast: 2 }).show).toBe(false));
+  it('never after a revive offer or fall in the segment', () => expect(evaluateInterstitial({ ...base, reviveOffered: true }).show).toBe(false));
+  it('only every 2nd checkpoint', () => expect(evaluateInterstitial({ ...base, winsSinceLast: 1 }).show).toBe(false));
   it('remove-ads disables it', () => expect(evaluateInterstitial({ ...base, removeAds: true }).show).toBe(false));
 });
 
 describe('economy', () => {
-  it('uses base × 1.35^level', () => {
+  it('uses base × 1.35^level for permanent upgrades', () => {
     expect(metaCost(100, 0)).toBe(100);
     expect(metaCost(100, 1)).toBe(135);
     expect(metaCost(100, 2)).toBe(182);
   });
 
-  it('pays 40-60 per win, 30% on loss, star bonus once', () => {
+  it('pays coins per wave and a bigger first-time checkpoint reward', () => {
     const save = new SaveSystem(mem());
     const meta = new Meta(save, nullAnalytics);
-    const first = meta.levelReward(0, true, 3);
-    expect(first.base).toBeGreaterThanOrEqual(40);
-    expect(first.starBonus).toBeGreaterThan(0);
-    meta.recordLevel(0, true, 3, 1);
-    const again = meta.levelReward(0, true, 3);
-    expect(again.starBonus).toBe(0);
-    const last = meta.levelReward(59, true, 1);
-    expect(last.base).toBeLessThanOrEqual(60);
-    const loss = meta.levelReward(0, false, 0);
-    expect(loss.total).toBe(Math.round(first.base * 0.3));
+    expect(meta.recordWaveCleared(0)).toBeGreaterThan(0);
+    expect(meta.bestWave()).toBe(1);
+    const first = meta.recordCheckpoint(10);
+    const again = meta.recordCheckpoint(10);
+    expect(first.firstTime).toBe(true);
+    expect(again.firstTime).toBe(false);
+    expect(again.coins).toBeLessThan(first.coins);
+    expect(checkpointCoins(20, true)).toBeGreaterThan(checkpointCoins(10, true));
+    expect(save.data.chest.pendingMilestone).toBe(1);
   });
 
   it('daily login streak resets after a missed day', () => {
-    const save = new SaveSystem(mem());
-    const meta = new Meta(save, nullAnalytics);
+    const meta = new Meta(new SaveSystem(mem()), nullAnalytics);
     const d1 = new Date(2026, 0, 1, 12);
-    const d2 = new Date(2026, 0, 2, 12);
-    const d4 = new Date(2026, 0, 4, 12);
     expect(meta.claimDaily(d1)?.dayIndex).toBe(0);
     expect(meta.claimDaily(d1)).toBeNull();
-    expect(meta.claimDaily(d2)?.dayIndex).toBe(1);
-    expect(meta.claimDaily(d4)?.dayIndex).toBe(0);
+    expect(meta.claimDaily(new Date(2026, 0, 2, 12))?.dayIndex).toBe(1);
+    expect(meta.claimDaily(new Date(2026, 0, 4, 12))?.dayIndex).toBe(0);
   });
 
   it('caps the treasury at 8 hours', () => {
@@ -115,66 +122,106 @@ describe('economy', () => {
   });
 });
 
-describe('levels', () => {
-  it('builds 60 campaign levels with 8-12 waves and bosses every 5th', () => {
-    const all = allCampaignLevels();
-    expect(all).toHaveLength(60);
-    for (const l of all) {
-      expect(l.waves.length).toBeGreaterThanOrEqual(8);
-      expect(l.waves.length).toBeLessThanOrEqual(12);
-      expect(l.isBoss).toBe((l.indexInChapter + 1) % 5 === 0);
-      if (l.isBoss) expect(l.waves[l.waves.length - 1].boss).toBe(true);
-    }
-  });
-
-  it('every level map has paths ending at the castle and enough build spots', () => {
-    for (const l of allCampaignLevels()) {
-      const map = new LevelMap(l.layout, l.buildSpots, l.seed, CHAPTERS[l.chapter].theme.props);
-      expect(map.buildSpots.length).toBeGreaterThanOrEqual(8);
-      for (const p of map.paths) {
-        expect(p.xs[p.xs.length - 1]).toBe(map.castle.x);
-        expect(p.zs[p.zs.length - 1]).toBe(map.castle.z);
+describe('towers', () => {
+  it('every upgrade is a stronger material, then star levels', () => {
+    for (const def of Object.values(TOWERS)) {
+      let prevDmg = 0;
+      let prevCost = 0;
+      for (let tier = 1; tier < MAX_LEVEL; tier++) {
+        const st = towerStats(def, tier, tier > 3 ? 0 : -1);
+        expect(st.damage).toBeGreaterThan(prevDmg);
+        const c = upgradeCost(def, tier);
+        expect(c).toBeGreaterThan(prevCost);
+        prevDmg = st.damage;
+        prevCost = c;
       }
     }
-  });
-
-  it('weekly challenge is deterministic per week', () => {
-    const a = buildWeeklyLevel(new Date(2026, 9, 13));
-    const b = buildWeeklyLevel(new Date(2026, 9, 14));
-    expect(weekKey(new Date(2026, 9, 13))).toBe(weekKey(new Date(2026, 9, 14)));
-    expect(a.modifier?.id).toBe(b.modifier?.id);
-    expect(JSON.stringify(a.waves)).toBe(JSON.stringify(b.waves));
-  });
-
-  it('endless waves scale up indefinitely', () => {
-    const lvl = buildEndlessLevel();
-    const count = (n: number) => lvl.endlessWave!(n).groups.reduce((a, g) => a + g.count, 0);
-    expect(count(30)).toBeGreaterThan(count(1));
-    expect(lvl.endlessWave!(60).hpMult).toBeGreaterThan(lvl.endlessWave!(5).hpMult);
+    expect(levelName(1)).toBe('Wood');
+    expect(levelName(2)).toBe('Stone');
+    expect(levelName(MAX_TIER)).toBe('Celestial');
+    expect(levelName(MAX_TIER + 2)).toBe('Celestial ★2');
   });
 });
 
-describe('run simulation', () => {
-  it('a level with no towers is lost and gives a defeat', () => {
-    const run = new Run({
-      level: buildCampaignLevel(0),
-      meta: { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0 }, castleHpBonus: 0, startGoldBonus: 0, heroPower: 0, heroId: null },
-      availableTowers: ['archer'],
-      allowSpecialisation: false,
-    });
-    run.callNextWave();
-    for (let i = 0; i < 60 * 600 && run.state === 'playing'; i++) run.update(1 / 30);
-    expect(run.state).toBe('lost');
+describe('kingdom siege', () => {
+  it('has one map whose roads all end at the castle, with enough pads', () => {
+    const map = kingdomMap();
+    expect(map.buildSpots.length).toBe(LAND.totalSpots);
+    for (const p of map.paths) {
+      expect(p.xs[p.xs.length - 1]).toBe(map.castle.x);
+      expect(p.zs[p.zs.length - 1]).toBe(map.castle.z);
+    }
+    expect(initialSpots()).toHaveLength(LAND.initialSpots);
   });
 
-  it('sell refunds 70% of investment', () => {
-    const run = new Run({
-      level: buildCampaignLevel(0),
-      meta: { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0 }, castleHpBonus: 0, startGoldBonus: 0, heroPower: 0, heroId: null },
-      availableTowers: ['archer'],
-      allowSpecialisation: true,
-    });
-    const t = run.build(0, 'archer')!;
+  it('opens new roads and Ages as waves progress', () => {
+    expect(openRoads(0)).toEqual([0]);
+    expect(openRoads(ROADS[1].openWave)).toEqual([0, 1]);
+    expect(openRoads(ROADS[2].openWave)).toEqual([0, 1, 2]);
+    expect(ageOf(0)).toBe(0);
+    expect(ageOf(25)).toBe(1);
+  });
+
+  it('waves are deterministic, endless, and capped in enemy count', () => {
+    expect(JSON.stringify(siegeWave(37))).toBe(JSON.stringify(siegeWave(37)));
+    for (const n of [5, 50, 150, 400]) {
+      const w = siegeWave(n);
+      const count = w.groups.reduce((a, g) => a + g.count, 0);
+      expect(count).toBeLessThanOrEqual(WAVE_COMPOSER.maxEnemiesPerWave + 4);
+      expect(w.groups.every((g) => openRoads(n).includes(g.path))).toBe(true);
+    }
+    expect(siegeWave(9).boss).toBe(true);
+    expect(siegeWave(300).hpMult).toBeGreaterThan(siegeWave(100).hpMult);
+  });
+
+  it('clearing land costs more each time and unlocks a pad', () => {
+    expect(clearLandCost(1)).toBeGreaterThan(clearLandCost(0));
+    const snap = newKingdom();
+    snap.gold = 10000;
+    const run = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['archer'] });
+    const locked = run.map.buildSpots.find((s) => !run.isSpotUnlocked(s.index))!;
+    expect(run.build(locked.index, 'archer')).toBeNull();
+    expect(run.clearLand(locked.index)).toBe(true);
+    expect(run.build(locked.index, 'archer')).not.toBeNull();
+  });
+
+  it('falling keeps towers and gold and returns to the last checkpoint', () => {
+    const snap = newKingdom();
+    snap.wave = 23;
+    snap.checkpoint = 20;
+    const run = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['archer'] });
+    const t = run.build([...run.unlockedSpots][0], 'archer')!;
+    run.upgrade(t);
+    const gold = run.gold;
+    run.callNextWave();
+    for (let i = 0; i < 30 * 600 && run.state === 'playing'; i++) run.update(1 / 30);
+    expect(run.state).toBe('lost');
+    const to = run.retreat();
+    expect(to).toBe(20);
+    expect(run.waveIndex).toBe(20);
+    expect(run.towers).toHaveLength(1);
+    expect(run.towers[0].tier).toBe(2);
+    expect(run.gold).toBeGreaterThanOrEqual(gold);
+    expect(run.castleHp).toBe(run.castleMaxHp);
+    expect(run.state).toBe('prep');
+  });
+
+  it('sell refunds 70% of the investment', () => {
+    const run = new Run({ snapshot: newKingdom(), meta: noMeta, availableTowers: ['archer'] });
+    const t = run.build([...run.unlockedSpots][0], 'archer')!;
     expect(run.sellValue(t)).toBe(Math.floor(70 * 0.7));
+  });
+
+  it('snapshots restore the same kingdom', () => {
+    const snap = newKingdom();
+    snap.gold = 5000;
+    const a = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['archer', 'cannon'] });
+    const spots = [...a.unlockedSpots];
+    a.build(spots[0], 'archer');
+    a.build(spots[1], 'cannon');
+    a.upgrade(a.towers[1]);
+    const b = new Run({ snapshot: a.snapshot(), meta: noMeta, availableTowers: ['archer', 'cannon'] });
+    expect(b.towers.map((t) => [t.def.id, t.tier, t.spot])).toEqual(a.towers.map((t) => [t.def.id, t.tier, t.spot]));
+    expect(b.gold).toBe(Math.floor(a.gold));
   });
 });

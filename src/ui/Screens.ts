@@ -1,11 +1,11 @@
-// Title (main menu) and world map screens.
+// Title (main menu) screen. Your own kingdom is rendered behind it.
 
 import { el, $, fmt, fmtTime } from './dom';
-import { icon, ICONS } from './icons';
+import { icon } from './icons';
 import * as Modals from './Modals';
 import type { Game } from '../game/Game';
-import { CHAPTERS, LEVELS_PER_CHAPTER, TOTAL_LEVELS, FEATURE_UNLOCK_LEVEL, BOSS_EVERY } from '../data/levels';
-import { buildEndlessLevel, buildWeeklyLevel, weekKey } from '../game/Levels';
+import { UNLOCK_WAVE } from '../data/base';
+import { ageTitle, checkpointOf } from '../game/Siege';
 
 export class TitleScreen {
   readonly el: HTMLElement;
@@ -33,16 +33,13 @@ export class TitleScreen {
           <button class="side-btn treasury">${icon('castle')}Treasury<i class="dot"></i><span class="timer"></span></button>
         </div>
         <div class="stack" style="display:flex;flex-direction:column;gap:10px;align-items:center">
+          <div class="kingdom-card"></div>
           <button class="btn big play">${icon('play')} Play</button>
-          <div class="row">
-            <button class="btn blue endless">${icon('infinity')} Endless</button>
-            <button class="btn wood weekly">${icon('trophy')} Weekly</button>
-          </div>
         </div>
       </div>
       <button class="version">v1.0.0</button>`;
     const q = (s: string) => $(this.el, s);
-    q('.play').onclick = () => game.goMap();
+    q('.play').onclick = () => game.enterKingdom();
     q('.settings').onclick = () => Modals.settings(game);
     q('.shop').onclick = () => this.gate('shop', () => Modals.shop(game));
     q('.heroes').onclick = () => this.gate('heroes', () => Modals.heroes(game));
@@ -50,8 +47,6 @@ export class TitleScreen {
     q('.daily').onclick = () => this.gate('dailyLogin', () => Modals.daily(game));
     q('.chest').onclick = () => this.gate('chests', () => Modals.chest(game));
     q('.treasury').onclick = () => this.gate('treasury', () => Modals.treasury(game));
-    q('.endless').onclick = () => this.gate('endless', () => Modals.endlessIntro(game, buildEndlessLevel()));
-    q('.weekly').onclick = () => this.gate('weekly', () => Modals.preLevel(game, buildWeeklyLevel(new Date())));
     q('.version').onclick = () => {
       if (++this.versionTaps >= 5) {
         this.versionTaps = 0;
@@ -63,10 +58,10 @@ export class TitleScreen {
     });
   }
 
-  private gate(f: keyof typeof FEATURE_UNLOCK_LEVEL, fn: () => void): void {
+  private gate(f: keyof typeof UNLOCK_WAVE, fn: () => void): void {
     const meta = this.game.s.meta;
     if (meta.featureUnlocked(f)) fn();
-    else this.game.s.ui.toast(`Unlocks after clearing level ${FEATURE_UNLOCK_LEVEL[f]}`);
+    else this.game.s.ui.toast(`Unlocks when you reach wave ${UNLOCK_WAVE[f]}`);
   }
 
   onEnter(): void {
@@ -94,25 +89,20 @@ export class TitleScreen {
     setDot('.daily', n.daily);
     setDot('.chest', n.chest);
     setDot('.treasury', n.treasury);
-    const lock = (sel: string, f: keyof typeof FEATURE_UNLOCK_LEVEL) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
+    const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
     lock('.shop', 'shop');
     lock('.heroes', 'heroes');
     lock('.missions', 'missions');
     lock('.daily', 'dailyLogin');
     lock('.chest', 'chests');
     lock('.treasury', 'treasury');
-    const endless = $(this.el, '.endless');
-    endless.innerHTML = meta.featureUnlocked('endless')
-      ? `${icon('infinity')} Endless<span class="sub">&nbsp;Best ${d.endless.bestWave}</span>`
-      : `${icon('lock')} Endless<span class="sub">&nbsp;Lv ${FEATURE_UNLOCK_LEVEL.endless}</span>`;
-    const weekly = $(this.el, '.weekly');
-    const wk = weekKey(new Date());
-    const cleared = d.weekly.week === wk && d.weekly.cleared;
-    weekly.innerHTML = meta.featureUnlocked('weekly')
-      ? `${icon('trophy')} Weekly${cleared ? '<span class="sub">&nbsp;✓</span>' : ''}`
-      : `${icon('lock')} Weekly<span class="sub">&nbsp;Lv ${FEATURE_UNLOCK_LEVEL.weekly}</span>`;
-    const lvl = Math.min(meta.levelsCompleted() + 1, TOTAL_LEVELS);
-    $(this.el, '.play').innerHTML = `${icon('play')} Play<span class="sub" style="margin-left:6px">Lv ${lvl}</span>`;
+    const base = d.base;
+    const wave = base ? base.wave : 0;
+    const card = $(this.el, '.kingdom-card');
+    card.innerHTML = base
+      ? `<b>${ageTitle(wave)}</b> · Wave ${wave + 1}<br/><span>⚑ Checkpoint ${base.checkpoint ?? checkpointOf(wave)} · Best ${meta.bestWave()} · ${base.towers.length} towers</span>`
+      : `<b>Found your kingdom</b><br/><span>Build, upgrade and hold out for as long as you can</span>`;
+    $(this.el, '.play').innerHTML = `${icon('play')} ${base ? 'Defend' : 'Begin'}`;
     this.tick(true);
   }
 
@@ -135,125 +125,5 @@ export class TitleScreen {
     const n = meta.notifications();
     $(this.el, '.chest .dot').classList.toggle('on', n.chest);
     $(this.el, '.treasury .dot').classList.toggle('on', n.treasury);
-  }
-}
-
-export class MapScreen {
-  readonly el: HTMLElement;
-  private chapter = 0;
-
-  constructor(private game: Game) {
-    this.el = el('div', 'map-screen');
-    this.el.innerHTML = `
-      <div class="topbar">
-        <button class="btn icon ghost back" aria-label="Back">${ICONS.home}</button>
-        <div class="pill coins">${icon('coin')}<span class="v">0</span></div>
-        <div class="grow"></div>
-        <div class="pill stars">${icon('star')}<span class="v">0</span></div>
-        <button class="btn small gold shopbtn">${icon('shop')}Shop<i class="dot"></i></button>
-      </div>
-      <div class="chapter-tabs"></div>
-      <div class="map-board"><svg class="road"></svg><div class="map-nodes"></div></div>`;
-    $(this.el, '.back').onclick = () => game.goTitle();
-    $(this.el, '.shopbtn').onclick = () => {
-      if (game.s.meta.featureUnlocked('shop')) Modals.shop(game);
-      else game.s.ui.toast(`Shop unlocks after level ${FEATURE_UNLOCK_LEVEL.shop}`);
-    };
-    window.addEventListener('resize', () => requestAnimationFrame(() => this.drawRoad()));
-  }
-
-  open(chapter?: number): void {
-    const meta = this.game.s.meta;
-    this.chapter = chapter ?? Math.min(CHAPTERS.length - 1, Math.floor(Math.min(meta.levelsCompleted(), TOTAL_LEVELS - 1) / LEVELS_PER_CHAPTER));
-    this.render();
-  }
-
-  render(): void {
-    const meta = this.game.s.meta;
-    $(this.el, '.coins .v').textContent = fmt(meta.d.coins);
-    $(this.el, '.stars .v').textContent = `${meta.totalStars()}/${TOTAL_LEVELS * 3}`;
-    $(this.el, '.shopbtn .dot').classList.toggle('on', meta.notifications().upgrades);
-    const tabs = $(this.el, '.chapter-tabs');
-    tabs.innerHTML = CHAPTERS.map((c, i) => {
-      const unlocked = meta.isLevelUnlocked(i * LEVELS_PER_CHAPTER);
-      return `<button class="chapter-tab ${i === this.chapter ? 'on' : ''} ${unlocked ? '' : 'locked'}" data-c="${i}">${unlocked ? '' : '🔒 '}${c.theme.name}</button>`;
-    }).join('');
-    tabs.querySelectorAll<HTMLButtonElement>('.chapter-tab').forEach((b) => {
-      b.onclick = () => {
-        const c = Number(b.dataset.c);
-        if (!meta.isLevelUnlocked(c * LEVELS_PER_CHAPTER)) {
-          this.game.s.ui.toast(`Clear ${CHAPTERS[c - 1].theme.name} to unlock ${CHAPTERS[c].theme.name}`);
-          return;
-        }
-        this.chapter = c;
-        this.render();
-      };
-    });
-
-    const theme = CHAPTERS[this.chapter].theme;
-    const board = $(this.el, '.map-board');
-    board.style.background = `radial-gradient(circle at 30% 20%, ${theme.grassAlt}, transparent 60%), radial-gradient(circle at 80% 85%, ${theme.cliff}55, transparent 55%), linear-gradient(160deg, ${theme.grass}, ${theme.grassAlt})`;
-
-    const portrait = this.game.orientation === 'portrait';
-    const cols = portrait ? 3 : 5;
-    const rows = Math.ceil(LEVELS_PER_CHAPTER / cols);
-    const nodes = $(this.el, '.map-nodes');
-    nodes.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    nodes.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-    const current = meta.levelsCompleted();
-    let html = '';
-    for (let i = 0; i < LEVELS_PER_CHAPTER; i++) {
-      const g = this.chapter * LEVELS_PER_CHAPTER + i;
-      const row = Math.floor(i / cols);
-      const col = row % 2 === 0 ? i % cols : cols - 1 - (i % cols);
-      const unlocked = meta.isLevelUnlocked(g);
-      const stars = meta.stars(g);
-      const boss = (i + 1) % BOSS_EVERY === 0;
-      const cls = [!unlocked ? 'locked' : stars > 0 ? 'done' : '', boss && unlocked ? 'boss' : '', g === current ? 'current' : ''].join(' ');
-      const starHtml = unlocked ? [0, 1, 2].map((k) => icon(k < stars ? 'star' : 'starEmpty')).join('') : '';
-      html += `<div class="map-node" style="grid-row:${row + 1};grid-column:${col + 1}">
-        ${boss ? `<span class="node-skull">${ICONS.skull}</span>` : ''}
-        <button class="node-btn ${cls}" data-g="${g}">${unlocked ? g + 1 : `<span class="lockico" style="display:inline-block;width:26px;height:26px">${ICONS.lock}</span>`}</button>
-        <div class="node-stars">${starHtml}</div></div>`;
-    }
-    nodes.innerHTML = html;
-    nodes.querySelectorAll<HTMLButtonElement>('.node-btn').forEach((b) => {
-      b.onclick = () => {
-        const g = Number(b.dataset.g);
-        if (!meta.isLevelUnlocked(g)) {
-          this.game.s.ui.toast('Clear the previous level first');
-          return;
-        }
-        Modals.preLevelCampaign(this.game, g);
-      };
-    });
-    requestAnimationFrame(() => this.drawRoad());
-  }
-
-  private drawRoad(): void {
-    const board = this.el.querySelector('.map-board') as HTMLElement | null;
-    if (!board || board.offsetParent === null) return;
-    const svg = $(this.el, 'svg.road');
-    const br = board.getBoundingClientRect();
-    const pts: [number, number][] = [];
-    const btns = [...this.el.querySelectorAll<HTMLElement>('.node-btn')];
-    btns.sort((a, b) => Number(a.dataset.g) - Number(b.dataset.g));
-    for (const b of btns) {
-      const r = b.getBoundingClientRect();
-      pts.push([r.left + r.width / 2 - br.left, r.top + r.height / 2 - br.top]);
-    }
-    if (pts.length < 2) return;
-    let d = `M${pts[0][0]},${pts[0][1]}`;
-    for (let i = 1; i < pts.length; i++) {
-      const [x0, y0] = pts[i - 1];
-      const [x1, y1] = pts[i];
-      const mx = (x0 + x1) / 2;
-      const my = (y0 + y1) / 2;
-      d += ` Q${x0 === x1 ? x0 + 30 : mx},${y0 === y1 ? my - 18 : my} ${x1},${y1}`;
-    }
-    svg.setAttribute('viewBox', `0 0 ${br.width} ${br.height}`);
-    svg.innerHTML = `<path d="${d}" stroke="rgba(0,0,0,.18)" stroke-width="22" fill="none" stroke-linecap="round" transform="translate(0,4)"/>
-      <path d="${d}" stroke="${CHAPTERS[this.chapter].theme.path}" stroke-width="18" fill="none" stroke-linecap="round"/>
-      <path d="${d}" stroke="rgba(255,255,255,.5)" stroke-width="3" fill="none" stroke-dasharray="8 10" stroke-linecap="round"/>`;
   }
 }

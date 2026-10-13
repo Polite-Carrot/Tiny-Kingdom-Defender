@@ -1,4 +1,4 @@
-// Tower balance data. All in-run tower numbers live here.
+// Tower balance data. Towers have 10 tiers; each tier is a new building material.
 // Distances are in tiles (1 tile = 1 world unit). Times are in seconds.
 
 export type TowerId = 'archer' | 'cannon' | 'frost' | 'lightning';
@@ -24,19 +24,36 @@ export interface TowerStats {
   multishot: number;
   /** Stun seconds on hit. */
   stun: number;
-  /** Chance to freeze (full stop) for stun seconds. */
+  /** Chance to freeze (full stop) for `stun` seconds. */
   freezeChance: number;
-  /** Armor shred: adds this much vulnerability to physical for 3s. */
+  /** Armor shred: removes this much armor for a few seconds. */
   shred: number;
   /** Pulses damage+slow on all enemies in range instead of shooting. */
   aura: boolean;
 }
 
+/** How stats grow with each tier above 1. */
+export interface TierGrowth {
+  damage: number; // multiplier per tier
+  range: number; // tiles added per tier
+  rangeMax: number; // max tiles added by tiers
+  cooldown: number; // multiplier per tier (<1 = faster)
+  splash: number; // tiles added per tier
+  slow: number; // slowFactor reduction per tier
+  slowMin: number;
+  chainsEvery: number; // +1 chain every N tiers (0 = never)
+}
+
+/** A specialisation chosen when upgrading from tier 3 to tier 4. Applies to every tier from 4 up. */
 export interface TowerBranch {
   id: string;
   name: string;
   description: string;
-  stats: Partial<TowerStats>;
+  damageMult: number;
+  rangeAdd?: number;
+  cooldownMult?: number;
+  splashAdd?: number;
+  set?: Partial<TowerStats>;
 }
 
 export interface TowerDef {
@@ -48,77 +65,98 @@ export interface TowerDef {
   hitsAir: boolean;
   hitsGround: boolean;
   color: string;
-  /** Stats per tier, index 0 = tier 1. Tier 3 is the last regular tier. */
-  tiers: TowerStats[];
-  /** Upgrade cost from tier N to N+1 (index 0 = 1->2, 1 = 2->3, 2 = 3->specialisation). */
-  upgradeCosts: number[];
+  base: TowerStats;
+  growth: TierGrowth;
+  /** Cost of the first upgrade (tier 1 -> 2); each next one is UPGRADE_COST_GROWTH times more. */
+  firstUpgrade: number;
   branches: [TowerBranch, TowerBranch];
 }
 
-const base: TowerStats = {
-  damage: 0, range: 0, cooldown: 1, splash: 0, projectileSpeed: 0, slowFactor: 1, slowDuration: 0,
-  chains: 0, chainRange: 0, multishot: 1, stun: 0, freezeChance: 0, shred: 0, aura: false,
-};
-const s = (o: Partial<TowerStats>): TowerStats => ({ ...base, ...o });
+/** Material tiers (Wood … Celestial). */
+export const MAX_TIER = 10;
+/** After Celestial, towers keep growing with star levels (★1, ★2, …) up to this total level. */
+export const MAX_LEVEL = MAX_TIER + 30;
+export const STAR_DAMAGE = 1.18;
+export const STAR_COST_GROWTH = 1.35;
+/** Upgrading from this tier picks a specialisation. */
+export const BRANCH_TIER = 3;
+export const UPGRADE_COST_GROWTH = 1.8;
 
-/** Upgrade cost chain: each step ~1.6x the previous (see economy.ts UPGRADE_COST_GROWTH). */
-const chain = (first: number) => [first, Math.round(first * 1.6 / 5) * 5, Math.round(first * 1.6 * 1.6 / 5) * 5];
+export interface TierMaterial {
+  name: string;
+  /** Main walls. */
+  body: string;
+  /** Trim, bands and crenellations. */
+  trim: string;
+  /** Roof / cap. */
+  roof: string;
+  /** Accent (gems, flags, rings). Values above 1 in the shader glow slightly. */
+  accent: string;
+  glow: number;
+}
+
+/** One material per tier: Wood → Stone → … → Celestial. */
+export const TIER_MATERIALS: TierMaterial[] = [
+  { name: 'Wood', body: '#9a6a3f', trim: '#6e4527', roof: '#b5803f', accent: '#e8c547', glow: 1 },
+  { name: 'Stone', body: '#c9c1b3', trim: '#a39a8b', roof: '#d9573f', accent: '#e8c547', glow: 1 },
+  { name: 'Iron', body: '#8a929e', trim: '#5d6470', roof: '#4a5260', accent: '#d9dde3', glow: 1 },
+  { name: 'Bronze', body: '#c58a4e', trim: '#8f5a2c', roof: '#a8662e', accent: '#ffd27a', glow: 1 },
+  { name: 'Silver', body: '#dfe5ec', trim: '#a8b2bf', roof: '#5a7fd1', accent: '#ffffff', glow: 1.1 },
+  { name: 'Gold', body: '#f2cf5b', trim: '#c9952a', roof: '#d9573f', accent: '#fff3b0', glow: 1.2 },
+  { name: 'Jade', body: '#6fcf9b', trim: '#3f8f66', roof: '#2f6f4e', accent: '#e8fff2', glow: 1.25 },
+  { name: 'Crystal', body: '#a9e4fb', trim: '#6fb8de', roof: '#c8a6ff', accent: '#ffffff', glow: 1.45 },
+  { name: 'Obsidian', body: '#3b3346', trim: '#231d2b', roof: '#7b4fd6', accent: '#c58cff', glow: 1.7 },
+  { name: 'Celestial', body: '#fff8e8', trim: '#f2c94c', roof: '#7fd6ff', accent: '#fff2a8', glow: 1.9 },
+];
+
+const base = (o: Partial<TowerStats>): TowerStats => ({
+  damage: 0, range: 0, cooldown: 1, splash: 0, projectileSpeed: 0, slowFactor: 1, slowDuration: 0,
+  chains: 0, chainRange: 0, multishot: 1, stun: 0, freezeChance: 0, shred: 0, aura: false, ...o,
+});
 
 export const TOWERS: Record<TowerId, TowerDef> = {
   archer: {
     id: 'archer', name: 'Archer', role: 'Fast single-target. Hits flying.', cost: 70,
     damageType: 'physical', hitsAir: true, hitsGround: true, color: '#7bbf5a',
-    tiers: [
-      s({ damage: 8, range: 2.9, cooldown: 0.6, projectileSpeed: 16 }),
-      s({ damage: 13, range: 3.1, cooldown: 0.55, projectileSpeed: 17 }),
-      s({ damage: 20, range: 3.3, cooldown: 0.5, projectileSpeed: 18 }),
-    ],
-    upgradeCosts: chain(60),
+    base: base({ damage: 8, range: 2.9, cooldown: 0.6, projectileSpeed: 16 }),
+    growth: { damage: 1.42, range: 0.12, rangeMax: 1.2, cooldown: 0.97, splash: 0, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 60,
     branches: [
-      { id: 'longbow', name: 'Longbow', description: 'Huge range, heavy piercing arrows.', stats: { damage: 58, range: 4.6, cooldown: 0.85, projectileSpeed: 26, shred: 0.15 } },
-      { id: 'volley', name: 'Volley', description: 'Fires at 3 enemies at once.', stats: { damage: 22, range: 3.4, cooldown: 0.42, multishot: 3 } },
+      { id: 'longbow', name: 'Longbow', description: 'Huge range, heavy piercing arrows.', damageMult: 2.4, rangeAdd: 1.1, cooldownMult: 1.6, set: { projectileSpeed: 26, shred: 0.15 } },
+      { id: 'volley', name: 'Volley', description: 'Fires at 3 enemies at once.', damageMult: 0.95, cooldownMult: 0.85, set: { multishot: 3 } },
     ],
   },
   cannon: {
     id: 'cannon', name: 'Cannon', role: 'Slow splash damage. Ground only.', cost: 120,
     damageType: 'physical', hitsAir: false, hitsGround: true, color: '#c9783f',
-    tiers: [
-      s({ damage: 24, range: 2.7, cooldown: 1.9, splash: 1.05, projectileSpeed: 7 }),
-      s({ damage: 38, range: 2.8, cooldown: 1.8, splash: 1.15, projectileSpeed: 7.5 }),
-      s({ damage: 56, range: 3.0, cooldown: 1.7, splash: 1.25, projectileSpeed: 8 }),
-    ],
-    upgradeCosts: chain(95),
+    base: base({ damage: 24, range: 2.7, cooldown: 1.9, splash: 1.05, projectileSpeed: 7 }),
+    growth: { damage: 1.42, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0.06, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 95,
     branches: [
-      { id: 'bombard', name: 'Bombard', description: 'Massive blast radius and damage.', stats: { damage: 135, range: 3.3, cooldown: 2.0, splash: 1.8, projectileSpeed: 8 } },
-      { id: 'shrapnel', name: 'Shrapnel', description: 'Rapid fire. Shreds armor.', stats: { damage: 60, range: 3.0, cooldown: 0.95, splash: 1.2, projectileSpeed: 10, shred: 0.3 } },
+      { id: 'bombard', name: 'Bombard', description: 'Massive blast radius and damage.', damageMult: 2.0, rangeAdd: 0.3, cooldownMult: 1.15, splashAdd: 0.55 },
+      { id: 'shrapnel', name: 'Shrapnel', description: 'Rapid fire. Shreds armor.', damageMult: 0.9, cooldownMult: 0.55, set: { projectileSpeed: 10, shred: 0.3 } },
     ],
   },
   frost: {
     id: 'frost', name: 'Frost', role: 'Slows enemies. Low damage.', cost: 90,
     damageType: 'magic', hitsAir: true, hitsGround: true, color: '#7fd0f0',
-    tiers: [
-      s({ damage: 4, range: 2.6, cooldown: 1.0, splash: 0.6, projectileSpeed: 11, slowFactor: 0.6, slowDuration: 1.6 }),
-      s({ damage: 7, range: 2.8, cooldown: 0.95, splash: 0.7, projectileSpeed: 12, slowFactor: 0.52, slowDuration: 1.8 }),
-      s({ damage: 11, range: 3.0, cooldown: 0.9, splash: 0.8, projectileSpeed: 12, slowFactor: 0.45, slowDuration: 2.0 }),
-    ],
-    upgradeCosts: chain(70),
+    base: base({ damage: 4, range: 2.6, cooldown: 1.0, splash: 0.6, projectileSpeed: 11, slowFactor: 0.6, slowDuration: 1.6 }),
+    growth: { damage: 1.4, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0.05, slow: 0.035, slowMin: 0.3, chainsEvery: 0 },
+    firstUpgrade: 70,
     branches: [
-      { id: 'glacier', name: 'Glacier', description: 'Deep slow and a chance to freeze solid.', stats: { damage: 24, range: 3.2, cooldown: 0.85, splash: 0.9, slowFactor: 0.32, slowDuration: 2.4, freezeChance: 0.18, stun: 1.0 } },
-      { id: 'blizzard', name: 'Blizzard', description: 'Constant icy aura hits everything in range.', stats: { damage: 13, range: 2.6, cooldown: 0.5, aura: true, slowFactor: 0.5, slowDuration: 0.8 } },
+      { id: 'glacier', name: 'Glacier', description: 'Deep slow and a chance to freeze solid.', damageMult: 2.0, set: { freezeChance: 0.18, stun: 1.0, slowDuration: 2.4 } },
+      { id: 'blizzard', name: 'Blizzard', description: 'Constant icy aura hits everything in range.', damageMult: 1.1, cooldownMult: 0.55, rangeAdd: -0.3, set: { aura: true, slowDuration: 0.8 } },
     ],
   },
   lightning: {
-    id: 'lightning', name: 'Lightning', role: 'Chains between 3-5 enemies.', cost: 150,
+    id: 'lightning', name: 'Lightning', role: 'Chains between 3+ enemies.', cost: 150,
     damageType: 'magic', hitsAir: true, hitsGround: true, color: '#b48cf0',
-    tiers: [
-      s({ damage: 20, range: 2.8, cooldown: 1.45, chains: 3, chainRange: 1.8 }),
-      s({ damage: 30, range: 3.0, cooldown: 1.35, chains: 4, chainRange: 1.9 }),
-      s({ damage: 44, range: 3.1, cooldown: 1.25, chains: 5, chainRange: 2.0 }),
-    ],
-    upgradeCosts: chain(115),
+    base: base({ damage: 20, range: 2.8, cooldown: 1.45, chains: 3, chainRange: 1.8 }),
+    growth: { damage: 1.4, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0, slow: 0, slowMin: 1, chainsEvery: 2 },
+    firstUpgrade: 115,
     branches: [
-      { id: 'storm', name: 'Storm Spire', description: 'Chains to 8 enemies.', stats: { damage: 56, range: 3.3, cooldown: 1.15, chains: 8, chainRange: 2.2 } },
-      { id: 'tesla', name: 'Tesla Overload', description: 'Devastating bolt that stuns.', stats: { damage: 165, range: 3.3, cooldown: 1.5, chains: 2, chainRange: 1.6, stun: 0.8 } },
+      { id: 'storm', name: 'Storm Spire', description: 'Chains to 4 more enemies.', damageMult: 1.15, rangeAdd: 0.2, set: { chainRange: 2.2 } },
+      { id: 'tesla', name: 'Tesla Overload', description: 'Devastating bolt that stuns.', damageMult: 3.2, cooldownMult: 1.1, set: { stun: 0.8, chainRange: 1.6 } },
     ],
   },
 };
@@ -133,18 +171,56 @@ export const TOWER_RULES = {
   projectileHitRadius: 0.3,
   /** Armor shred duration in seconds. */
   shredDuration: 3,
-  /** Ground-only towers never target flyers. */
   defaultTargetMode: 'first' as TargetMode,
 };
 
-/** Returns stats for a tower tier (1-3) or specialisation (tier 4 + branch index). */
+/** Stars above Celestial for a tower level. */
+export const starsOf = (level: number) => Math.max(0, level - MAX_TIER);
+
+/** Stats for a tower at a level (1..MAX_LEVEL) with an optional specialisation (from tier 4). */
 export function towerStats(def: TowerDef, tier: number, branch: number): TowerStats {
-  if (tier >= 4 && branch >= 0) return { ...def.tiers[2], ...def.branches[branch].stats };
-  return def.tiers[Math.min(tier, 3) - 1];
+  const g = def.growth;
+  const k = Math.max(0, Math.min(tier, MAX_TIER) - 1);
+  const s: TowerStats = { ...def.base };
+  s.damage = def.base.damage * Math.pow(g.damage, k) * Math.pow(STAR_DAMAGE, starsOf(tier));
+  s.range = def.base.range + Math.min(g.rangeMax, g.range * k);
+  s.cooldown = def.base.cooldown * Math.pow(g.cooldown, k);
+  if (s.splash > 0) s.splash += g.splash * k;
+  if (s.slowFactor < 1) s.slowFactor = Math.max(g.slowMin, def.base.slowFactor - g.slow * k);
+  if (g.chainsEvery > 0) s.chains += Math.floor(k / g.chainsEvery);
+  if (tier > BRANCH_TIER && branch >= 0) {
+    const b = def.branches[branch];
+    s.damage *= b.damageMult;
+    s.range += b.rangeAdd ?? 0;
+    s.cooldown *= b.cooldownMult ?? 1;
+    s.splash += b.splashAdd ?? 0;
+    if (b.id === 'storm') s.chains += 4;
+    if (b.id === 'tesla') s.chains = 2;
+    Object.assign(s, b.set ?? {});
+  }
+  return s;
+}
+
+/** Gold to upgrade from `tier` to `tier + 1` (star levels grow more gently). */
+export function upgradeCost(def: TowerDef, tier: number): number {
+  const materialTier = Math.min(tier, MAX_TIER - 1);
+  const base = def.firstUpgrade * Math.pow(UPGRADE_COST_GROWTH, materialTier - 1);
+  const stars = Math.max(0, tier - (MAX_TIER - 1));
+  return Math.round((base * Math.pow(STAR_COST_GROWTH, stars)) / 5) * 5;
+}
+
+/** Display name, e.g. "Iron", "Celestial ★3". */
+export function levelName(level: number): string {
+  const st = starsOf(level);
+  return `${materialFor(level).name}${st ? ` ★${st}` : ''}`;
 }
 
 export function totalInvested(def: TowerDef, tier: number): number {
   let total = def.cost;
-  for (let i = 0; i < tier - 1; i++) total += def.upgradeCosts[i];
+  for (let t = 1; t < tier; t++) total += upgradeCost(def, t);
   return total;
+}
+
+export function materialFor(tier: number): TierMaterial {
+  return TIER_MATERIALS[Math.max(0, Math.min(TIER_MATERIALS.length - 1, tier - 1))];
 }

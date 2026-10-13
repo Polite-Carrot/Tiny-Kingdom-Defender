@@ -8,8 +8,11 @@ import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, p
 import { Particles, Rings, Bolts } from '../systems/Effects';
 import type { AudioSystem } from '../systems/Audio';
 import { ENEMIES, type EnemyId } from '../data/enemies';
-import { CHAPTERS, GRID_SIZE, type ChapterTheme } from '../data/levels';
+import { GRID_SIZE, ROADS } from '../data/base';
+import type { Theme } from '../data/themes';
+import { materialFor } from '../data/towers';
 import { tileToWorld } from './LevelMap';
+import { themeOf } from './Siege';
 import type { Run, Tower, ProjectileKind } from './Run';
 
 export interface ViewHooks {
@@ -23,7 +26,6 @@ const ENEMY_COLORS: Record<EnemyId, string> = {
   boss_ogre: '#8aa05a', boss_scorpion: '#c9a063', boss_yeti: '#eef3f7', boss_dragon: '#b8322a',
 };
 
-const GROUND_PLANE: Record<string, string> = { meadow: '#78c3e6', desert: '#e3bd7c', snow: '#d5e5f3', volcano: '#e8481a' };
 
 interface TowerView {
   group: THREE.Group;
@@ -34,6 +36,7 @@ interface TowerView {
   tier: number;
   branch: number;
   aim: number;
+  headY: number;
 }
 
 const _m = new THREE.Matrix4();
@@ -73,7 +76,13 @@ export class BattleView {
   readonly rings = new Rings();
   readonly bolts = new Bolts();
   private time = 0;
-  private theme: ChapterTheme;
+  private theme: Theme;
+  /** Static board (tiles, props, pads, castle): rebuilt when the Age changes or a road opens. */
+  private board = new THREE.Group();
+  private boardDisposables: { dispose(): void }[] = [];
+  private overgrowth: THREE.Mesh | null = null;
+  private castleColor: string;
+  private roadCells: Map<number, number>;
   private padColor = new THREE.Color();
   private padHighlight = -1;
   heroSelected = false;
@@ -88,13 +97,13 @@ export class BattleView {
     private hooks: ViewHooks,
     cosmetics: { castleColor: string; trailColor: string | null },
   ) {
-    this.theme = CHAPTERS[run.config.level.chapter].theme;
+    this.theme = themeOf(run.waveIndex);
     this.trailColor = cosmetics.trailColor ? new THREE.Color(cosmetics.trailColor) : null;
-    const t = this.theme;
-    renderer.setTheme(t.sky, t.fog, t.sun, t.ambient);
+    this.castleColor = cosmetics.castleColor;
+    this.roadCells = BattleView.rasterizeRoads();
     this.particles = new Particles(renderer.quality === 'high' ? 900 : 400);
-    this.root.add(this.particles.mesh, this.rings.group, this.bolts.group);
-    this.buildBoard(cosmetics.castleColor);
+    this.root.add(this.particles.mesh, this.rings.group, this.bolts.group, this.board);
+    this.buildBoard();
     this.buildDynamic();
     renderer.scene.add(this.root);
     this.bindEvents();
@@ -107,32 +116,75 @@ export class BattleView {
 
   // --- Board ------------------------------------------------------------------
 
-  private buildBoard(castleColor: string): void {
+  /** Tile key -> lowest road index that uses it (includes the off-board spawn tiles). */
+  private static rasterizeRoads(): Map<number, number> {
+    const cells = new Map<number, number>();
+    ROADS.forEach((road, ri) => {
+      const pts = road.points;
+      for (let i = 1; i < pts.length; i++) {
+        let [c, r] = pts[i - 1];
+        const [tc, tr] = pts[i];
+        for (let guard = 0; guard < 64; guard++) {
+          const k = (r + 1) * 64 + (c + 1);
+          if (!cells.has(k)) cells.set(k, ri);
+          if (c === tc && r === tr) break;
+          if (c !== tc) c += Math.sign(tc - c);
+          else r += Math.sign(tr - r);
+        }
+      }
+    });
+    return cells;
+  }
+
+  /** Switches the Age theme (colours, props, sky) and rebuilds the board. */
+  setTheme(theme: Theme): void {
+    this.theme = theme;
+    this.buildBoard();
+  }
+
+  rebuildBoard(): void {
+    this.buildBoard();
+  }
+
+  private boardTrack<T extends { dispose(): void }>(o: T): T {
+    this.boardDisposables.push(o);
+    return o;
+  }
+
+  private buildBoard(): void {
+    for (const d of this.boardDisposables) d.dispose();
+    this.boardDisposables = [];
+    this.board.clear();
+    this.overgrowth = null;
     const t = this.theme;
+    this.renderer.setTheme(t.sky, t.fog, t.sun, t.ambient);
     const map = this.run.map;
+    const wave = this.run.waveIndex;
     const b = new ModelBuilder();
     const half = GRID_SIZE / 2 + 1;
     // Diorama body.
     b.box(half * 2, 1.0, half * 2, t.cliff, { y: -0.62 });
     b.box(half * 2 - 0.5, 0.8, half * 2 - 0.5, t.cliffDark, { y: -1.4 });
-    // Tiles.
     const rnd = (i: number) => ((Math.sin(i * 91.7) * 43758.5453) % 1 + 1) % 1;
-    const pathOff = new Set<number>();
-    for (const p of map.layout.paths) pathOff.add((p[0][1] + 1) * 64 + (p[0][0] + 1));
     const grass = new THREE.Color(t.grass);
     const grassAlt = new THREE.Color(t.grassAlt);
+    const pathCol = new THREE.Color(t.path);
     const tmp = new THREE.Color();
     for (let r = -1; r <= GRID_SIZE; r++) {
       for (let c = -1; c <= GRID_SIZE; c++) {
         const x = tileToWorld(c);
         const z = tileToWorld(r);
         const inside = c >= 0 && r >= 0 && c < GRID_SIZE && r < GRID_SIZE;
-        const isPath = inside ? map.isPath(c, r) : pathOff.has((r + 1) * 64 + (c + 1));
-        const i = (r + 2) * 31 + c;
-        if (isPath) {
+        const road = this.roadCells.get((r + 1) * 64 + (c + 1));
+        const i = (r + 2) * 37 + c;
+        if (road !== undefined && ROADS[road].openWave <= wave) {
           b.box(1, 0.12, 1, t.path, { x, y: -0.1, z });
-          // Little stones along the path.
           if (rnd(i) > 0.6) b.box(0.12, 0.04, 0.1, t.pathEdge, { x: x + (rnd(i + 3) - 0.5) * 0.7, y: -0.03, z: z + (rnd(i + 5) - 0.5) * 0.7, ry: rnd(i) * 3 });
+        } else if (road !== undefined) {
+          // A road that hasn't opened yet: an overgrown trail you can plan around.
+          tmp.copy(grass).lerp(pathCol, 0.35).multiplyScalar(0.95 + rnd(i) * 0.06);
+          b.box(1, 0.16, 1, tmp.getStyle(), { x, y: -0.1, z });
+          if (rnd(i + 7) > 0.55) b.dodec(0.12, '#8a8378', { x: x + (rnd(i + 2) - 0.5) * 0.6, y: 0.0, z: z + (rnd(i + 4) - 0.5) * 0.6, sy: 0.6 });
         } else {
           tmp.copy((c + r) % 2 === 0 ? grass : grassAlt).multiplyScalar(0.96 + rnd(i) * 0.08);
           if (!inside) tmp.multiplyScalar(0.9);
@@ -141,75 +193,97 @@ export class BattleView {
         }
       }
     }
-    const boardGeo = this.track(b.build());
-    const board = new THREE.Mesh(boardGeo, this.material);
+    const board = new THREE.Mesh(this.boardTrack(b.build()), this.material);
     board.receiveShadow = true;
-    this.root.add(board);
+    this.board.add(board);
 
-    // Sea / sand / lava plane around the diorama.
-    const planeMat = this.track(t.id === 'volcano'
-      ? new THREE.MeshBasicMaterial({ color: GROUND_PLANE[t.id] })
-      : new THREE.MeshLambertMaterial({ color: GROUND_PLANE[t.id] ?? t.fog }));
-    const plane = new THREE.Mesh(this.track(new THREE.PlaneGeometry(140, 140)), planeMat);
+    // Sea / sand / ice / lava around the diorama.
+    const planeMat = this.boardTrack(t.groundGlow ? new THREE.MeshBasicMaterial({ color: t.ground }) : new THREE.MeshLambertMaterial({ color: t.ground }));
+    const plane = new THREE.Mesh(this.boardTrack(new THREE.PlaneGeometry(160, 160)), planeMat);
     plane.rotation.x = -Math.PI / 2;
     plane.position.y = -1.3;
-    this.root.add(plane);
+    this.board.add(plane);
 
-    // Props merged into one draw call.
-    const items = map.props.map((p) => ({ geo: propModel(p.type), x: p.x, y: 0, z: p.z, ry: p.rot, s: p.scale }));
-    // Rim decoration.
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2;
+    // Props merged into one draw call; the Age decides which prop each slot shows.
+    const pick = (v: number) => t.props[Math.min(t.props.length - 1, Math.floor(v * t.props.length))];
+    const items = map.props.map((p) => ({ geo: propModel(pick(p.variant)), x: p.x, y: 0, z: p.z, ry: p.rot, s: p.scale }));
+    for (let i = 0; i < 30; i++) {
       const side = i % 4;
       const k = (i * 0.37) % 1;
       const px = side === 0 ? -half + 0.45 : side === 1 ? half - 0.45 : (k - 0.5) * (half * 2 - 1);
       const pz = side === 2 ? -half + 0.45 : side === 3 ? half - 0.45 : (k - 0.5) * (half * 2 - 1);
       const c = Math.round(px + (GRID_SIZE - 1) / 2);
       const r = Math.round(pz + (GRID_SIZE - 1) / 2);
-      if (pathOff.has((r + 1) * 64 + (c + 1))) continue;
-      items.push({ geo: propModel(t.props[i % t.props.length]), x: px, y: 0, z: pz, ry: a, s: 0.9 });
+      if (this.roadCells.has((r + 1) * 64 + (c + 1))) continue;
+      items.push({ geo: propModel(t.props[i % t.props.length]), x: px, y: 0, z: pz, ry: i * 1.3, s: 0.9 });
     }
     if (items.length) {
-      const propsMesh = new THREE.Mesh(this.track(mergeTransformed(items)), this.material);
+      const propsMesh = new THREE.Mesh(this.boardTrack(mergeTransformed(items)), this.material);
       propsMesh.castShadow = true;
       propsMesh.receiveShadow = true;
-      this.root.add(propsMesh);
+      this.board.add(propsMesh);
     }
 
     // Build pads (instanced so they can be highlighted individually).
     this.pads = new THREE.InstancedMesh(padModel(), this.material, Math.max(1, map.buildSpots.length));
+    this.boardDisposables.push({ dispose: () => this.pads.dispose() });
     this.padColor.set(t.pad);
-    map.buildSpots.forEach((s, i) => {
-      _m.makeTranslation(s.x, 0, s.z);
+    map.buildSpots.forEach((sp, i) => {
+      _m.makeTranslation(sp.x, 0, sp.z);
       this.pads.setMatrixAt(i, _m);
-      this.pads.setColorAt(i, this.padColor);
     });
+    this.refreshPads();
     this.pads.receiveShadow = true;
-    this.root.add(this.pads);
+    this.board.add(this.pads);
+    this.buildOvergrowth();
 
-    // Castle, facing the incoming path.
+    // Castle, facing its first road.
     const cp = map.paths[0];
     const n = cp.xs.length;
-    const dirX = cp.xs[n - 2] - cp.xs[n - 1];
-    const dirZ = cp.zs[n - 2] - cp.zs[n - 1];
-    this.castle = new THREE.Mesh(castleModel(castleColor), this.material);
+    this.castle = new THREE.Mesh(castleModel(this.castleColor), this.material);
     this.castle.position.set(map.castle.x, 0, map.castle.z);
-    this.castle.rotation.y = Math.atan2(dirX, dirZ);
+    this.castle.rotation.y = Math.atan2(cp.xs[n - 2] - cp.xs[n - 1], cp.zs[n - 2] - cp.zs[n - 1]);
     this.castle.castShadow = true;
-    this.root.add(this.castle);
+    this.board.add(this.castle);
 
-    // Spawn caves.
-    const seen = new Set<string>();
+    // Spawn caves (closed roads get a boarded-up gate: the rocks are drawn either way).
     map.paths.forEach((p) => {
-      const key = `${p.xs[0]},${p.zs[0]}`;
-      if (seen.has(key)) return;
-      seen.add(key);
       const m = new THREE.Mesh(spawnModel(t.id), this.material);
       m.position.set(p.xs[0], 0, p.zs[0]);
       m.rotation.y = Math.atan2(p.xs[1] - p.xs[0], p.zs[1] - p.zs[0]);
       m.castShadow = true;
-      this.root.add(m);
+      this.board.add(m);
     });
+    this.padHighlight = -1;
+  }
+
+  /** Pad colours: unlocked pads use the Age's stone colour, locked land is darker. */
+  private refreshPads(): void {
+    const locked = new THREE.Color(this.theme.cliffDark).lerp(new THREE.Color(this.theme.grass), 0.35);
+    this.run.map.buildSpots.forEach((sp, i) => this.pads.setColorAt(i, this.run.isSpotUnlocked(sp.index) ? this.padColor : locked));
+    if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
+  }
+
+  /** Bushes and rocks covering land that hasn't been cleared yet. */
+  private buildOvergrowth(): void {
+    if (this.overgrowth) {
+      this.board.remove(this.overgrowth);
+      this.overgrowth.geometry.dispose();
+      this.overgrowth = null;
+    }
+    const t = this.theme;
+    const bushType = t.id === 'desert' ? 'cactus' : t.id === 'snow' ? 'pine' : t.id === 'volcano' ? 'lavarock' : 'bush';
+    const items: { geo: THREE.BufferGeometry; x: number; y: number; z: number; ry: number; s: number }[] = [];
+    for (const sp of this.run.map.buildSpots) {
+      if (this.run.isSpotUnlocked(sp.index)) continue;
+      const k = sp.index * 1.7;
+      items.push({ geo: propModel(bushType), x: sp.x - 0.12, y: 0.06, z: sp.z + 0.05, ry: k, s: 0.75 });
+      items.push({ geo: propModel('rock'), x: sp.x + 0.18, y: 0.05, z: sp.z - 0.12, ry: k * 2, s: 0.8 });
+    }
+    if (!items.length) return;
+    this.overgrowth = new THREE.Mesh(mergeTransformed(items), this.material);
+    this.overgrowth.castShadow = true;
+    this.board.add(this.overgrowth);
   }
 
   private buildDynamic(): void {
@@ -457,6 +531,36 @@ export class BattleView {
     on('earlyCall', ({ gold }) => {
       if (gold > 0) this.audio.play('coin');
     });
+    on('landCleared', ({ spot }) => {
+      const sp = this.run.map.buildSpots[spot];
+      this.refreshPads();
+      this.buildOvergrowth();
+      this.particles.burst(sp.x, 0.2, sp.z, '#8fbf5a', 16, { speed: 2.2, up: 2.5, size: 0.1 });
+      this.particles.burst(sp.x, 0.2, sp.z, '#bfb29a', 10, { speed: 1.6, up: 1.5, size: 0.14 });
+      this.rings.spawn(sp.x, sp.z, 0.9, '#ffffff', 0.4);
+      this.audio.play('build');
+    });
+    on('ageChange', ({ wave }) => {
+      this.setTheme(themeOf(wave));
+      const c = this.run.map.castle;
+      this.rings.spawn(c.x, c.z, 6, '#ffffff', 1.2);
+    });
+    on('roadOpened', ({ road }) => {
+      this.rebuildBoard();
+      const p = this.run.map.paths[road];
+      for (let i = 0; i < 3; i++) this.rings.spawn(p.xs[0], p.zs[0], 1.5 + i, '#ff7a6a', 0.8 + i * 0.3);
+      this.rig.shake(0.25);
+      this.audio.play('bossRoar');
+    });
+    on('retreat', () => {
+      this.particles.clear();
+      this.rebuildBoard();
+    });
+    on('goldRush', () => {
+      const c = this.run.map.castle;
+      this.particles.burst(c.x, 1.5, c.z, '#ffd84a', 40, { speed: 3, up: 4, size: 0.1 });
+      this.audio.play('reward');
+    });
     on('revived', () => {
       this.rings.spawn(this.run.map.castle.x, this.run.map.castle.z, 3, '#7dffb0', 0.9);
       this.particles.burst(this.run.map.castle.x, 1, this.run.map.castle.z, '#7dffb0', 40, { speed: 3, up: 4, size: 0.1 });
@@ -474,12 +578,13 @@ export class BattleView {
       group.add(base, head);
       group.position.set(t.x, 0, t.z);
       this.root.add(group);
-      v = { group, base, head, anim: 0, recoil: 0, tier: t.tier, branch: t.branch, aim: 0 };
+      v = { group, base, head, anim: 0, recoil: 0, tier: t.tier, branch: t.branch, aim: 0, headY: model.headY };
       this.towerViews.set(t.id, v);
     }
     v.base.geometry = model.base;
     v.head.geometry = model.head;
     v.head.position.y = model.headY;
+    v.headY = model.headY;
     v.tier = t.tier;
     v.branch = t.branch;
   }
@@ -501,7 +606,7 @@ export class BattleView {
   }
 
   highlightSpot(index: number): void {
-    if (this.padHighlight >= 0) this.pads.setColorAt(this.padHighlight, this.padColor);
+    if (this.padHighlight >= 0) this.refreshPads();
     this.padHighlight = index;
     if (index >= 0) {
       const s = this.run.map.buildSpots[index];
@@ -762,7 +867,7 @@ export class BattleView {
       v.aim += diff * Math.min(1, dt * 14);
       if (t.def.id === 'frost') {
         v.head.rotation.y += dt * 1.2;
-        v.head.position.y = towerModelHeadY(v) + Math.sin(this.time * 2 + t.id) * 0.04;
+        v.head.position.y = v.headY + Math.sin(this.time * 2 + t.id) * 0.04;
       } else if (t.def.id === 'lightning') {
         v.head.rotation.y += dt * 2;
         const pulse = 1 + v.recoil * 0.3;
@@ -775,6 +880,10 @@ export class BattleView {
         v.head.scale.set(1, 1 - v.recoil * 0.08, 1);
       }
       v.recoil = Math.max(0, v.recoil - dt * 6);
+      // Precious materials sparkle.
+      if (t.tier >= 6 && Math.random() < dt * (t.tier - 4) * 0.6) {
+        this.particles.burst(t.x + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 1.2, t.z + (Math.random() - 0.5) * 0.6, materialFor(t.tier).accent, 1, { speed: 0.2, up: 0.8, size: 0.05, gravity: -0.5, life: 0.8 });
+      }
     }
   }
 
@@ -782,6 +891,8 @@ export class BattleView {
     this.unsub.forEach((u) => u());
     this.renderer.scene.remove(this.root);
     for (const d of this.disposables) d.dispose();
+    for (const d of this.boardDisposables) d.dispose();
+    this.overgrowth?.geometry.dispose();
     for (const m of this.enemyMeshes.values()) m.dispose();
     this.particles.dispose();
     this.rings.dispose();
@@ -793,9 +904,6 @@ export class BattleView {
 const _cTmp = new THREE.Color();
 /** Enemies are drawn a bit larger than their logical size for readability on phones. */
 const ENEMY_VISUAL_SCALE = 1.3;
-function towerModelHeadY(v: TowerView): number {
-  return 0.85 + Math.min(v.tier, 4) * 0.1;
-}
 
 export function enemyColor(id: EnemyId): string {
   return ENEMY_COLORS[id];

@@ -11,12 +11,12 @@ import { LocalAnalytics } from '../analytics/Analytics';
 import { AdManager } from '../ads/AdManager';
 import { MockAdProvider } from '../ads/MockAdProvider';
 import { Meta } from './Meta';
-import { Battle, type BattleResult } from './Battle';
+import { Battle } from './Battle';
 import { AutoPlayer } from './AutoPlayer';
-import { buildCampaignLevel, type LevelDef } from './Levels';
 import type { Services } from './Services';
-import { CHAPTERS, LEVELS_PER_CHAPTER, TOTAL_LEVELS } from '../data/levels';
-import { TitleScreen, MapScreen } from '../ui/Screens';
+import { GRID_SIZE } from '../data/base';
+import { themeOf } from './Siege';
+import { TitleScreen } from '../ui/Screens';
 import * as Modals from '../ui/Modals';
 
 export type Orientation = 'portrait' | 'landscape';
@@ -26,9 +26,9 @@ export class Game {
   readonly hud: Hud;
   readonly input: Input;
   readonly title: TitleScreen;
-  readonly map: MapScreen;
   battle: Battle | null = null;
-  private demo: { battle: Battle; ai: AutoPlayer; level: number } | null = null;
+  /** Menu backdrop: your own kingdom, idle. */
+  private demo: Battle | null = null;
   private last = performance.now();
   private fpsFrames = 0;
   private fpsTime = 0;
@@ -37,14 +37,12 @@ export class Game {
   private adPaused = false;
   private pauseModalOpen = false;
   private safeProbe: HTMLElement;
-  /** Set when a rewarded ad grants +50% gold for the next level. */
-  pendingStartGoldMult = 1;
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     const save = new SaveSystem();
     const analytics = new LocalAnalytics(import.meta.env.DEV);
     const renderer = new Renderer(canvas, save.data.settings.quality);
-    const rig = new CameraRig(renderer.camera, 7.2);
+    const rig = new CameraRig(renderer.camera, GRID_SIZE / 2 + 0.7);
     const audio = new AudioSystem();
     const ui = new UI(uiRoot);
     ui.onClick = () => {
@@ -77,12 +75,13 @@ export class Game {
       sell: () => this.battle?.sell(),
       targetMode: (m) => this.battle?.setTargetMode(m),
       closeCtx: () => this.battle?.deselect(),
+      clearLand: () => this.battle?.clearLand(),
+      goldRush: () => this.goldRush(),
+      shop: () => this.openShopInSiege(),
     });
     ui.addScreen('battle', this.hud.el);
     this.title = new TitleScreen(this);
-    this.map = new MapScreen(this);
     ui.addScreen('title', this.title.el);
-    ui.addScreen('map', this.map.el);
 
     this.input = new Input(canvas, renderer.camera, rig, {
       onTap: (x, z) => {
@@ -108,18 +107,14 @@ export class Game {
     audio.setVolumes(save.data.settings.music, save.data.settings.sfx);
     meta.refreshMissions();
     analytics.track('session_start', {
-      levels_completed: meta.levelsCompleted(), coins: save.data.coins, first_session: save.data.stats.wins + save.data.stats.losses === 0,
-      save_recovered: save.recovered,
+      best_wave: meta.bestWave(), coins: save.data.coins, first_session: !save.data.base, save_recovered: save.recovered,
     });
     if (save.recovered !== 'none') this.s.ui.toast(save.recovered === 'backup' ? 'Save was damaged — restored from backup.' : 'Save was damaged and had to be reset.', 4000);
     void ads.init();
     this.onResize();
-    // First launch goes straight into the guided first level.
-    if (meta.levelsCompleted() === 0 && !save.data.tutorial.done && (save.data.levels['L1']?.plays ?? 0) === 0) {
-      this.startLevel(buildCampaignLevel(0), 1);
-    } else {
-      this.goTitle();
-    }
+    // First launch goes straight into founding the kingdom, with guided hints.
+    if (!save.data.base) this.enterKingdom();
+    else this.goTitle();
     requestAnimationFrame(this.frame);
   }
 
@@ -137,11 +132,7 @@ export class Game {
       this.hud.showFps(this.s.save.data.settings.showFps, this.fps);
     }
     if (this.battle) this.battle.update(dt);
-    else if (this.demo) {
-      this.demo.battle.updateDemo(dt * 1.0, this.demo.ai);
-      const st = this.demo.battle.run.state;
-      if (st === 'won' || st === 'lost') this.startDemo(this.demo.level + 1);
-    }
+    else if (this.demo) this.demo.updateDemo(dt);
     if (this.s.ui.currentScreen === 'title') this.title.tick();
     this.s.rig.update(dt);
     this.s.renderer.render();
@@ -161,10 +152,7 @@ export class Game {
     const w = renderer.width;
     const h = renderer.height;
     const o: Orientation = w > h ? 'landscape' : 'portrait';
-    if (o !== this.orientation) {
-      this.orientation = o;
-      this.map.render();
-    }
+    this.orientation = o;
     document.body.classList.toggle('portrait', o === 'portrait');
     document.body.classList.toggle('landscape', o === 'landscape');
     const sa = this.safeInsets();
@@ -187,18 +175,9 @@ export class Game {
 
   // --- Screens ------------------------------------------------------------------------
 
-  private furthestChapter(): number {
-    return Math.min(CHAPTERS.length - 1, Math.floor(Math.min(this.s.meta.levelsCompleted(), TOTAL_LEVELS - 1) / LEVELS_PER_CHAPTER));
-  }
-
-  private startDemo(seed: number): void {
-    this.demo?.battle.dispose();
-    const chapter = this.furthestChapter();
-    const idx = chapter * LEVELS_PER_CHAPTER + (seed % 6);
-    const level = buildCampaignLevel(idx);
-    const battle = new Battle(this.s, this.hud, level, { startGoldMult: 3, demo: true });
-    battle.run.callNextWave();
-    this.demo = { battle, ai: new AutoPlayer(battle.run, seed), level: seed };
+  private startDemo(): void {
+    this.demo?.dispose();
+    this.demo = new Battle(this.s, this.hud, { demo: true });
     this.s.rig.resetView();
     this.s.rig.pan.set(0, 0);
   }
@@ -209,7 +188,7 @@ export class Game {
 
   goTitle(): void {
     this.leaveBattle();
-    if (!this.demo || this.demo.battle.level.chapter !== this.furthestChapter()) this.startDemo(Math.floor(Math.random() * 6));
+    this.startDemo();
     this.onResize();
     this.title.render();
     this.s.ui.show('title');
@@ -218,18 +197,10 @@ export class Game {
     this.title.onEnter();
   }
 
-  goMap(chapter?: number): void {
-    this.leaveBattle();
-    if (!this.demo) this.startDemo(0);
-    this.onResize();
-    this.map.open(chapter);
-    this.s.ui.show('map');
-    this.input.enabled = false;
-    this.music('menu');
-  }
-
   private leaveBattle(): void {
     if (this.battle) {
+      this.flushRunStats();
+      this.battle.persist();
       this.battle.dispose();
       this.battle = null;
       this.s.ui.clearHint();
@@ -238,67 +209,74 @@ export class Game {
     }
   }
 
-  startLevel(level: LevelDef, startGoldMult = this.pendingStartGoldMult): void {
-    this.pendingStartGoldMult = 1;
+  /** Opens your kingdom and resumes the siege from the last saved wave. */
+  enterKingdom(): void {
     this.s.ui.closeModals();
     this.leaveBattle();
-    this.demo?.battle.dispose();
+    this.demo?.dispose();
     this.demo = null;
-    const battle = new Battle(this.s, this.hud, level, { startGoldMult });
+    const battle = new Battle(this.s, this.hud);
     this.battle = battle;
-    battle.onEnd = (r) => this.onBattleEnd(r);
+    this.lastStats = { ...battle.run.stats };
+    battle.onCheckpoint = (wave, coins, firstTime) => this.onCheckpoint(wave, coins, firstTime);
+    battle.onFallen = (from, to) => Modals.fallen(this, from, to);
     battle.onReviveOffer = () => Modals.revive(this, battle);
+    battle.onAgeChange = () => this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
+    battle.run.events.on('waveCleared', () => this.flushRunStats());
     this.s.rig.resetView();
     this.s.rig.pan.set(0, 0);
     this.onResize();
     this.s.ui.show('battle');
     this.input.enabled = true;
-    this.music(CHAPTERS[level.chapter].theme.id as MusicTrack);
+    this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
   }
 
-  private onBattleEnd(r: BattleResult): void {
+  private lastStats: Battle['run']['stats'] | null = null;
+  /** Moves run statistics into missions and lifetime stats (called per wave and on leaving). */
+  private flushRunStats(): void {
+    const b = this.battle;
+    if (!b || !this.lastStats) return;
     const { meta } = this.s;
-    const stats = r.run.stats;
-    meta.d.stats.kills += stats.kills;
-    // Mission progress from the run.
+    const st = b.run.stats;
+    const prev = this.lastStats;
     const done = [
-      ...meta.addMissionProgress('kills', stats.kills),
-      ...meta.addMissionProgress('flyingKills', stats.flyingKills),
-      ...meta.addMissionProgress('bossKills', stats.bossKills),
-      ...meta.addMissionProgress('goldEarned', stats.goldEarned),
-      ...meta.addMissionProgress('heroAbility', stats.heroAbilityUses),
-      ...meta.addMissionProgress('earlyCalls', stats.earlyCalls),
+      ...meta.addMissionProgress('kills', st.kills - prev.kills),
+      ...meta.addMissionProgress('flyingKills', st.flyingKills - prev.flyingKills),
+      ...meta.addMissionProgress('bossKills', st.bossKills - prev.bossKills),
+      ...meta.addMissionProgress('goldEarned', st.goldEarned - prev.goldEarned),
+      ...meta.addMissionProgress('heroAbility', st.heroAbilityUses - prev.heroAbilityUses),
+      ...meta.addMissionProgress('earlyCalls', st.earlyCalls - prev.earlyCalls),
     ];
-    if (r.won && r.level.kind !== 'endless') {
-      done.push(...meta.addMissionProgress('wins', 1));
-      if (r.stars === 3) done.push(...meta.addMissionProgress('threeStars', 1));
-      if (stats.maxTowers <= 3) done.push(...meta.addMissionProgress('winFewTowers', 1));
-    }
+    meta.d.stats.kills += st.kills - prev.kills;
+    this.lastStats = { ...st };
     meta.commit();
-    if (done.length) setTimeout(() => this.s.ui.toast(`Mission complete: ${done[0]}!`, 2600), 600);
-    Modals.results(this, r);
+    if (done.length) setTimeout(() => this.s.ui.toast(`Mission complete: ${done[0]}!`, 2600), 300);
   }
 
-  /** After the results screen: maybe show an interstitial, then continue. */
-  async afterResults(r: BattleResult, next: () => void): Promise<void> {
-    const { ads, meta } = this.s;
-    if (r.won && r.level.kind === 'campaign') meta.d.ads.winsSinceInterstitial++;
-    const shown = await ads.maybeShowInterstitial('level_complete', {
-      winsSinceLast: meta.d.ads.winsSinceInterstitial,
-      levelsCompleted: meta.levelsCompleted(),
-      result: r.won ? 'win' : 'loss',
-      reviveOffered: r.reviveOffered,
-      removeAds: meta.d.ads.removeAds,
+  private onCheckpoint(wave: number, coins: number, firstTime: boolean): void {
+    const b = this.battle;
+    if (!b) return;
+    Modals.checkpoint(this, wave, coins, firstTime, async () => {
+      // Interstitials only ever appear here: at a checkpoint, never after trouble.
+      const { ads, meta } = this.s;
+      meta.d.ads.winsSinceInterstitial++;
+      const shown = await ads.maybeShowInterstitial('checkpoint', {
+        winsSinceLast: meta.d.ads.winsSinceInterstitial,
+        levelsCompleted: meta.bestWave(),
+        result: 'win',
+        reviveOffered: b.segmentTrouble,
+        removeAds: meta.d.ads.removeAds,
+      });
+      if (shown) meta.d.ads.winsSinceInterstitial = 0;
+      b.segmentTrouble = false;
+      meta.commit();
     });
-    if (shown) meta.d.ads.winsSinceInterstitial = 0;
-    meta.commit();
-    next();
   }
 
   // --- Battle helpers --------------------------------------------------------------------
 
   openPause(): void {
-    if (!this.battle || this.battle.ended || this.pauseModalOpen) return;
+    if (!this.battle || this.battle.run.state === 'lost' || this.pauseModalOpen) return;
     this.battle.paused = true;
     this.pauseModalOpen = true;
     Modals.pause(this, () => {
@@ -308,7 +286,7 @@ export class Game {
   }
 
   private autoPause(): void {
-    if (this.battle && !this.battle.ended && !this.s.ads.showing && this.battle.run.state !== 'reviveOffer') this.openPause();
+    if (this.battle && !this.s.ads.showing && this.battle.run.state !== 'reviveOffer' && this.battle.run.state !== 'lost' && !this.s.ui.modalOpen) this.openPause();
   }
 
   private onVisibility(): void {
@@ -333,6 +311,33 @@ export class Game {
     this.s.audio.setMuted(false);
     if (this.adPaused && this.battle) this.battle.paused = this.pauseModalOpen;
     this.adPaused = false;
+  }
+
+  private async goldRush(): Promise<void> {
+    const b = this.battle;
+    if (!b || b.run.goldRushUsed) return;
+    const ok = await this.s.ads.showRewarded('gold_rush');
+    if (ok && this.battle === b && b.run.activateGoldRush()) {
+      this.s.ui.banner('Gold Rush!', 'Enemies drop double gold');
+      b.persist();
+    }
+  }
+
+  /** Shop opened from the siege: pauses, then applies new permanent upgrades. */
+  openShopInSiege(): void {
+    const b = this.battle;
+    if (!b) return;
+    if (!this.s.meta.featureUnlocked('shop')) {
+      this.s.ui.toast('The shop opens after wave 3');
+      return;
+    }
+    b.paused = true;
+    this.pauseModalOpen = true;
+    Modals.shop(this, 'towers', () => {
+      this.pauseModalOpen = false;
+      b.applyMeta();
+      if (!this.s.ads.showing) b.paused = false;
+    });
   }
 
   private async reinforce(): Promise<void> {

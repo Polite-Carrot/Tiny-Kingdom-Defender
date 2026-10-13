@@ -114,6 +114,8 @@ button * { pointer-events: none; }
 body.landscape .title-screen .menu-main { flex-direction: row; align-items: flex-end; justify-content: space-between; padding: 0 calc(var(--sar) + 18px) calc(var(--sab) + 16px) calc(var(--sal) + 18px); }
 body.landscape .title-screen .menu-side { max-width: 300px; justify-content: flex-start; }
 body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
+.kingdom-card { background: rgba(30,22,50,.72); color: #fff; border-radius: 16px; padding: 8px 16px; text-align: center; font-size: 15px; line-height: 1.3; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
+.kingdom-card span { font-size: 12px; opacity: .85; }
 .version { background: transparent; position: absolute; left: calc(var(--sal) + 8px); top: calc(var(--sat) + 56px); font-size: 11px; color: rgba(255,255,255,.55); padding: 6px; }
 
 /* ---------- World map ---------- */
@@ -141,7 +143,7 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 
 /* ---------- Modals ---------- */
 .modal-layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: calc(var(--sat) + 12px) calc(var(--sar) + 12px) calc(var(--sab) + 12px) calc(var(--sal) + 12px);
-  background: rgba(20, 14, 34, .55); opacity: 0; transition: opacity .22s; pointer-events: auto; }
+  background: rgba(20, 14, 34, .55); opacity: 0; transition: opacity .22s; pointer-events: auto; z-index: 20; }
 .modal-layer.on { opacity: 1; }
 .modal { position: relative; width: min(440px, 100%); max-height: 100%; overflow-y: auto; overflow-x: hidden; transform: translateY(30px) scale(.9); transition: transform .3s cubic-bezier(.2,1.5,.4,1);
   background: var(--paper); border-radius: 24px; box-shadow: inset 0 -7px 0 var(--paper-2), 0 10px 0 rgba(0,0,0,.3); padding: 18px; touch-action: pan-y; }
@@ -224,9 +226,16 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 .hud-actions { right: calc(var(--sar) + 10px); bottom: calc(var(--sab) + 10px); justify-content: flex-end; }
 .hud-hero { position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 10px); display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
 body.landscape .hud-hero { left: calc(var(--sal) + 10px); flex-direction: column-reverse; align-items: center; }
-.btn.reinforce { position: absolute; top: calc(var(--sat) + 60px); }
-body.portrait .btn.reinforce { right: calc(var(--sar) + 8px); }
-body.landscape .btn.reinforce { left: calc(var(--sal) + 10px); }
+.btn.reinforce, .btn.goldrush { position: absolute; top: calc(var(--sat) + 60px); max-width: 210px; font-size: 13px; padding: 6px 12px; min-height: 52px; line-height: 1.1; }
+body.portrait .btn.reinforce, body.portrait .btn.goldrush { right: calc(var(--sar) + 8px); }
+body.landscape .btn.reinforce, body.landscape .btn.goldrush { left: calc(var(--sal) + 10px); }
+.rush-pill { position: absolute; top: calc(var(--sat) + 60px); left: calc(var(--sal) + 8px); background: linear-gradient(180deg, #ffe27a, #e09a12); color: #4a2c00; font-weight: 900; font-size: 13px; padding: 6px 10px; border-radius: 12px; box-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 12px rgba(255,210,90,.8); pointer-events: none; }
+body.landscape .rush-pill { top: calc(var(--sat) + 120px); }
+.wave-pill { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; line-height: 1.05; }
+.wave-pill .age { font-size: 10px; font-weight: 800; opacity: .8; white-space: nowrap; }
+.tier-pips.small { gap: 2px; margin-top: 2px; }
+.tier-pips.small i { width: 9px; height: 9px; border-radius: 2px; }
+.hud .shop-btn .ico { width: 28px; height: 28px; }
 .hero-btn { position: relative; width: 64px; height: 64px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.9), 0 4px 0 rgba(0,0,0,.3); overflow: hidden; padding: 0; }
 .hero-btn img { width: 100%; height: 100%; object-fit: cover; }
 .hero-btn.sel { box-shadow: 0 0 0 4px #7dff9a, 0 4px 0 rgba(0,0,0,.3), 0 0 16px #7dff9a; }
@@ -359,3 +368,12 @@ body.landscape .seg.targets button { font-size: 12px; padding: 0 4px; }
   .stars-big .ico { width: 46px; height: 46px; }
   .stars-big .ico.mid { width: 56px; height: 56px; }
 }
+
+/* Compact HUD top bar so 5 items fit on narrow phones. */
+.hud-top { gap: 5px; }
+.hud .pill { height: 44px; font-size: 17px; padding: 0 10px 0 4px; gap: 4px; }
+.hud .pill .ico { width: 26px; height: 26px; }
+.hud .wave-pill { padding: 0 10px; max-width: 132px; overflow: hidden; }
+.hud .wave-pill .age { overflow: hidden; text-overflow: ellipsis; max-width: 112px; }
+.hud-top .btn.icon { width: 44px; min-width: 44px; min-height: 44px; flex: none; }
+@media (max-width: 360px) { .hud .wave-pill .age { display: none; } }

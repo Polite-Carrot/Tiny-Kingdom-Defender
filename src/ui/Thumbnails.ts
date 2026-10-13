@@ -8,11 +8,21 @@ import { HERO_ORDER, type HeroId } from '../data/heroes';
 import { COSMETICS } from '../data/economy';
 
 const thumbs = new Map<string, string>();
+let shotFn: ((key: string, parts: { geo: THREE.BufferGeometry; y?: number }[], yaw?: number, pitch?: number, zoom?: number) => void) | null = null;
 
 export function thumb(key: string): string {
   return thumbs.get(key) ?? '';
 }
-export const towerThumb = (id: TowerId, tier = 1, branch = -1) => thumb(`tower-${id}-${tier}-${branch}`);
+
+/** Tower portraits are rendered on demand (40 tier/branch combinations). */
+export function towerThumb(id: TowerId, tier = 1, branch = -1): string {
+  const key = `tower-${id}-${tier}-${branch}`;
+  if (!thumbs.has(key) && shotFn) {
+    const m = towerModel(id, tier, branch);
+    shotFn(key, [{ geo: m.base }, { geo: m.head, y: m.headY }], 0.5, 0.35, 1.1);
+  }
+  return thumbs.get(key) ?? '';
+}
 export const enemyThumb = (id: EnemyId) => thumb(`enemy-${id}`);
 export const heroThumb = (id: HeroId) => thumb(`hero-${id}`);
 
@@ -57,18 +67,11 @@ export function renderThumbnails(): void {
     thumbs.set(key, canvas.toDataURL('image/png'));
     scene.remove(group);
   };
+  shotFn = shot;
 
-  for (const id of TOWER_ORDER) {
-    for (const [tier, branch] of [[1, -1], [2, -1], [3, -1], [4, 0], [4, 1]]) {
-      const m = towerModel(id, tier, branch);
-      shot(`tower-${id}-${tier}-${branch}`, [{ geo: m.base }, { geo: m.head, y: m.headY }], 0.5, 0.35, 1.1);
-    }
-  }
+  for (const id of TOWER_ORDER) towerThumb(id, 1, -1);
   for (const id of Object.keys(ENEMIES) as EnemyId[]) shot(`enemy-${id}`, [{ geo: enemyModel(id) }], 0.5, 0.25, 1.15);
   for (const id of HERO_ORDER) shot(`hero-${id}`, [{ geo: heroModel(id) }], 0.4, 0.2, 1.25);
   shot('hero-champion', [{ geo: heroModel('champion') }], 0.4, 0.2, 1.2);
   for (const c of COSMETICS) if (c.kind === 'castle') shot(`castle-${c.id}`, [{ geo: castleModel(c.color) }], 0.6, 0.4, 1.0);
-  mat.dispose();
-  renderer.dispose();
-  renderer.forceContextLoss();
 }

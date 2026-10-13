@@ -4,7 +4,10 @@ import { el, $, fmt } from './dom';
 import { icon, ICONS } from './icons';
 import { towerThumb, enemyThumb, heroThumb } from './Thumbnails';
 import { TOWERS, TOWER_ORDER, type TowerId, type TargetMode, type TowerStats } from '../data/towers';
-import { TOWER_UNLOCK_LEVEL } from '../data/levels';
+import { TOWER_UNLOCK_WAVE } from '../data/base';
+import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf } from '../data/towers';
+import { SIEGE } from '../data/base';
+import { ageTitle } from '../game/Siege';
 import { AD_REWARDS } from '../data/economy';
 import { waveSummary } from '../game/WaveComposer';
 import type { Run, Tower } from '../game/Run';
@@ -22,14 +25,14 @@ export interface HudCallbacks {
   sell(): void;
   targetMode(mode: TargetMode): void;
   closeCtx(): void;
+  clearLand(): void;
+  goldRush(): void;
+  shop(): void;
 }
 
 export interface HudOptions {
-  levelIndex: number;
-  lightningOwned: boolean;
-  reinforcementsAllowed: boolean;
-  speedUpAllowed: boolean;
-  label: string;
+  reinforcementsAllowed: () => boolean;
+  goldRushAllowed: () => boolean;
 }
 
 const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor' } as const;
@@ -49,12 +52,16 @@ export class Hud {
   private abilityBtn: HTMLButtonElement;
   private abilityCd: HTMLElement;
   private reinforceBtn: HTMLButtonElement;
+  private rushBtn: HTMLButtonElement;
+  private rushPill: HTMLElement;
+  private ageEl: HTMLElement;
+  private rushShown = false;
   private ctx: HTMLElement;
   private vignette: HTMLElement;
   private fpsEl: HTMLElement;
   private run: Run | null = null;
   private opts!: HudOptions;
-  private ctxMode: 'none' | 'build' | 'tower' = 'none';
+  private ctxMode: 'none' | 'build' | 'tower' | 'land' = 'none';
   private ctxSpot = -1;
   private ctxTower: Tower | null = null;
   private previewId: TowerId | null = null;
@@ -64,7 +71,7 @@ export class Hud {
   private lastCtxKey = '';
   private reinforceShown = false;
   private sellArmedUntil = 0;
-  onAdOfferShown: (placement: 'reinforcements') => void = () => {};
+  onAdOfferShown: (placement: 'reinforcements' | 'gold_rush') => void = () => {};
 
   constructor(private cb: HudCallbacks) {
     this.el = el('div', 'hud');
@@ -73,14 +80,17 @@ export class Hud {
       <div class="hud-top">
         <div class="pill hp">${icon('heart')}<span class="v">20</span></div>
         <div class="pill gold-pill">${icon('coin')}<span class="v">0</span></div>
-        <div class="pill wave-pill"><span class="v">Wave 0/0</span></div>
+        <div class="pill wave-pill"><span class="v">Wave 0</span><span class="age"></span></div>
         <div class="grow"></div>
+        <button class="btn icon gold shop-btn" aria-label="Shop">${icon('shop')}</button>
         <button class="btn icon blue pause-btn" aria-label="Pause">${icon('pause')}</button>
       </div>
       <div class="hud-hero">
         <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
         <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
       </div>
+      <div class="rush-pill" style="display:none"></div>
+      <button class="btn ad goldrush" aria-label="Gold Rush"><span class="adtag">▶ AD</span><span>Gold Rush<span class="sub">2× gold from enemies for ${SIEGE.goldRushWaves} waves</span></span></button>
       <button class="btn ad reinforce" aria-label="Reinforcements"><span class="adtag">▶ AD</span><span>Reinforcements<span class="sub">Royal Champion fights for ${AD_REWARDS.reinforcementDuration}s</span></span></button>
       <div class="hud-actions">
         <div class="next-wave">
@@ -116,6 +126,11 @@ export class Hud {
     this.heroBtn.onclick = () => cb.selectHero();
     this.abilityBtn.onclick = () => cb.ability();
     this.reinforceBtn.onclick = () => cb.reinforce();
+    this.rushBtn = $(this.el, '.goldrush') as HTMLButtonElement;
+    this.rushPill = $(this.el, '.rush-pill');
+    this.ageEl = $(this.el, '.wave-pill .age');
+    this.rushBtn.onclick = () => cb.goldRush();
+    $(this.el, '.shop-btn').onclick = () => cb.shop();
   }
 
   bind(run: Run, opts: HudOptions): void {
@@ -124,6 +139,7 @@ export class Hud {
     this.lastGold = this.lastHp = -1;
     this.lastWaveKey = this.lastCtxKey = '';
     this.reinforceShown = false;
+    this.rushShown = false;
     this.closeCtx();
     const hero = run.hero;
     this.heroWrap.style.display = hero ? '' : 'none';
@@ -131,7 +147,6 @@ export class Hud {
       (this.heroBtn.querySelector('img') as HTMLImageElement).src = heroThumb(hero.def.id);
       $(this.abilityBtn, '.ico').innerHTML = ICONS[ABILITY_ICON[hero.def.ability.kind]];
     }
-    this.speedBtn.style.display = opts.speedUpAllowed ? '' : 'none';
     this.setSpeed(1);
     this.setHeroSelected(false);
   }
@@ -193,16 +208,20 @@ export class Hud {
       this.lastHp = run.castleHp;
       this.hpEl.textContent = String(run.castleHp);
     }
-    const total = run.totalWaves === Infinity ? '∞' : String(run.totalWaves);
-    const waveTxt = `Wave ${Math.max(run.waveIndex, run.state === 'prep' ? 0 : 1)}/${total}`;
-    if (this.waveEl.textContent !== waveTxt) this.waveEl.textContent = waveTxt;
+    const shown = run.state === 'prep' ? run.waveIndex + 1 : Math.max(1, run.waveIndex);
+    const waveTxt = `Wave ${shown}`;
+    if (this.waveEl.textContent !== waveTxt) {
+      this.waveEl.textContent = waveTxt;
+      const cp = run.lastCheckpoint;
+      this.ageEl.textContent = `${ageTitle(shown - 1)}${cp > 0 ? ` · ⚑ ${cp}` : ''}`;
+    }
 
     // Next-wave button.
-    const canCall = run.state === 'prep' || (run.nextWaveTimer >= 0 && run.waveIndex < run.totalWaves);
+    const canCall = run.state === 'prep' || run.nextWaveTimer >= 0;
     let label: string;
-    if (run.state === 'prep') label = `${ICONS.play} Start`;
+    if (run.state === 'prep') label = `${ICONS.play} ${run.waveIndex > 0 ? 'Resume' : 'Start'}`;
     else if (canCall) label = `Next <span class="cost">+${run.earlyCallBonus()}${ICONS.coin}</span>`;
-    else label = run.waveIndex >= run.totalWaves ? 'Final wave' : 'Incoming…';
+    else label = 'Incoming…';
     const key = `${run.state}|${canCall}|${run.earlyCallBonus()}|${run.waveIndex}`;
     if (key !== this.lastWaveKey) {
       this.lastWaveKey = key;
@@ -228,11 +247,25 @@ export class Hud {
     }
 
     // Reinforcements (rewarded ad) – shown mid-wave only.
-    const showR = this.opts.reinforcementsAllowed && run.state === 'playing' && !run.reinforcementsUsed && run.aliveCount() > 0;
+    const showR = this.opts.reinforcementsAllowed() && run.state === 'playing' && !run.reinforcementsUsed && run.aliveCount() > 0;
     this.reinforceBtn.style.display = showR ? '' : 'none';
     if (showR && !this.reinforceShown) {
       this.reinforceShown = true;
       this.onAdOfferShown('reinforcements');
+    }
+
+    // Gold Rush (rewarded ad) and its active indicator.
+    const showRush = this.opts.goldRushAllowed() && !run.goldRushUsed && run.state !== 'lost' && run.state !== 'reviveOffer';
+    this.rushBtn.style.display = showRush && !showR ? '' : 'none';
+    if (showRush && !this.rushShown) {
+      this.rushShown = true;
+      this.onAdOfferShown('gold_rush');
+    }
+    const rushTxt = run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
+    if (this.rushPill.dataset.t !== rushTxt) {
+      this.rushPill.dataset.t = rushTxt;
+      this.rushPill.innerHTML = rushTxt;
+      this.rushPill.style.display = rushTxt ? '' : 'none';
     }
 
     // Keep the context panel fresh (affordability etc.).
@@ -240,8 +273,10 @@ export class Hud {
       const t = this.ctxTower;
       // Only re-render on meaningful changes so taps are never swallowed by a DOM swap.
       const afford = this.ctxMode === 'build'
-        ? TOWER_ORDER.map((id) => (run.gold >= TOWERS[id].cost ? 1 : 0)).join('')
-        : String(t && run.gold >= (run.upgradeCost(t) ?? Infinity));
+        ? TOWER_ORDER.map((id) => (run.gold >= TOWERS[id].cost ? 1 : 0)).join('') + run.config.availableTowers.join()
+        : this.ctxMode === 'land'
+          ? String(run.gold >= run.clearLandCost())
+          : String(t && run.gold >= (run.upgradeCost(t) ?? Infinity));
       const ctxKey = `${this.ctxMode}|${performance.now() < this.sellArmedUntil}|${afford}|${t?.tier}|${t?.branch}|${t?.targetMode}|${this.previewId}`;
       if (t) {
         const k = this.ctx.querySelector('.kills');
@@ -250,6 +285,7 @@ export class Hud {
       if (ctxKey !== this.lastCtxKey) {
         this.lastCtxKey = ctxKey;
         if (this.ctxMode === 'build') this.renderBuild();
+        else if (this.ctxMode === 'land') this.renderLand();
         else this.renderTower();
       }
     }
@@ -285,6 +321,26 @@ export class Hud {
     this.renderBuild();
   }
 
+  openLand(spot: number): void {
+    this.ctxMode = 'land';
+    this.ctxSpot = spot;
+    this.ctxTower = null;
+    this.lastCtxKey = '';
+    this.ctx.classList.remove('hidden');
+    this.renderLand();
+  }
+
+  private renderLand(): void {
+    const run = this.run!;
+    const cost = run.clearLandCost();
+    this.ctx.innerHTML = `
+      <div class="ctx-head"><span class="name">Overgrown land</span><button class="x" aria-label="Close">✕</button></div>
+      <div class="ctx-info" style="margin:0 0 8px">Clear it to get a new build pad. Each clearing costs more, so choose spots that cover the roads well.</div>
+      <div class="ctx-row"><button class="btn land-btn ${run.gold < cost ? 'disabled' : ''}">Clear land <span class="cost">${icon('coin')}${cost}</span></button></div>`;
+    $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
+    $(this.ctx, '.land-btn').onclick = () => this.cb.clearLand();
+  }
+
   openTower(t: Tower): void {
     this.ctxMode = 'tower';
     this.ctxTower = t;
@@ -308,7 +364,7 @@ export class Hud {
     return this.ctxSpot;
   }
 
-  get mode(): 'none' | 'build' | 'tower' {
+  get mode(): 'none' | 'build' | 'tower' | 'land' {
     return this.ctxMode;
   }
 
@@ -322,13 +378,8 @@ export class Hud {
     const cards = TOWER_ORDER.map((id) => {
       const def = TOWERS[id];
       const available = run.isTowerAvailable(id);
-      const modifierBlocked = !!run.config.level.modifier?.allowedTowers && !run.config.level.modifier.allowedTowers.includes(id);
       let lockText = '';
-      if (!available) {
-        if (modifierBlocked) lockText = 'Banned';
-        else if (id === 'lightning' && !this.opts.lightningOwned) lockText = 'Shop';
-        else lockText = `Lv ${TOWER_UNLOCK_LEVEL[id] + 1}`;
-      }
+      if (!available) lockText = id === 'lightning' ? `Shop · W${TOWER_UNLOCK_WAVE[id]}` : `Wave ${TOWER_UNLOCK_WAVE[id]}`;
       const poor = run.gold < def.cost;
       const sel = this.previewId === id;
       return `<button class="tcard ${available ? '' : 'locked'} ${poor ? 'poor' : ''} ${sel ? 'sel' : ''}" data-tower="${id}">
@@ -378,26 +429,26 @@ export class Hud {
     const t = this.ctxTower!;
     const def = t.def;
     const cost = run.upgradeCost(t);
-    const pips = [1, 2, 3, 4].map((i) => `<i class="${t.tier >= i ? 'on' : ''}"></i>`).join('');
-    const title = t.tier >= 4 ? def.branches[t.branch].name : `${def.name}`;
+    const mat = materialFor(t.tier);
+    const pips = Array.from({ length: MAX_TIER }, (_, i) => `<i class="${t.tier > i ? 'on' : ''}" style="${t.tier > i ? `background:${materialFor(i + 1).body}` : ''}"></i>`).join('');
+    const title = `${mat.name} ${t.tier > BRANCH_TIER ? def.branches[t.branch].name : def.name}${starsOf(t.tier) ? ` <span style="color:#e09a12">★${starsOf(t.tier)}</span>` : ''}`;
     let next: TowerStats | null = null;
-    if (cost !== null && t.tier < 3) next = run.computeStats(def, t.tier + 1, -1);
+    if (cost !== null && t.tier !== BRANCH_TIER) next = run.computeStats(def, t.tier + 1, t.branch);
     let upgrade = '';
-    if (cost !== null && t.tier < 3) {
-      upgrade = `<button class="btn upgrade-btn ${run.gold < cost ? 'disabled' : ''}">Upgrade <span class="cost">${icon('coin')}${cost}</span></button>`;
-    } else if (cost !== null && t.tier === 3) {
+    if (cost !== null && t.tier !== BRANCH_TIER) {
+      const label = t.tier >= MAX_TIER ? `Empower to ★${starsOf(t.tier + 1)}` : `Upgrade to ${levelName(t.tier + 1)}`;
+      upgrade = `<button class="btn upgrade-btn ${run.gold < cost ? 'disabled' : ''}">${label} <span class="cost">${icon('coin')}${cost}</span></button>`;
+    } else if (cost !== null) {
       upgrade = def.branches.map((b, i) => `<button class="btn ${i === 0 ? '' : 'blue'} branch-btn ${run.gold < cost ? 'disabled' : ''}" data-branch="${i}">
-        <span>${b.name} <span class="cost">${icon('coin')}${cost}</span></span><small>${b.description}</small></button>`).join('');
-    } else if (t.tier === 3) {
-      upgrade = `<button class="btn disabled" disabled>Specialise at Lv ${4}</button>`;
+        <span>${materialFor(t.tier + 1).name} ${b.name} <span class="cost">${icon('coin')}${cost}</span></span><small>${b.description}</small></button>`).join('');
     } else {
-      upgrade = `<button class="btn gold disabled" disabled>★ MAX</button>`;
+      upgrade = `<button class="btn gold disabled" disabled>★ ${levelName(t.tier)} · MAX</button>`;
     }
     const modes: TargetMode[] = ['first', 'strongest', 'closest'];
     const showTargets = !t.stats.aura;
     this.ctx.innerHTML = `
       <div class="ctx-head"><img src="${towerThumb(def.id, t.tier, t.branch)}" style="width:40px;height:40px" alt=""/>
-        <span class="name">${title}<div class="tier-pips">${pips}</div></span>
+        <span class="name">${title}<div class="tier-pips small">${pips}</div></span>
         <span class="muted kills">☠ ${t.kills}</span><button class="x" aria-label="Close">✕</button></div>
       ${this.statsBlock(t.stats, next, def.id)}
       ${showTargets ? `<div class="seg targets">${modes.map((m) => `<button data-mode="${m}" class="${t.targetMode === m ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>` : ''}

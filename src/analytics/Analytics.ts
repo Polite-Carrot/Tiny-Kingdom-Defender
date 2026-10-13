@@ -85,9 +85,12 @@ export function summarise(events: readonly AnalyticsEvent[]): AnalyticsSummary {
       case 'coins_earned': s.coinsBySource[String(p.source)] = (s.coinsBySource[String(p.source)] ?? 0) + Number(p.amount); break;
       case 'coins_spent': s.coinsBySink[String(p.sink)] = (s.coinsBySink[String(p.sink)] ?? 0) + Number(p.amount); break;
       case 'level_end': {
-        const l = (s.levels[String(p.level)] ??= { plays: 0, wins: 0 });
+        // Siege pushes: each ends at a checkpoint (success) or a retreat; bucket by 10-wave segment.
+        const w = Math.max(1, Number(p.wave_reached) || 1);
+        const seg = Math.floor((w - 1) / 10) * 10;
+        const l = (s.levels[`${seg + 1}-${seg + 10}`] ??= { plays: 0, wins: 0 });
         l.plays++;
-        if (p.result === 'win') l.wins++;
+        if (p.result === 'checkpoint') l.wins++;
         break;
       }
       default:

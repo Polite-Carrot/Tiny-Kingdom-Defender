@@ -1,34 +1,38 @@
-// Simple heuristic AI used by the headless balance simulator.
-// Greedy: builds on the spots that cover the most path, then upgrades.
+// Simple heuristic AI used by the headless balance simulator (and the debug "autoplay").
+// Greedy: builds on the pads that cover the most open road, clears land when out of pads,
+// and spends the rest on the cheapest upgrade.
 
-import { TOWERS, type TowerId } from '../data/towers';
+import { TOWERS, BRANCH_TIER, type TowerId } from '../data/towers';
 import { Random } from '../core/Random';
+import { openRoads } from './Siege';
 import type { Run, Tower } from './Run';
 
 export class AutoPlayer {
-  private spotValue: number[];
   private think = 0;
   private rng: Random;
-  private buildCycle: TowerId[];
   private cycleIdx = 0;
+  private valueCache = new Map<string, number[]>();
 
   constructor(private run: Run, seed: number, private skill = 1) {
     this.rng = new Random(seed);
-    const map = run.map;
-    // Coverage of each spot: number of path samples within ~3 tiles.
-    this.spotValue = map.buildSpots.map((s) => {
-      let v = 0;
-      map.paths.forEach((p, pi) => {
-        const pt = { x: 0, z: 0, dx: 0, dz: 0 };
-        for (let d = 0; d < p.length; d += 0.25) {
-          map.pointAt(pi, d, pt);
-          if ((pt.x - s.x) ** 2 + (pt.z - s.z) ** 2 <= 2.9 * 2.9) v += 1 + d / p.length; // prefer near castle
-        }
-      });
-      return v * (0.9 + this.rng.next() * 0.2);
-    });
-    const avail = (['archer', 'cannon', 'archer', 'frost', 'lightning', 'cannon', 'archer'] as TowerId[]).filter((t) => run.isTowerAvailable(t));
-    this.buildCycle = avail.length ? avail : (['archer', 'cannon', 'frost', 'lightning'] as TowerId[]).filter((t) => run.isTowerAvailable(t));
+  }
+
+  /** Coverage of each spot for the roads that are open now (and soon). */
+  private spotValues(): number[] {
+    const roads = openRoads(this.run.waveIndex + 3);
+    const key = roads.join(',');
+    let v = this.valueCache.get(key);
+    if (!v) {
+      const map = this.run.map;
+      v = map.buildSpots.map((s) => roads.reduce((a, r) => a + map.spotCoverage(s, r, 2.9), 0) * (0.9 + this.rng.next() * 0.2));
+      this.valueCache.set(key, v);
+    }
+    return v;
+  }
+
+  private cycle(): TowerId[] {
+    const avail = (['archer', 'cannon', 'archer', 'frost', 'lightning', 'cannon', 'archer'] as TowerId[]).filter((t) => this.run.isTowerAvailable(t));
+    return avail.length ? avail : ['archer'];
   }
 
   update(dt: number): void {
@@ -45,13 +49,14 @@ export class AutoPlayer {
     if (run.heroAbilityReady()) run.useHeroAbility();
   }
 
-  private bestFreeSpot(): number {
+  private best(filter: (spot: number) => boolean): number {
+    const values = this.spotValues();
     let best = -1;
-    let bv = -1;
+    let bv = 0.5;
     this.run.map.buildSpots.forEach((s, i) => {
-      if (this.run.towerAt(s.index)) return;
-      if (this.spotValue[i] > bv) {
-        bv = this.spotValue[i];
+      if (!filter(s.index)) return;
+      if (values[i] > bv) {
+        bv = values[i];
         best = i;
       }
     });
@@ -60,36 +65,33 @@ export class AutoPlayer {
 
   private act(): void {
     const run = this.run;
-    for (let guard = 0; guard < 6; guard++) {
-      const spot = this.bestFreeSpot();
-      const nextType = this.buildCycle[this.cycleIdx % this.buildCycle.length];
-      const towers = run.towers;
-      // Upgrade candidate: cheapest upgrade among valuable towers.
+    for (let guard = 0; guard < 8; guard++) {
+      const cycle = this.cycle();
+      const nextType = cycle[this.cycleIdx % cycle.length];
+      const free = this.best((i) => run.isSpotUnlocked(i) && !run.towerAt(i));
+      const land = free < 0 ? this.best((i) => !run.isSpotUnlocked(i)) : -1;
       let up: Tower | null = null;
       let upCost = Infinity;
-      for (const t of towers) {
+      for (const t of run.towers) {
         const c = run.upgradeCost(t);
         if (c !== null && c < upCost) {
           upCost = c;
           up = t;
         }
       }
-      const buildFirst = spot >= 0 && (towers.length < 4 || towers.length < run.map.buildSpots.length * 0.75 * this.skill && this.rng.next() < 0.6);
-      if (buildFirst && run.gold >= TOWERS[nextType].cost) {
-        if (run.build(spot, nextType)) {
-          this.cycleIdx++;
-          continue;
-        }
-      }
-      if (up && run.gold >= upCost && (!buildFirst || spot < 0)) {
-        run.upgrade(up, up.tier === 3 ? this.rng.int(0, 1) : -1);
+      const wantsTower = free >= 0 && (run.towers.length < 4 || this.rng.next() < 0.55 * this.skill);
+      if (wantsTower && run.gold >= TOWERS[nextType].cost && run.build(free, nextType)) {
+        this.cycleIdx++;
         continue;
       }
-      if (spot >= 0 && run.gold >= TOWERS[nextType].cost && !up) {
-        if (run.build(spot, nextType)) {
-          this.cycleIdx++;
-          continue;
-        }
+      // Clearing land competes with upgrades: take it when it is cheaper than the next upgrade.
+      if (land >= 0 && run.clearLandCost() <= upCost * 1.2 && run.gold >= run.clearLandCost() + TOWERS[nextType].cost) {
+        run.clearLand(land);
+        continue;
+      }
+      if (up && run.gold >= upCost && !(wantsTower && run.gold < upCost + TOWERS[nextType].cost && run.towers.length < 6)) {
+        run.upgrade(up, up.tier === BRANCH_TIER ? this.rng.int(0, 1) : -1);
+        continue;
       }
       break;
     }

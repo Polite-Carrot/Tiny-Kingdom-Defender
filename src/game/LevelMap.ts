@@ -1,7 +1,7 @@
-// Turns a tile layout into world-space paths, build spots and decorative props.
+// Turns the kingdom's road layout into world-space paths, build spots and decorative props.
 // Pure logic: no rendering imports so the headless simulator can use it.
 
-import { GRID_SIZE, type Layout, type Waypoint, type ChapterTheme } from '../data/levels';
+import { GRID_SIZE, type Waypoint } from '../data/base';
 import { Random } from '../core/Random';
 
 export interface PathData {
@@ -22,7 +22,8 @@ export interface BuildSpot {
 }
 
 export interface Prop {
-  type: ChapterTheme['props'][number];
+  /** 0..1, picks the prop type from the current theme's list. */
+  variant: number;
   x: number;
   z: number;
   rot: number;
@@ -40,22 +41,8 @@ const HALF = (GRID_SIZE - 1) / 2;
 export const tileToWorld = (c: number) => c - HALF;
 export const worldToTile = (x: number) => Math.round(x + HALF);
 
-export type LayoutTransform = 0 | 1 | 2 | 3;
-
-export function transformLayout(layout: Layout, t: LayoutTransform): Layout {
-  const max = GRID_SIZE - 1;
-  const tf = ([c, r]: Waypoint): Waypoint => {
-    switch (t) {
-      case 1: return [max - c, r]; // mirror
-      case 2: return [r, c]; // transpose
-      case 3: return [max - r, max - c]; // anti-transpose
-      default: return [c, r];
-    }
-  };
-  return { paths: layout.paths.map((p) => p.map(tf)) };
-}
-
 export class LevelMap {
+  readonly size = GRID_SIZE;
   readonly paths: PathData[] = [];
   readonly pathCells = new Set<number>();
   readonly buildSpots: BuildSpot[] = [];
@@ -64,9 +51,9 @@ export class LevelMap {
   /** Spawn points (start of each path), world space. */
   readonly spawns: { x: number; z: number }[] = [];
 
-  constructor(public readonly layout: Layout, spotCount: number, seed: number, propTypes: Prop['type'][]) {
+  constructor(public readonly roads: Waypoint[][], spotCount: number, seed: number) {
     const rng = new Random(seed);
-    for (const wp of layout.paths) {
+    for (const wp of roads) {
       const xs: number[] = [];
       const zs: number[] = [];
       const cum: number[] = [];
@@ -83,10 +70,22 @@ export class LevelMap {
       this.paths.push({ xs, zs, cum, length: len });
       this.spawns.push({ x: xs[0], z: zs[0] });
     }
-    const last = layout.paths[0][layout.paths[0].length - 1];
+    const last = roads[0][roads[0].length - 1];
     this.castle = { col: last[0], row: last[1], x: tileToWorld(last[0]), z: tileToWorld(last[1]) };
     this.generateSpots(spotCount, rng);
-    this.generateProps(rng, propTypes);
+    this.generateProps(rng);
+  }
+
+  /** Number of road tiles of a given road within `radius` of a spot. */
+  spotCoverage(spot: BuildSpot, road: number, radius = 2.7): number {
+    const p = this.paths[road];
+    let n = 0;
+    const pt: PathPoint = { x: 0, z: 0, dx: 0, dz: 0 };
+    for (let d = 0; d <= p.length; d += 0.5) {
+      this.pointAt(road, d, pt);
+      if ((pt.x - spot.x) ** 2 + (pt.z - spot.z) ** 2 <= radius * radius) n++;
+    }
+    return n / 2;
   }
 
   static key(c: number, r: number): number {
@@ -153,8 +152,7 @@ export class LevelMap {
     chosen.forEach((cand, i) => this.buildSpots.push({ index: i, col: cand.c, row: cand.r, x: tileToWorld(cand.c), z: tileToWorld(cand.r) }));
   }
 
-  private generateProps(rng: Random, types: Prop['type'][]): void {
-    if (types.length === 0) return;
+  private generateProps(rng: Random): void {
     const spotSet = new Set(this.buildSpots.map((s) => LevelMap.key(s.col, s.row)));
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
@@ -168,7 +166,7 @@ export class LevelMap {
         const n = edge && rng.next() < 0.4 ? 2 : 1;
         for (let i = 0; i < n; i++) {
           this.props.push({
-            type: rng.pick(types),
+            variant: rng.next(),
             x: tileToWorld(c) + rng.range(-0.28, 0.28),
             z: tileToWorld(r) + rng.range(-0.28, 0.28),
             rot: rng.range(0, Math.PI * 2),
