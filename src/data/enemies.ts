@@ -93,7 +93,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   boss_dragon: {
     id: 'boss_dragon', name: 'Magma Drake', description: 'Charges, summons and shields itself in flame.',
     hp: 1900, speed: 0.5, armor: 0.3, magicResist: 0.3, flying: false, bounty: 260, leakDamage: 12, cost: 90, scale: 2.2,
-    boss: { mechanics: ['charge', 'summon', 'immune'], chargeInterval: 9, chargeDuration: 1.4, chargeSpeedMult: 2.8, summonId: 'minion', summonCount: 3, summonInterval: 9, immuneAt: [0.5], immuneDuration: 3 }, unlockLevel: 999,
+    boss: { mechanics: ['charge', 'summon', 'immune'], chargeInterval: 9, chargeDuration: 1.4, chargeSpeedMult: 2.8, summonId: 'minion', summonCount: 2, summonInterval: 9, immuneAt: [0.5], immuneDuration: 3 }, unlockLevel: 999,
   },
 };
 

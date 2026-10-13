@@ -70,8 +70,8 @@ export const ENDLESS = {
   /** Budget growth per wave. */
   budgetBase: 12,
   budgetPerWave: 5.5,
-  budgetExp: 1.12,
-  hpGrowthPerWave: 0.06,
+  budgetExp: 1.22,
+  hpGrowthPerWave: 0.1,
   bossEvery: 10,
 };
 

@@ -116,7 +116,8 @@ export function simulate(level: LevelDef, profile: Profile, seed: number): Resul
   });
   const ai = new AutoPlayer(run, seed * 31 + 7);
   let t = 0;
-  while ((run.state === 'prep' || run.state === 'playing') && t < MAX_TIME) {
+  const limit = level.kind === 'endless' ? MAX_TIME * 8 : MAX_TIME;
+  while ((run.state === 'prep' || run.state === 'playing') && t < limit) {
     ai.update(DT);
     run.update(DT);
     t += DT;

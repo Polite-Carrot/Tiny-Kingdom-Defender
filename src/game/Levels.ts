@@ -1,7 +1,7 @@
 // Builds playable level definitions (campaign, endless, weekly) from data config.
 
 import {
-  CHAPTERS, LEVELS_PER_CHAPTER, BOSS_EVERY, WAVE_COMPOSER, ENDLESS_LAYOUT, WEEKLY_MODIFIERS, WEEKLY, TOTAL_LEVELS,
+  CHAPTERS, LEVELS_PER_CHAPTER, BOSS_EVERY, LEVEL_OVERRIDES, WAVE_COMPOSER, ENDLESS_LAYOUT, WEEKLY_MODIFIERS, WEEKLY, TOTAL_LEVELS,
   type Layout, type ChapterDef, type WeeklyModifier,
 } from '../data/levels';
 import { ENEMY_RULES, BOSS_BY_CHAPTER, type EnemyId } from '../data/enemies';
@@ -68,9 +68,10 @@ export function buildCampaignLevel(globalIndex: number): LevelDef {
   const rng = new Random(seed);
   const isBoss = (idx + 1) % BOSS_EVERY === 0;
   const layout = layoutFor(chapter, idx);
-  const pathFactor = pathLengthFactor(layout);
+  const ov = LEVEL_OVERRIDES[globalIndex + 1] ?? {};
+  const pathFactor = pathLengthFactor(layout) * (ov.budgetMult ?? 1);
   const waveCount = Math.round(chapter.waveCountMin + ((chapter.waveCountMax - chapter.waveCountMin) * idx) / (LEVELS_PER_CHAPTER - 1));
-  const hpLevel = chapter.hpMult * (1 + ENEMY_RULES.hpGrowthPerLevel * idx);
+  const hpLevel = chapter.hpMult * (1 + ENEMY_RULES.hpGrowthPerLevel * idx) * (ov.hpMult ?? 1);
   const waves: WaveDef[] = [];
   for (let w = 0; w < waveCount; w++) {
     const last = w === waveCount - 1;

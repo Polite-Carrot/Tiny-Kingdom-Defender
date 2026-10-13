@@ -113,7 +113,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     index: 1, layouts: DESERT, buildSpots: 12, startGoldBonus: 50,
-    budgetBase: 9, budgetPerWave: 3.4, budgetPerLevel: 1.0, hpMult: 1.25, waveCountMin: 9, waveCountMax: 11,
+    budgetBase: 9, budgetPerWave: 3.5, budgetPerLevel: 1.25, hpMult: 1.32, waveCountMin: 9, waveCountMax: 11,
     theme: {
       id: 'desert', name: 'Desert', subtitle: 'Sunscorch Dunes',
       grass: '#ecc985', grassAlt: '#e2bb73', path: '#c99b5b', pathEdge: '#ab7e43', cliff: '#c4834a', cliffDark: '#9a5f30',
@@ -124,7 +124,7 @@ export const CHAPTERS: ChapterDef[] = [
     },
   },
   {
-    index: 2, layouts: SNOW, buildSpots: 13, startGoldBonus: 100,
+    index: 2, layouts: SNOW, buildSpots: 13, startGoldBonus: 75,
     budgetBase: 12, budgetPerWave: 4.4, budgetPerLevel: 1.0, hpMult: 1.6, waveCountMin: 10, waveCountMax: 12,
     theme: {
       id: 'snow', name: 'Snow', subtitle: 'Frostpeak Pass',
@@ -136,7 +136,7 @@ export const CHAPTERS: ChapterDef[] = [
     },
   },
   {
-    index: 3, layouts: VOLCANO, buildSpots: 14, startGoldBonus: 150,
+    index: 3, layouts: VOLCANO, buildSpots: 14, startGoldBonus: 125,
     budgetBase: 15, budgetPerWave: 5.4, budgetPerLevel: 1.1, hpMult: 2.1, waveCountMin: 10, waveCountMax: 12,
     theme: {
       id: 'volcano', name: 'Volcano', subtitle: 'Cinder Crown',
@@ -148,6 +148,12 @@ export const CHAPTERS: ChapterDef[] = [
     },
   },
 ];
+
+/** Per-level hand tuning on top of the generated curve (keyed by 1-based level number). */
+export const LEVEL_OVERRIDES: Record<number, { budgetMult?: number; hpMult?: number }> = {
+  55: { budgetMult: 0.85 },
+  60: { budgetMult: 0.95 },
+};
 
 export const LEVELS_PER_CHAPTER = 15;
 export const TOTAL_LEVELS = CHAPTERS.length * LEVELS_PER_CHAPTER;

@@ -7,7 +7,7 @@ import type { Game } from '../game/Game';
 import type { Battle, BattleResult } from '../game/Battle';
 import { buildCampaignLevel, weekKey, type LevelDef } from '../game/Levels';
 import { waveSummary } from '../game/WaveComposer';
-import { CHAPTERS, TOTAL_LEVELS, FEATURE_UNLOCK_LEVEL } from '../data/levels';
+import { CHAPTERS, TOTAL_LEVELS, FEATURE_UNLOCK_LEVEL, LEVELS_PER_CHAPTER } from '../data/levels';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { TOWERS, TOWER_ORDER, type TowerId } from '../data/towers';
 import { HEROES, HERO_ORDER } from '../data/heroes';
@@ -218,7 +218,11 @@ export function results(game: Game, r: BattleResult): void {
     actions.append(mapBtn);
     if (r.level.kind === 'campaign' && r.won && r.level.globalIndex + 1 < TOTAL_LEVELS) {
       const next = el('button', 'btn', `Next ${icon('play')}`);
-      next.onclick = () => go(() => preLevelCampaign(game, r.level.globalIndex + 1));
+      next.onclick = () => go(() => {
+        const n = r.level.globalIndex + 1;
+        game.goMap(Math.floor(n / LEVELS_PER_CHAPTER));
+        preLevelCampaign(game, n);
+      });
       actions.append(next);
     } else if (!r.won || isEndless) {
       const retry = el('button', 'btn blue', `${icon('restart')} Retry`);
