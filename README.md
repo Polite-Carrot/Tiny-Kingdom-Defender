@@ -178,6 +178,8 @@ How this lines up with the design goals:
 * **Bosses are a clear spike.** Boss levels (5, 10, 15, …) always show a drop in HP remaining, and levels 35, 55 and 60 are the walls of the late game.
 * **No-upgrade players start to struggle mid-chapter 2.** From level 18 they start losing stars (castle HP mostly 50–75%). The first losses come at the level 25 boss. From level 27 on, they either lose or barely survive (castle HP at or below 20%). This is the point where the shop and the rewarded ads (revive, reinforcements, +50% start gold) start to matter.
 
+With typical upgrades and no early wave calls, a level lasts 3–4.5 minutes (level 1 is a shorter 2.5-minute tutorial).
+
 The full output is saved in `docs/balance-report.txt`.
 
 ## Ads
