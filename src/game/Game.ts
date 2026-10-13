@@ -175,7 +175,7 @@ export class Game {
     } else if (o === 'portrait') {
       safe = { top: sa.top + 60, bottom: sa.bottom + 96, left: sa.left + 4, right: sa.right + 4 };
     } else {
-      safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: sa.left + (this.battle.run.hero ? 92 : 12), right: sa.right + 236 };
+      safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: sa.left + (this.battle.run.hero ? 92 : 12), right: sa.right + 252 };
     }
     rig.frame(w, h, safe);
     const fog = renderer.scene.fog as import('three').Fog;

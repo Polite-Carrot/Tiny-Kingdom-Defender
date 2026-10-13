@@ -783,7 +783,9 @@ export class BattleView {
     this.renderer.scene.remove(this.root);
     for (const d of this.disposables) d.dispose();
     for (const m of this.enemyMeshes.values()) m.dispose();
-    this.particles.mesh.dispose();
+    this.particles.dispose();
+    this.rings.dispose();
+    this.bolts.dispose();
     this.material.dispose();
   }
 }

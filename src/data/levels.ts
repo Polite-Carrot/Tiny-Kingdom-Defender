@@ -116,7 +116,7 @@ export const CHAPTERS: ChapterDef[] = [
     budgetBase: 9, budgetPerWave: 3.5, budgetPerLevel: 1.25, hpMult: 1.32, waveCountMin: 9, waveCountMax: 11,
     theme: {
       id: 'desert', name: 'Desert', subtitle: 'Sunscorch Dunes',
-      grass: '#ecc985', grassAlt: '#e2bb73', path: '#c99b5b', pathEdge: '#ab7e43', cliff: '#c4834a', cliffDark: '#9a5f30',
+      grass: '#f0d496', grassAlt: '#e8c884', path: '#b47f4a', pathEdge: '#94643a', cliff: '#c4834a', cliffDark: '#9a5f30',
       pad: '#e8dcc2', sky: '#ffe2b0', fog: '#ffe8c4', sun: '#fff0cc', ambient: '#e8c9a0',
       props: ['cactus', 'cactus', 'dune', 'rock', 'deadtree'],
       music: { root: 62, scale: [0, 1, 4, 5, 7, 8, 10], bpm: 104, wave: 'sawtooth' },
@@ -128,7 +128,7 @@ export const CHAPTERS: ChapterDef[] = [
     budgetBase: 12, budgetPerWave: 4.4, budgetPerLevel: 1.0, hpMult: 1.6, waveCountMin: 10, waveCountMax: 12,
     theme: {
       id: 'snow', name: 'Snow', subtitle: 'Frostpeak Pass',
-      grass: '#eef5fb', grassAlt: '#dfeaf4', path: '#a9b8c8', pathEdge: '#8899ad', cliff: '#7d8fa6', cliffDark: '#5d6d84',
+      grass: '#eef5fb', grassAlt: '#dfeaf4', path: '#8b9db3', pathEdge: '#6f8299', cliff: '#7d8fa6', cliffDark: '#5d6d84',
       pad: '#c4ccd6', sky: '#cfe3f5', fog: '#e4eef8', sun: '#f4f8ff', ambient: '#a9c0dd',
       props: ['pine', 'pine', 'rock', 'snowman', 'crystal'],
       music: { root: 57, scale: [0, 2, 3, 5, 7, 8, 10], bpm: 96, wave: 'sine' },

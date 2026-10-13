@@ -35,16 +35,11 @@ export class Particles {
     for (let i = 0; i < capacity; i++) this.free.push({} as Particle);
   }
 
-  setCapacityScale(scale: number): void {
-    this.limit = Math.floor(this.capacity * scale);
-  }
-  private limit = Infinity;
-
   burst(x: number, y: number, z: number, color: THREE.ColorRepresentation, count: number, o: { speed?: number; up?: number; size?: number; life?: number; gravity?: number; spread?: number } = {}): void {
     _c.set(color);
     const speed = o.speed ?? 2;
     for (let i = 0; i < count; i++) {
-      if (this.list.length >= Math.min(this.capacity, this.limit)) return;
+      if (this.list.length >= this.capacity) return;
       const p = this.free.pop();
       if (!p) return;
       const a = Math.random() * Math.PI * 2;
@@ -111,6 +106,12 @@ export class Particles {
     this.list.length = 0;
     this.mesh.count = 0;
   }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+    this.mesh.dispose();
+  }
 }
 
 interface Ring {
@@ -169,6 +170,11 @@ export class Rings {
       r.active = false;
       r.mesh.visible = false;
     }
+  }
+
+  dispose(): void {
+    this.rings[0]?.mesh.geometry.dispose();
+    for (const r of this.rings) (r.mesh.material as THREE.Material).dispose();
   }
 }
 
@@ -241,6 +247,13 @@ export class Bolts {
     for (const b of this.bolts) {
       b.active = false;
       b.line.visible = false;
+    }
+  }
+
+  dispose(): void {
+    for (const b of this.bolts) {
+      b.line.geometry.dispose();
+      (b.line.material as THREE.Material).dispose();
     }
   }
 }
