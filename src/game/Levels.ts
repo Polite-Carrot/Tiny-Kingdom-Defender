@@ -36,6 +36,19 @@ const LEVEL_NAMES = [
   ['Ashen Road', 'Ember Fields', 'Obsidian Fork', 'Magma Falls', 'Drake\'s Nest', 'Cinder Steps', 'Smoke Hollow', 'Brimstone Gate', 'Lava Lake', 'Scorched Spire', 'Molten Maze', 'Fire Gardens', 'Caldera Rim', 'Crown of Flame', 'The Magma Drake'],
 ];
 
+/** Mean path length relative to the reference, clamped. Shorter roads get smaller waves. */
+export function pathLengthFactor(layout: Layout): number {
+  const lens = layout.paths.map((p) => {
+    let len = 0;
+    for (let i = 1; i < p.length; i++) len += Math.abs(p[i][0] - p[i - 1][0]) + Math.abs(p[i][1] - p[i - 1][1]);
+    return len;
+  });
+  const mean = lens.reduce((a, b) => a + b, 0) / lens.length;
+  // Blend in the shortest road: enemies sent down it have the least exposure.
+  const effective = (mean + Math.min(...lens)) / 2;
+  return Math.max(WAVE_COMPOSER.pathFactorMin, Math.min(WAVE_COMPOSER.pathFactorMax, effective / WAVE_COMPOSER.referencePathLength));
+}
+
 export function levelId(globalIndex: number): string {
   return `L${globalIndex + 1}`;
 }
@@ -55,27 +68,29 @@ export function buildCampaignLevel(globalIndex: number): LevelDef {
   const rng = new Random(seed);
   const isBoss = (idx + 1) % BOSS_EVERY === 0;
   const layout = layoutFor(chapter, idx);
+  const pathFactor = pathLengthFactor(layout);
   const waveCount = Math.round(chapter.waveCountMin + ((chapter.waveCountMax - chapter.waveCountMin) * idx) / (LEVELS_PER_CHAPTER - 1));
   const hpLevel = chapter.hpMult * (1 + ENEMY_RULES.hpGrowthPerLevel * idx);
   const waves: WaveDef[] = [];
   for (let w = 0; w < waveCount; w++) {
     const last = w === waveCount - 1;
-    const budget = chapter.budgetBase + chapter.budgetPerLevel * idx + chapter.budgetPerWave * w;
+    const budget = (chapter.budgetBase + chapter.budgetPerLevel * idx + chapter.budgetPerWave * w) * pathFactor;
     let boss: EnemyId | undefined;
     if (isBoss && last) boss = BOSS_BY_CHAPTER[chapterIdx];
     const wave = composeWave(rng, {
-      budget: boss ? budget * 2 : budget,
+      budget: boss ? budget * WAVE_COMPOSER.bossBudgetMult : budget,
       waveIndex: w,
       unlockIndex: globalIndex,
       weights: chapter.theme.enemyWeights,
       pathCount: layout.paths.length,
       hpMult: hpLevel * (1 + WAVE_COMPOSER.hpPerWave * w),
+      goldMult: Math.pow(hpLevel, ENEMY_RULES.bountyHpExponent) * (1 + WAVE_COMPOSER.multiPathGoldBonus * (layout.paths.length - 1)),
       boss,
       mix: globalIndex >= WAVE_COMPOSER.mixFromLevel && w > 0,
     });
     if (boss) {
       const tier = Math.floor(idx / BOSS_EVERY);
-      wave.bossHp = ENEMY_RULES.bossTierHp[tier] ?? 1;
+      wave.bossHp = (ENEMY_RULES.bossTierHp[tier] ?? 1) * pathFactor;
     }
     waves.push(wave);
   }
@@ -112,6 +127,7 @@ export function buildEndlessLevel(): LevelDef {
       weights,
       pathCount: ENDLESS_LAYOUT.paths.length,
       hpMult: 1 + ENDLESS.hpGrowthPerWave * n,
+      goldMult: Math.pow(1 + ENDLESS.hpGrowthPerWave * n, ENEMY_RULES.bountyHpExponent),
       boss,
       mix: n > 0,
     });
@@ -149,7 +165,7 @@ export function buildWeeklyLevel(date: Date): LevelDef {
     const budget = ref.budgetBase + ref.budgetPerLevel * 2 + ref.budgetPerWave * w;
     const wave = composeWave(rng, {
       budget: boss ? budget * 2 : budget, waveIndex: w, unlockIndex: 20, weights, pathCount: layout.paths.length,
-      hpMult: ref.hpMult * (1 + WAVE_COMPOSER.hpPerWave * w) * (modifier.enemyHpMult ?? 1), boss, mix: true,
+      hpMult: ref.hpMult * (1 + WAVE_COMPOSER.hpPerWave * w) * (modifier.enemyHpMult ?? 1), goldMult: Math.pow(ref.hpMult, ENEMY_RULES.bountyHpExponent), boss, mix: true,
     });
     if (boss) wave.bossHp = 0.6;
     waves.push(wave);

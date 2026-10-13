@@ -17,6 +17,8 @@ export interface WaveGroup {
 export interface WaveDef {
   groups: WaveGroup[];
   hpMult: number;
+  /** Bounty multiplier for every enemy in the wave. */
+  goldMult: number;
   boss: boolean;
   /** Boss HP multiplier (boss waves only). */
   bossHp?: number;
@@ -30,23 +32,24 @@ export interface ComposeOptions {
   weights: Partial<Record<EnemyId, number>>;
   pathCount: number;
   hpMult: number;
+  goldMult?: number;
   boss?: EnemyId;
   /** Allow multiple enemy types per wave. */
   mix: boolean;
 }
 
-export function availableEnemies(unlockIndex: number, weights: Partial<Record<EnemyId, number>>): Partial<Record<EnemyId, number>> {
+export function availableEnemies(unlockIndex: number, weights: Partial<Record<EnemyId, number>>, waveIndex = 99): Partial<Record<EnemyId, number>> {
   const out: Partial<Record<EnemyId, number>> = {};
   for (const id of REGULAR_ENEMIES) {
     const w = weights[id] ?? 0;
-    if (w > 0 && ENEMIES[id].unlockLevel <= unlockIndex) out[id] = w;
+    if (w > 0 && ENEMIES[id].unlockLevel <= unlockIndex && (ENEMIES[id].minWave ?? 0) <= waveIndex) out[id] = w;
   }
   if (Object.keys(out).length === 0) out.grunt = 1;
   return out;
 }
 
 export function composeWave(rng: Random, o: ComposeOptions): WaveDef {
-  const pool = availableEnemies(o.unlockIndex, o.weights);
+  const pool = availableEnemies(o.unlockIndex, o.weights, o.waveIndex);
   const groups: WaveGroup[] = [];
   let budget = o.budget;
   let delay = 0;
@@ -82,7 +85,7 @@ export function composeWave(rng: Random, o: ComposeOptions): WaveDef {
     delay += Math.min(count * spacing * 0.6, 6) + WAVE_COMPOSER.groupGap;
   }
 
-  return { groups, hpMult: o.hpMult, boss: !!o.boss };
+  return { groups, hpMult: o.hpMult, goldMult: o.goldMult ?? 1, boss: !!o.boss };
 }
 
 /** Summarises a wave for the preview UI. */

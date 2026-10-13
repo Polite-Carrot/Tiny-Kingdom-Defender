@@ -59,6 +59,7 @@ export interface Enemy {
   immuneTimer: number;
   immuneIdx: number;
   wave: number;
+  bountyMult: number;
   armorBonus: number;
   speedMult: number;
   frozen: boolean;
@@ -187,6 +188,7 @@ interface SpawnEntry {
   path: number;
   wave: number;
   hpMult: number;
+  goldMult: number;
 }
 
 export class Run {
@@ -234,7 +236,8 @@ export class Run {
     this.speedMult = mod?.enemySpeedMult ?? 1;
     this.extraArmor = mod?.extraArmor ?? 0;
     this.waveGoldMult = mod?.waveGoldMult ?? 1;
-    this.gold = Math.round((RUN_ECONOMY.startingGold + config.meta.startGoldBonus) * (mod?.startGoldMult ?? 1) * (config.startGoldMult ?? 1));
+    const chapterBonus = lvl.kind === 'endless' ? 0 : chapter.startGoldBonus;
+    this.gold = Math.round((RUN_ECONOMY.startingGold + chapterBonus + config.meta.startGoldBonus) * (mod?.startGoldMult ?? 1) * (config.startGoldMult ?? 1));
     this.castleMaxHp = Math.max(1, Math.round((RUN_ECONOMY.castleHp + config.meta.castleHpBonus) * (mod?.castleHpMult ?? 1)));
     this.castleHp = this.castleMaxHp;
 
@@ -497,6 +500,7 @@ export class Run {
           path: g.path % this.map.paths.length,
           wave: n,
           hpMult: wave.hpMult * (isBoss ? wave.bossHp ?? 1 : 1),
+          goldMult: wave.goldMult ?? 1,
         });
         total++;
       }
@@ -510,7 +514,7 @@ export class Run {
   private updateSpawns(): void {
     while (this.spawnQueue.length && this.spawnQueue[0].time <= this.time) {
       const s = this.spawnQueue.shift()!;
-      this.spawnEnemy(s.enemy, s.path, 0, s.wave, s.hpMult);
+      this.spawnEnemy(s.enemy, s.path, 0, s.wave, s.hpMult, s.goldMult);
       if (!this.spawnQueue.some((q) => q.wave === s.wave)) this.waveSpawnDone.set(s.wave, true);
     }
   }
@@ -528,7 +532,7 @@ export class Run {
     if (this.nextWaveTimer <= 0) this.startWave();
   }
 
-  spawnEnemy(id: EnemyId, path: number, dist: number, wave: number, hpMult: number): Enemy {
+  spawnEnemy(id: EnemyId, path: number, dist: number, wave: number, hpMult: number, goldMult = 1): Enemy {
     const def = ENEMIES[id];
     let e = this.enemies.find((o) => !o.alive && o.flash <= -1);
     if (!e) {
@@ -543,7 +547,7 @@ export class Run {
       abilityTimer: def.heal ? def.heal.interval * this.rng.range(0.5, 1) : 0,
       summonTimer: def.boss?.summonInterval ?? 0,
       chargeTimer: def.boss?.chargeInterval ?? 0,
-      immuneTimer: 0, immuneIdx: 0, wave, armorBonus: this.extraArmor, speedMult: this.speedMult, frozen: false,
+      immuneTimer: 0, immuneIdx: 0, wave, bountyMult: goldMult, armorBonus: this.extraArmor, speedMult: this.speedMult, frozen: false,
       phase: this.rng.next() * Math.PI * 2,
     } satisfies Partial<Enemy>);
     this.placeEnemy(e);
@@ -609,7 +613,7 @@ export class Run {
           if (e.summonTimer <= 0) {
             e.summonTimer = b.summonInterval ?? 8;
             for (let i = 0; i < (b.summonCount ?? 2); i++) {
-              const m = this.spawnEnemy(b.summonId, e.path, Math.max(0, e.dist - 0.4 - i * 0.35), e.wave, e.maxHp / def.hp * 0.5 + 0.5);
+              const m = this.spawnEnemy(b.summonId, e.path, Math.max(0, e.dist - 0.4 - i * 0.35), e.wave, e.maxHp / def.hp * 0.25 + 0.5, e.bountyMult);
               this.waveRemaining.set(e.wave, (this.waveRemaining.get(e.wave) ?? 0) + 1);
               m.lane = this.rng.range(-0.3, 0.3);
             }
@@ -723,7 +727,7 @@ export class Run {
     e.alive = false;
     e.hp = 0;
     e.flash = 0.6; // death animation timer (counts down to -1 before reuse)
-    const bounty = reward ? e.def.bounty : 0;
+    const bounty = reward ? Math.round(e.def.bounty * e.bountyMult) : 0;
     if (reward) {
       this.stats.kills++;
       if (e.def.flying) this.stats.flyingKills++;

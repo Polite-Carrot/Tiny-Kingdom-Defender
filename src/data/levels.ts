@@ -38,6 +38,8 @@ export interface ChapterDef {
   layouts: Layout[];
   /** Build spots generated per level. */
   buildSpots: number;
+  /** Extra starting gold in this chapter (enemies hit harder from wave 1). */
+  startGoldBonus: number;
   /** Wave budget parameters. */
   budgetBase: number;
   budgetPerWave: number;
@@ -64,7 +66,7 @@ const DESERT: Layout[] = [
   { paths: [[[-1, 2], [6, 2], [6, 6], [12, 6]], [[-1, 10], [6, 10], [6, 6], [12, 6]]] },
   { paths: [[[3, -1], [3, 4], [9, 4], [9, 8], [12, 8]], [[-1, 11], [5, 11], [5, 8], [9, 8], [12, 8]]] },
   { paths: [[[-1, 6], [4, 6], [4, 2], [8, 2], [8, 6], [12, 6]], [[-1, 6], [4, 6], [4, 10], [8, 10], [8, 6], [12, 6]]] },
-  { paths: [[[-1, 1], [11, 1], [11, 4], [1, 4], [1, 8], [8, 8], [8, 12]], [[13, 8], [8, 8], [8, 12]]] },
+  { paths: [[[-1, 1], [11, 1], [11, 4], [1, 4], [1, 8], [8, 8], [8, 12]], [[13, 10], [11, 10], [11, 6], [9, 6], [9, 8], [8, 8], [8, 12]]] },
   { paths: [[[6, -1], [6, 4], [2, 4], [2, 9], [6, 9], [6, 12]], [[6, -1], [6, 4], [10, 4], [10, 9], [6, 9], [6, 12]]] },
 ];
 
@@ -82,7 +84,7 @@ const VOLCANO: Layout[] = [
   { paths: [[[-1, 2], [4, 2], [4, 9], [6, 9], [6, 12]], [[13, 2], [8, 2], [8, 9], [6, 9], [6, 12]], [[6, -1], [6, 5], [6, 12]]] },
   { paths: [[[-1, 1], [11, 1], [11, 4], [1, 4], [1, 7], [11, 7], [11, 10], [6, 10], [6, 12]], [[13, 7], [11, 7], [11, 10], [6, 10], [6, 12]]] },
   { paths: [[[-1, 6], [3, 6], [3, 1], [9, 1], [9, 6], [12, 6]], [[-1, 6], [3, 6], [3, 11], [9, 11], [9, 6], [12, 6]], [[6, -1], [6, 1], [9, 1], [9, 6], [12, 6]]] },
-  { paths: [[[-1, 2], [10, 2], [10, 6], [6, 6]], [[13, 10], [2, 10], [2, 6], [6, 6]], [[6, -1], [6, 6]]] },
+  { paths: [[[-1, 2], [10, 2], [10, 6], [6, 6]], [[13, 10], [2, 10], [2, 6], [6, 6]], [[13, 4], [12, 4], [12, 8], [8, 8], [8, 6], [6, 6]]] },
   { paths: [
     [[-1, 1], [11, 1], [11, 3], [1, 3], [1, 5], [11, 5], [11, 7], [1, 7], [1, 9], [11, 9], [11, 11], [12, 11]],
     [[-1, 9], [11, 9], [11, 11], [12, 11]],
@@ -98,7 +100,7 @@ export const ENDLESS_LAYOUT: Layout = {
 
 export const CHAPTERS: ChapterDef[] = [
   {
-    index: 0, layouts: MEADOW, buildSpots: 10,
+    index: 0, layouts: MEADOW, buildSpots: 10, startGoldBonus: 0,
     budgetBase: 6, budgetPerWave: 2.4, budgetPerLevel: 0.75, hpMult: 1.0, waveCountMin: 8, waveCountMax: 10,
     theme: {
       id: 'meadow', name: 'Meadow', subtitle: 'The Green Vale',
@@ -110,8 +112,8 @@ export const CHAPTERS: ChapterDef[] = [
     },
   },
   {
-    index: 1, layouts: DESERT, buildSpots: 12,
-    budgetBase: 15, budgetPerWave: 4.6, budgetPerLevel: 1.1, hpMult: 1.35, waveCountMin: 9, waveCountMax: 11,
+    index: 1, layouts: DESERT, buildSpots: 12, startGoldBonus: 50,
+    budgetBase: 9, budgetPerWave: 3.4, budgetPerLevel: 1.0, hpMult: 1.25, waveCountMin: 9, waveCountMax: 11,
     theme: {
       id: 'desert', name: 'Desert', subtitle: 'Sunscorch Dunes',
       grass: '#ecc985', grassAlt: '#e2bb73', path: '#c99b5b', pathEdge: '#ab7e43', cliff: '#c4834a', cliffDark: '#9a5f30',
@@ -122,8 +124,8 @@ export const CHAPTERS: ChapterDef[] = [
     },
   },
   {
-    index: 2, layouts: SNOW, buildSpots: 13,
-    budgetBase: 26, budgetPerWave: 7.0, budgetPerLevel: 1.5, hpMult: 1.75, waveCountMin: 10, waveCountMax: 12,
+    index: 2, layouts: SNOW, buildSpots: 13, startGoldBonus: 100,
+    budgetBase: 12, budgetPerWave: 4.4, budgetPerLevel: 1.0, hpMult: 1.6, waveCountMin: 10, waveCountMax: 12,
     theme: {
       id: 'snow', name: 'Snow', subtitle: 'Frostpeak Pass',
       grass: '#eef5fb', grassAlt: '#dfeaf4', path: '#a9b8c8', pathEdge: '#8899ad', cliff: '#7d8fa6', cliffDark: '#5d6d84',
@@ -134,15 +136,15 @@ export const CHAPTERS: ChapterDef[] = [
     },
   },
   {
-    index: 3, layouts: VOLCANO, buildSpots: 14,
-    budgetBase: 40, budgetPerWave: 9.8, budgetPerLevel: 2.0, hpMult: 2.25, waveCountMin: 10, waveCountMax: 12,
+    index: 3, layouts: VOLCANO, buildSpots: 14, startGoldBonus: 150,
+    budgetBase: 15, budgetPerWave: 5.4, budgetPerLevel: 1.1, hpMult: 1.95, waveCountMin: 10, waveCountMax: 12,
     theme: {
       id: 'volcano', name: 'Volcano', subtitle: 'Cinder Crown',
       grass: '#5a4a4f', grassAlt: '#4e3f45', path: '#2f2629', pathEdge: '#e0582b', cliff: '#3b2e33', cliffDark: '#241b1f',
       pad: '#8c7c78', sky: '#3a2430', fog: '#5a2f30', sun: '#ffc08a', ambient: '#8a5a6a',
       props: ['lavarock', 'lavarock', 'deadtree', 'crystal', 'rock'],
       music: { root: 55, scale: [0, 1, 3, 5, 7, 8, 11], bpm: 120, wave: 'square' },
-      enemyWeights: { grunt: 2, runner: 3, knight: 3, bat: 3, shaman: 2.5, shield: 2.5 },
+      enemyWeights: { grunt: 2.5, runner: 3, knight: 3, bat: 3, shaman: 2, shield: 2 },
     },
   },
 ];
@@ -158,10 +160,18 @@ export const WAVE_COMPOSER = {
   groupGap: 2.5,
   /** Fraction of budget the boss wave spends on escorts. */
   bossEscortFraction: 0.45,
+  /** Boss waves get this multiple of a normal wave's budget (boss + escorts). */
+  bossBudgetMult: 1.6,
   /** Within a level, HP grows by this fraction per wave. */
   hpPerWave: 0.03,
   /** Level index (0-based) from which waves use more than one enemy type. */
   mixFromLevel: 1,
+  /** Wave budgets scale with mean path length / this reference (short roads = fewer enemies). */
+  referencePathLength: 26,
+  pathFactorMin: 0.6,
+  pathFactorMax: 1.15,
+  /** Extra bounty per additional road (defending several roads needs more towers). */
+  multiPathGoldBonus: 0.2,
 };
 
 /** Tower availability gating for onboarding (global level index, 0-based, at which it unlocks). */
