@@ -67,7 +67,7 @@ button * { pointer-events: none; }
 .btn.ad { background: linear-gradient(180deg, #b48cff, #8a5cf0); box-shadow: inset 0 -5px 0 var(--purple-d), 0 4px 0 rgba(0,0,0,.25), 0 0 18px rgba(180,140,255,.8);
   animation: adPulse 1.8s ease-in-out infinite; text-align: left; }
 .btn.ad::before { content: ''; position: absolute; inset: -3px; border-radius: inherit; border: 2px solid rgba(255,255,255,.6); opacity: .0; animation: adRing 1.8s ease-out infinite; pointer-events: none; }
-.btn.ad .adtag { font-size: 11px; font-weight: 900; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.95); color: var(--purple-d); text-shadow: none; letter-spacing: .5px; }
+.btn.ad .adtag { white-space: nowrap; flex: none; font-size: 11px; font-weight: 900; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.95); color: var(--purple-d); text-shadow: none; letter-spacing: .5px; }
 .btn.ad.used { animation: none; filter: grayscale(.7); }
 @keyframes adPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
 @keyframes adRing { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.15); } }
@@ -114,7 +114,7 @@ button * { pointer-events: none; }
 body.landscape .title-screen .menu-main { flex-direction: row; align-items: flex-end; justify-content: space-between; padding: 0 calc(var(--sar) + 18px) calc(var(--sab) + 16px) calc(var(--sal) + 18px); }
 body.landscape .title-screen .menu-side { max-width: 300px; justify-content: flex-start; }
 body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
-.version { background: transparent; position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 4px); font-size: 11px; color: rgba(255,255,255,.55); padding: 6px; }
+.version { background: transparent; position: absolute; left: calc(var(--sal) + 8px); top: calc(var(--sat) + 56px); font-size: 11px; color: rgba(255,255,255,.55); padding: 6px; }
 
 /* ---------- World map ---------- */
 .map-screen { background: rgba(20, 14, 34, .25); }
@@ -221,11 +221,12 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 .wave-pill { font-size: 16px; padding: 0 14px; }
 
 .hud-actions { position: absolute; display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
-body.portrait .hud-actions { left: calc(var(--sal) + 8px); right: calc(var(--sar) + 8px); bottom: calc(var(--sab) + 10px); justify-content: space-between; }
-body.landscape .hud-actions { right: calc(var(--sar) + 10px); bottom: calc(var(--sab) + 10px); width: 220px; flex-wrap: wrap; justify-content: flex-end; }
-body.landscape .hud-hero { position: absolute; left: calc(var(--sal) + 10px); bottom: calc(var(--sab) + 10px); flex-direction: column-reverse; }
-
-.hud-hero { display: flex; gap: 8px; align-items: flex-end; }
+.hud-actions { right: calc(var(--sar) + 10px); bottom: calc(var(--sab) + 10px); justify-content: flex-end; }
+.hud-hero { position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 10px); display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
+body.landscape .hud-hero { left: calc(var(--sal) + 10px); flex-direction: column-reverse; align-items: center; }
+.btn.reinforce { position: absolute; top: calc(var(--sat) + 60px); }
+body.portrait .btn.reinforce { right: calc(var(--sar) + 8px); }
+body.landscape .btn.reinforce { left: calc(var(--sal) + 10px); }
 .hero-btn { position: relative; width: 64px; height: 64px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.9), 0 4px 0 rgba(0,0,0,.3); overflow: hidden; padding: 0; }
 .hero-btn img { width: 100%; height: 100%; object-fit: cover; }
 .hero-btn.sel { box-shadow: 0 0 0 4px #7dff9a, 0 4px 0 rgba(0,0,0,.3), 0 0 16px #7dff9a; }

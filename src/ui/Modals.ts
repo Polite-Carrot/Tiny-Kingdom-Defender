@@ -21,7 +21,7 @@ import type { ModalHandle } from './UI';
 
 /** A rewarded-ad button: glowing, optional, and always states exactly what the player gets. */
 function adButton(game: Game, placement: RewardedPlacement, title: string, sub: string, onReward: (btn: HTMLButtonElement) => void, cls = ''): HTMLButtonElement {
-  const b = el('button', `btn ad ${cls}`, `<span class="adtag">${ICONS.tv.replace('<svg', '<svg style="width:14px;height:14px;vertical-align:-2px"')} AD</span><span>${title}${sub ? `<span class="sub">${sub}</span>` : ''}</span>`);
+  const b = el('button', `btn ad ${cls}`, `<span class="adtag">▶ AD</span><span>${title}${sub ? `<span class="sub">${sub}</span>` : ''}</span>`);
   game.s.ads.offerShown(placement);
   let busy = false;
   b.onclick = async () => {
@@ -690,7 +690,7 @@ export function debug(game: Game): void {
           <h3>Win rate by level</h3><table><tr><th>Level</th><th>Plays</th><th>Wins</th><th>Rate</th></tr>${lv}</table>
           <h3>Recent events</h3><pre>${events.slice(-30).reverse().map((e) => `${(e.t / 1000).toFixed(1)}s ${e.name} ${JSON.stringify(e.params)}`).join('\n')}</pre>
           <h3>Cheats (testing)</h3>
-          <div class="actions"><button class="btn small gold coins">+1000 coins</button><button class="btn small blue unlock">Unlock all levels</button><button class="btn small treasury">Treasury +8h</button><button class="btn small chest">Chest ready</button><button class="btn small daily">Next day</button></div>
+          <div class="actions"><button class="btn small gold coins">+1000 coins</button><button class="btn small blue unlock">Unlock all levels</button><button class="btn small treasury">Treasury +8h</button><button class="btn small chest">Chest ready</button><button class="btn small daily">Next day</button><button class="btn small blue auto">Autoplay battle</button></div>
         </div>`;
       $(m, '.coins').onclick = () => {
         meta.earn(1000, 'debug');
@@ -714,6 +714,10 @@ export function debug(game: Game): void {
         meta.d.chest.nextFree = Date.now();
         meta.commit();
         game.s.ui.toast('Free chest ready');
+      };
+      $(m, '.auto').onclick = () => {
+        game.autoplay();
+        game.s.ui.toast(game.battle ? 'AI is now playing this battle' : 'Start a battle first');
       };
       $(m, '.daily').onclick = () => {
         const d = meta.d.daily;

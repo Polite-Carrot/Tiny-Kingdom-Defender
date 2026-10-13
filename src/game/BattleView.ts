@@ -23,7 +23,7 @@ const ENEMY_COLORS: Record<EnemyId, string> = {
   boss_ogre: '#8aa05a', boss_scorpion: '#c9a063', boss_yeti: '#eef3f7', boss_dragon: '#b8322a',
 };
 
-const GROUND_PLANE: Record<string, string> = { meadow: '#78c3e6', desert: '#e3bd7c', snow: '#d5e5f3', volcano: '#ff5a1f' };
+const GROUND_PLANE: Record<string, string> = { meadow: '#78c3e6', desert: '#e3bd7c', snow: '#d5e5f3', volcano: '#e8481a' };
 
 interface TowerView {
   group: THREE.Group;
@@ -546,7 +546,7 @@ export class BattleView {
       const idx = counts.get(e.def.id) ?? 0;
       if (idx >= mesh.instanceMatrix.count) continue;
       counts.set(e.def.id, idx + 1);
-      const sc = e.def.scale;
+      const sc = e.def.scale * ENEMY_VISUAL_SCALE;
       const yaw = Math.atan2(e.dirX, e.dirZ);
       let y = e.y;
       let rx = 0;
@@ -620,6 +620,7 @@ export class BattleView {
     }
     for (const [id, mesh] of this.enemyMeshes) {
       mesh.count = counts.get(id) ?? 0;
+      mesh.visible = mesh.count > 0;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
@@ -666,6 +667,9 @@ export class BattleView {
     }
 
     this.shadows.count = shadows;
+    this.shadows.visible = shadows > 0;
+    this.bubbles.visible = bubbles > 0;
+    this.barBg.visible = this.barFill.visible = bars > 0;
     this.shadows.instanceMatrix.needsUpdate = true;
     this.bubbles.count = bubbles;
     this.bubbles.instanceMatrix.needsUpdate = true;
@@ -730,6 +734,9 @@ export class BattleView {
     this.projArrow.count = na;
     this.projBall.count = nb;
     this.projGlow.count = ng;
+    this.projArrow.visible = na > 0;
+    this.projBall.visible = nb > 0;
+    this.projGlow.visible = ng > 0;
     this.projArrow.instanceMatrix.needsUpdate = true;
     this.projArrow.instanceColor!.needsUpdate = true;
     this.projBall.instanceMatrix.needsUpdate = true;
@@ -782,6 +789,8 @@ export class BattleView {
 }
 
 const _cTmp = new THREE.Color();
+/** Enemies are drawn a bit larger than their logical size for readability on phones. */
+const ENEMY_VISUAL_SCALE = 1.3;
 function towerModelHeadY(v: TowerView): number {
   return 0.85 + Math.min(v.tier, 4) * 0.1;
 }

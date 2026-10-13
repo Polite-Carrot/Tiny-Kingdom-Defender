@@ -213,6 +213,7 @@ export class Game {
     this.onResize();
     this.title.render();
     this.s.ui.show('title');
+    this.input.enabled = false;
     this.music('menu');
     this.title.onEnter();
   }
@@ -223,6 +224,7 @@ export class Game {
     this.onResize();
     this.map.open(chapter);
     this.s.ui.show('map');
+    this.input.enabled = false;
     this.music('menu');
   }
 
@@ -250,6 +252,7 @@ export class Game {
     this.s.rig.pan.set(0, 0);
     this.onResize();
     this.s.ui.show('battle');
+    this.input.enabled = true;
     this.music(CHAPTERS[level.chapter].theme.id as MusicTrack);
   }
 
@@ -340,6 +343,11 @@ export class Game {
       this.s.ui.banner('Reinforcements!', 'A Royal Champion joins the fight');
       this.s.audio.play('reward');
     }
+  }
+
+  /** Debug: hand the current battle to the heuristic AI. */
+  autoplay(): void {
+    if (this.battle) this.battle.autoPlayer = new AutoPlayer(this.battle.run, 1);
   }
 
   applySettings(): void {

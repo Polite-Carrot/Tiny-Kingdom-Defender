@@ -101,6 +101,7 @@ export class Particles {
       n++;
     }
     this.mesh.count = n;
+    this.mesh.visible = n > 0;
     this.mesh.instanceMatrix.needsUpdate = true;
     this.mesh.instanceColor!.needsUpdate = true;
   }

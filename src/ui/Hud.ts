@@ -77,12 +77,12 @@ export class Hud {
         <div class="grow"></div>
         <button class="btn icon blue pause-btn" aria-label="Pause">${icon('pause')}</button>
       </div>
+      <div class="hud-hero">
+        <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
+        <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
+      </div>
+      <button class="btn ad reinforce" aria-label="Reinforcements"><span class="adtag">▶ AD</span><span>Reinforcements<span class="sub">Royal Champion fights for ${AD_REWARDS.reinforcementDuration}s</span></span></button>
       <div class="hud-actions">
-        <div class="hud-hero">
-          <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
-          <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
-        </div>
-        <button class="btn ad reinforce" aria-label="Reinforcements"><span class="adtag">AD</span><span>Reinforcements<span class="sub">Royal Champion fights for ${AD_REWARDS.reinforcementDuration}s</span></span></button>
         <div class="next-wave">
           <div class="wave-preview"></div>
           <div style="display:flex;gap:8px">

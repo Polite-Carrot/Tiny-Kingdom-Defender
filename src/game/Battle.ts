@@ -37,6 +37,8 @@ export class Battle {
   private reviveOffered = false;
   private startTime = performance.now();
   private endlessMilestones = 0;
+  /** Debug: lets the heuristic AI play this battle. */
+  autoPlayer: { update(dt: number): void } | null = null;
   onEnd: (r: BattleResult) => void = () => {};
   onReviveOffer: () => void = () => {};
 
@@ -140,6 +142,7 @@ export class Battle {
       this.acc += Math.min(dt, 0.1) * this.speed;
       let steps = 0;
       while (this.acc >= STEP && steps < MAX_STEPS * this.speed) {
+        this.autoPlayer?.update(STEP);
         this.run.update(STEP);
         this.acc -= STEP;
         steps++;

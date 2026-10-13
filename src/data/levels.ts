@@ -137,10 +137,10 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     index: 3, layouts: VOLCANO, buildSpots: 14, startGoldBonus: 150,
-    budgetBase: 15, budgetPerWave: 5.4, budgetPerLevel: 1.1, hpMult: 1.95, waveCountMin: 10, waveCountMax: 12,
+    budgetBase: 15, budgetPerWave: 5.4, budgetPerLevel: 1.1, hpMult: 2.1, waveCountMin: 10, waveCountMax: 12,
     theme: {
       id: 'volcano', name: 'Volcano', subtitle: 'Cinder Crown',
-      grass: '#5a4a4f', grassAlt: '#4e3f45', path: '#2f2629', pathEdge: '#e0582b', cliff: '#3b2e33', cliffDark: '#241b1f',
+      grass: '#5b4a4c', grassAlt: '#524245', path: '#b08a6e', pathEdge: '#e0582b', cliff: '#3b2e33', cliffDark: '#241b1f',
       pad: '#8c7c78', sky: '#3a2430', fog: '#5a2f30', sun: '#ffc08a', ambient: '#8a5a6a',
       props: ['lavarock', 'lavarock', 'deadtree', 'crystal', 'rock'],
       music: { root: 55, scale: [0, 1, 3, 5, 7, 8, 11], bpm: 120, wave: 'square' },
