@@ -1,0 +1,441 @@
+// All game models, built procedurally from primitives. Forward is +Z.
+
+import * as THREE from 'three';
+import { ModelBuilder } from './ModelBuilder';
+import type { TowerId } from '../data/towers';
+import type { EnemyId } from '../data/enemies';
+import type { HeroId } from '../data/heroes';
+import type { ChapterTheme } from '../data/levels';
+
+const cache = new Map<string, THREE.BufferGeometry>();
+function cached(key: string, fn: () => THREE.BufferGeometry): THREE.BufferGeometry {
+  let g = cache.get(key);
+  if (!g) {
+    g = fn();
+    cache.set(key, g);
+  }
+  return g;
+}
+
+const STONE = '#c9c1b3';
+const STONE_D = '#a39a8b';
+const WOOD = '#9a6a3f';
+const WOOD_D = '#74492a';
+const ROOF = '#d9573f';
+const METAL = '#5d6470';
+const GOLD = '#f2c94c';
+
+// --- Towers -------------------------------------------------------------------
+
+export interface TowerModel {
+  base: THREE.BufferGeometry;
+  head: THREE.BufferGeometry;
+  headY: number;
+}
+
+function stoneBase(b: ModelBuilder, h: number, r = 0.42) {
+  b.cyl(r, r + 0.06, 0.16, 8, STONE_D, { y: 0.08 });
+  b.cyl(r - 0.05, r, h, 8, STONE, { y: 0.16 + h / 2 });
+  // Brick band.
+  b.cyl(r - 0.02, r - 0.02, 0.06, 8, STONE_D, { y: 0.16 + h * 0.55 });
+}
+
+export function towerModel(id: TowerId, tier: number, branch: number): TowerModel {
+  const key = `${id}-${tier}-${branch}`;
+  const base = cached(`tb-${key}`, () => buildTowerBase(id, tier, branch));
+  const head = cached(`th-${key}`, () => buildTowerHead(id, tier, branch));
+  return { base, head, headY: towerHeadY(id, tier) };
+}
+
+function towerHeadY(id: TowerId, tier: number): number {
+  switch (id) {
+    case 'archer': return 0.75 + tier * 0.12;
+    case 'cannon': return 0.55 + tier * 0.06;
+    case 'frost': return 0.85 + tier * 0.1;
+    case 'lightning': return 1.0 + tier * 0.12;
+  }
+}
+
+function buildTowerBase(id: TowerId, tier: number, branch: number): THREE.BufferGeometry {
+  const b = new ModelBuilder();
+  const t = Math.min(tier, 4);
+  switch (id) {
+    case 'archer': {
+      const h = 0.45 + t * 0.12;
+      stoneBase(b, h * 0.6, 0.38);
+      // Wooden lookout.
+      const top = 0.16 + h * 0.6;
+      for (const [x, z] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) b.box(0.07, h * 0.6, 0.07, WOOD_D, { x, y: top + h * 0.3, z });
+      b.box(0.66, 0.06, 0.66, WOOD, { y: top + h * 0.6 });
+      for (const [x, z, w, d] of [[0, 0.31, 0.66, 0.05], [0, -0.31, 0.66, 0.05], [0.31, 0, 0.05, 0.66], [-0.31, 0, 0.05, 0.66]]) b.box(w, 0.14, d, WOOD_D, { x, y: top + h * 0.6 + 0.09, z });
+      // Roof.
+      const roofY = top + h * 0.6 + 0.45;
+      if (t >= 2) for (const [x, z] of [[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]]) b.box(0.05, 0.36, 0.05, WOOD_D, { x, y: roofY - 0.2, z });
+      if (t >= 2) b.cone(0.5, 0.36, 4, branch === 0 ? '#3f7d4e' : ROOF, { y: roofY + 0.14, ry: Math.PI / 4 });
+      if (t >= 3) {
+        b.cyl(0.015, 0.015, 0.4, 4, WOOD_D, { y: roofY + 0.5 });
+        b.box(0.22, 0.12, 0.02, branch === 1 ? '#3f6fd1' : '#e8c547', { x: 0.11, y: roofY + 0.62 });
+      }
+      if (t >= 4 && branch === 0) b.cone(0.18, 0.5, 4, '#2f5f3c', { y: roofY + 0.45, ry: Math.PI / 4 });
+      if (t >= 4 && branch === 1) for (let i = 0; i < 3; i++) b.box(0.18, 0.18, 0.04, '#e0d2b0', { x: Math.cos(i * 2.1) * 0.42, y: top + 0.25, z: Math.sin(i * 2.1) * 0.42, ry: -i * 2.1 });
+      break;
+    }
+    case 'cannon': {
+      const h = 0.22 + t * 0.06;
+      b.cyl(0.46, 0.5, 0.14, 8, STONE_D, { y: 0.07 });
+      b.cyl(0.42, 0.46, h, 8, t >= 4 && branch === 0 ? '#8d8478' : STONE, { y: 0.14 + h / 2 });
+      // Crenellations.
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        b.box(0.14, 0.14, 0.1, STONE_D, { x: Math.cos(a) * 0.4, y: 0.14 + h + 0.07, z: Math.sin(a) * 0.4, ry: -a });
+      }
+      if (t >= 2) b.box(0.2, 0.12, 0.2, WOOD, { x: 0.3, y: 0.2 + h, z: -0.25 });
+      if (t >= 3) for (let i = 0; i < 3; i++) b.ball(0.07, 0, '#333740', { x: -0.28 + i * 0.08, y: 0.22 + h, z: -0.3 });
+      if (t >= 4 && branch === 1) b.torus(0.44, 0.04, 4, 12, METAL, { y: 0.14 + h * 0.6, rx: Math.PI / 2 });
+      break;
+    }
+    case 'frost': {
+      const h = 0.5 + t * 0.1;
+      stoneBase(b, h, 0.36);
+      b.cyl(0.42, 0.3, 0.12, 8, '#e6f4fb', { y: 0.16 + h + 0.06 });
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        b.octa(0.08 + t * 0.012, '#9fdcf5', { x: Math.cos(a) * 0.33, y: 0.16 + h + 0.12, z: Math.sin(a) * 0.33, sy: 2 });
+      }
+      if (t >= 3) b.cone(0.1, 0.4, 5, '#bfe9fb', { x: 0.36, y: 0.35, z: 0.2, rz: -0.3 });
+      if (t >= 4 && branch === 1) b.torus(0.5, 0.05, 4, 12, '#dff6ff', { y: 0.4, rx: Math.PI / 2 });
+      break;
+    }
+    case 'lightning': {
+      const h = 0.4 + t * 0.12;
+      b.cyl(0.4, 0.46, 0.18, 6, '#4a4f5c', { y: 0.09 });
+      b.cyl(0.18, 0.3, h, 6, METAL, { y: 0.18 + h / 2 });
+      const rings = 1 + Math.min(t, 3);
+      for (let i = 0; i < rings; i++) b.torus(0.24 - i * 0.03, 0.035, 4, 10, '#d48a3a', { y: 0.3 + (i * h) / rings, rx: Math.PI / 2 });
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        b.box(0.06, 0.4, 0.06, '#3c414c', { x: Math.cos(a) * 0.32, y: 0.3, z: Math.sin(a) * 0.32, rz: Math.cos(a) * 0.3, rx: -Math.sin(a) * 0.3 });
+      }
+      b.cyl(0.05, 0.08, 0.35, 5, '#d48a3a', { y: 0.18 + h + 0.17 });
+      if (t >= 4 && branch === 0) for (let i = 0; i < 3; i++) b.cyl(0.03, 0.04, 0.5, 4, '#d48a3a', { x: Math.cos(i * 2.1) * 0.3, y: 0.55 + h * 0.5, z: Math.sin(i * 2.1) * 0.3 });
+      break;
+    }
+  }
+  return b.build();
+}
+
+function buildTowerHead(id: TowerId, tier: number, branch: number): THREE.BufferGeometry {
+  const b = new ModelBuilder();
+  const t = Math.min(tier, 4);
+  switch (id) {
+    case 'archer': {
+      // Archer figure with bow.
+      b.cyl(0.08, 0.1, 0.2, 6, t >= 4 && branch === 0 ? '#2f5f3c' : '#4f8f45', { y: 0.1 });
+      b.ball(0.08, 0, '#f1c9a0', { y: 0.27 });
+      b.cone(0.1, 0.14, 6, '#3d7a37', { y: 0.37 });
+      b.torus(0.14, 0.015, 3, 8, WOOD_D, { z: 0.12, y: 0.16, ry: Math.PI / 2, sx: 1, sy: 1.4 });
+      if (t >= 4 && branch === 1) b.box(0.06, 0.06, 0.25, WOOD, { x: 0.12, y: 0.15, z: 0.05 });
+      break;
+    }
+    case 'cannon': {
+      const big = t >= 4 && branch === 0;
+      const len = 0.42 + t * 0.04 + (big ? 0.1 : 0);
+      const r = 0.1 + t * 0.012 + (big ? 0.05 : 0);
+      b.box(0.36, 0.12, 0.4, WOOD, { y: 0.06 });
+      b.cyl(r, r * 1.2, len, 8, '#3a3f49', { y: 0.2, z: 0.12, rx: Math.PI / 2 - 0.35 });
+      b.torus(r * 1.15, 0.025, 4, 8, GOLD, { y: 0.2 + Math.cos(Math.PI / 2 - 0.35) * len * 0.45, z: 0.12 + len * 0.45 * Math.sin(Math.PI / 2 - 0.35) });
+      for (const x of [-0.17, 0.17]) b.cyl(0.09, 0.09, 0.04, 8, WOOD_D, { x, y: 0.08, rz: Math.PI / 2 });
+      if (t >= 4 && branch === 1) b.cyl(r * 0.8, r, len * 0.9, 6, '#3a3f49', { x: 0.14, y: 0.18, z: 0.1, rx: Math.PI / 2 - 0.35 });
+      break;
+    }
+    case 'frost': {
+      const big = 0.18 + t * 0.03;
+      b.octa(big, t >= 4 && branch === 1 ? '#e6f9ff' : '#7fd0f0', { y: big * 1.4, sy: 1.6 });
+      b.octa(big * 0.45, '#d8f4ff', { y: big * 1.4 + 0.02, x: big * 0.9, sy: 1.5 });
+      b.octa(big * 0.45, '#d8f4ff', { y: big * 1.4 + 0.02, x: -big * 0.9, sy: 1.5 });
+      if (t >= 4 && branch === 0) b.octa(big * 0.5, '#5ab8e6', { y: big * 3, sy: 1.8 });
+      break;
+    }
+    case 'lightning': {
+      const r = 0.12 + t * 0.025;
+      b.ball(r, 1, t >= 4 && branch === 1 ? '#ffd76a' : '#c8a6ff', { y: r });
+      b.torus(r * 1.4, 0.02, 3, 10, '#ffe9a8', { y: r, rx: 1.2 });
+      break;
+    }
+  }
+  return b.build();
+}
+
+// --- Enemies ------------------------------------------------------------------
+
+export function enemyModel(id: EnemyId): THREE.BufferGeometry {
+  return cached(`enemy-${id}`, () => buildEnemy(id));
+}
+
+function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; w?: number } = {}) {
+  const h = o.h ?? 1;
+  const w = o.w ?? 1;
+  b.box(0.08 * w, 0.14 * h, 0.08, '#4a3a2a', { x: -0.07 * w, y: 0.07 * h });
+  b.box(0.08 * w, 0.14 * h, 0.08, '#4a3a2a', { x: 0.07 * w, y: 0.07 * h });
+  b.box(0.26 * w, 0.22 * h, 0.18, body, { y: 0.25 * h });
+  b.ball(0.13, 0, skin, { y: 0.47 * h });
+}
+
+function buildEnemy(id: EnemyId): THREE.BufferGeometry {
+  const b = new ModelBuilder();
+  const SKIN = '#7fb24f';
+  switch (id) {
+    case 'grunt':
+      humanoid(b, '#a8643a', SKIN);
+      b.cone(0.04, 0.12, 4, SKIN, { x: -0.13, y: 0.5, rz: 1.2 });
+      b.cone(0.04, 0.12, 4, SKIN, { x: 0.13, y: 0.5, rz: -1.2 });
+      b.cyl(0.035, 0.06, 0.3, 5, WOOD_D, { x: 0.18, y: 0.3, z: 0.08, rx: 0.6 });
+      b.ball(0.025, 0, '#222', { x: -0.05, y: 0.5, z: 0.12 });
+      b.ball(0.025, 0, '#222', { x: 0.05, y: 0.5, z: 0.12 });
+      break;
+    case 'runner':
+      humanoid(b, '#e0913a', '#c7d36a', { h: 0.95, w: 0.85 });
+      b.cone(0.1, 0.22, 4, '#d2452f', { y: 0.62, rx: -0.6, z: -0.04 });
+      b.box(0.3, 0.04, 0.06, '#d2452f', { y: 0.3, z: -0.1 });
+      break;
+    case 'knight':
+      humanoid(b, '#8a93a3', '#b9c2cf', { w: 1.15 });
+      b.cyl(0.14, 0.15, 0.16, 8, '#9ea7b7', { y: 0.52 });
+      b.box(0.2, 0.03, 0.03, '#2a2d33', { y: 0.53, z: 0.14 });
+      b.cone(0.03, 0.14, 4, '#c73a3a', { y: 0.66 });
+      b.box(0.04, 0.4, 0.04, '#d9dde3', { x: 0.2, y: 0.38, z: 0.06 });
+      b.box(0.36, 0.06, 0.2, '#6f7888', { y: 0.37 });
+      break;
+    case 'bat':
+      b.ball(0.13, 0, '#5b3f73', { y: 0, sy: 1.1 });
+      b.cone(0.04, 0.1, 3, '#5b3f73', { x: -0.07, y: 0.15 });
+      b.cone(0.04, 0.1, 3, '#5b3f73', { x: 0.07, y: 0.15 });
+      b.box(0.36, 0.02, 0.18, '#3e2952', { x: -0.24, y: 0.03, rz: 0.3 });
+      b.box(0.36, 0.02, 0.18, '#3e2952', { x: 0.24, y: 0.03, rz: -0.3 });
+      b.ball(0.025, 0, '#ffde59', { x: -0.05, y: 0.04, z: 0.11 });
+      b.ball(0.025, 0, '#ffde59', { x: 0.05, y: 0.04, z: 0.11 });
+      break;
+    case 'shaman':
+      b.cone(0.2, 0.42, 6, '#6a4aa0', { y: 0.21 });
+      b.ball(0.12, 0, SKIN, { y: 0.47 });
+      b.cone(0.13, 0.2, 6, '#e0c050', { y: 0.62 });
+      b.cyl(0.02, 0.02, 0.6, 4, WOOD, { x: 0.18, y: 0.3 });
+      b.ball(0.06, 0, '#79f2a0', { x: 0.18, y: 0.63 });
+      break;
+    case 'shield':
+      humanoid(b, '#7a5a3a', '#9fb070', { w: 1.2, h: 1.05 });
+      b.box(0.5, 0.55, 0.06, '#b0884f', { y: 0.3, z: 0.18 });
+      b.box(0.52, 0.06, 0.07, '#7b8494', { y: 0.55, z: 0.18 });
+      b.box(0.52, 0.06, 0.07, '#7b8494', { y: 0.06, z: 0.18 });
+      b.ball(0.07, 0, GOLD, { y: 0.3, z: 0.22 });
+      break;
+    case 'minion':
+      humanoid(b, '#c0392b', '#e0634f', { h: 0.85, w: 0.85 });
+      b.cone(0.03, 0.1, 4, '#3a1a1a', { x: -0.06, y: 0.55 });
+      b.cone(0.03, 0.1, 4, '#3a1a1a', { x: 0.06, y: 0.55 });
+      break;
+    case 'boss_ogre':
+      b.box(0.12, 0.18, 0.12, '#5a4632', { x: -0.1, y: 0.09 });
+      b.box(0.12, 0.18, 0.12, '#5a4632', { x: 0.1, y: 0.09 });
+      b.ball(0.26, 0, '#8aa05a', { y: 0.36, sy: 0.9 });
+      b.box(0.4, 0.12, 0.3, '#7a4a2a', { y: 0.24 });
+      b.ball(0.13, 0, '#9ab06a', { y: 0.6 });
+      b.cone(0.03, 0.08, 4, '#f4f0e0', { x: -0.06, y: 0.57, z: 0.12, rx: -0.5 });
+      b.cone(0.03, 0.08, 4, '#f4f0e0', { x: 0.06, y: 0.57, z: 0.12, rx: -0.5 });
+      b.cyl(0.05, 0.1, 0.5, 6, WOOD_D, { x: 0.3, y: 0.4, z: 0.1, rx: 0.4 });
+      b.cone(0.12, 0.12, 5, GOLD, { y: 0.74 });
+      break;
+    case 'boss_scorpion':
+      b.dodec(0.28, '#c9a063', { y: 0.32 });
+      b.dodec(0.16, '#b08a52', { y: 0.62 });
+      b.box(0.14, 0.3, 0.14, '#a07a45', { x: -0.22, y: 0.15 });
+      b.box(0.14, 0.3, 0.14, '#a07a45', { x: 0.22, y: 0.15 });
+      b.dodec(0.12, '#a07a45', { x: -0.34, y: 0.36 });
+      b.dodec(0.12, '#a07a45', { x: 0.34, y: 0.36 });
+      b.ball(0.035, 0, '#4ff0ff', { x: -0.06, y: 0.64, z: 0.13 });
+      b.ball(0.035, 0, '#4ff0ff', { x: 0.06, y: 0.64, z: 0.13 });
+      break;
+    case 'boss_yeti':
+      b.ball(0.3, 1, '#eef3f7', { y: 0.36, sy: 1.05 });
+      b.ball(0.15, 0, '#f6f9fb', { y: 0.7 });
+      b.box(0.14, 0.06, 0.04, '#7aa0c4', { y: 0.68, z: 0.13 });
+      b.ball(0.11, 0, '#e4ecf2', { x: -0.3, y: 0.3, sy: 1.6 });
+      b.ball(0.11, 0, '#e4ecf2', { x: 0.3, y: 0.3, sy: 1.6 });
+      b.cone(0.03, 0.1, 4, '#cfdce8', { x: -0.08, y: 0.83, rz: 0.4 });
+      b.cone(0.03, 0.1, 4, '#cfdce8', { x: 0.08, y: 0.83, rz: -0.4 });
+      break;
+    case 'boss_dragon':
+      b.ball(0.26, 0, '#b8322a', { y: 0.32, sz: 1.3 });
+      b.ball(0.14, 0, '#c8443a', { y: 0.5, z: 0.32 });
+      b.cone(0.06, 0.2, 4, '#f2c94c', { x: -0.07, y: 0.62, z: 0.28, rx: -0.6 });
+      b.cone(0.06, 0.2, 4, '#f2c94c', { x: 0.07, y: 0.62, z: 0.28, rx: -0.6 });
+      b.box(0.5, 0.03, 0.3, '#7d1f1a', { x: -0.36, y: 0.48, rz: 0.4 });
+      b.box(0.5, 0.03, 0.3, '#7d1f1a', { x: 0.36, y: 0.48, rz: -0.4 });
+      b.cone(0.1, 0.4, 4, '#a02a22', { y: 0.28, z: -0.4, rx: -Math.PI / 2 });
+      for (const x of [-0.14, 0.14]) for (const z of [-0.12, 0.14]) b.box(0.08, 0.16, 0.08, '#7d1f1a', { x, y: 0.08, z });
+      b.ball(0.03, 0, '#ffe066', { x: -0.06, y: 0.54, z: 0.44 });
+      b.ball(0.03, 0, '#ffe066', { x: 0.06, y: 0.54, z: 0.44 });
+      break;
+  }
+  return b.build();
+}
+
+// --- Heroes -------------------------------------------------------------------
+
+export function heroModel(id: HeroId | 'champion'): THREE.BufferGeometry {
+  return cached(`hero-${id}`, () => {
+    const b = new ModelBuilder();
+    b.box(0.09, 0.16, 0.09, '#3b3026', { x: -0.07, y: 0.08 });
+    b.box(0.09, 0.16, 0.09, '#3b3026', { x: 0.07, y: 0.08 });
+    switch (id) {
+      case 'ranger':
+        b.box(0.28, 0.26, 0.18, '#3f7d3a', { y: 0.29 });
+        b.ball(0.12, 0, '#f1c9a0', { y: 0.52 });
+        b.cone(0.16, 0.24, 6, '#2f6a2c', { y: 0.62 });
+        b.box(0.32, 0.3, 0.03, '#2f6a2c', { y: 0.3, z: -0.11 });
+        b.torus(0.18, 0.018, 3, 8, WOOD_D, { x: 0.18, y: 0.32, z: 0.05, ry: Math.PI / 2, sy: 1.5 });
+        break;
+      case 'knight':
+        b.box(0.32, 0.28, 0.2, '#5a7fd1', { y: 0.3 });
+        b.cyl(0.13, 0.13, 0.18, 8, '#c9d2df', { y: 0.53 });
+        b.box(0.18, 0.03, 0.03, '#222', { y: 0.55, z: 0.13 });
+        b.cone(0.04, 0.16, 4, '#f2c94c', { y: 0.7 });
+        b.box(0.04, 0.48, 0.04, '#e8ecf2', { x: 0.21, y: 0.42, z: 0.08 });
+        b.box(0.14, 0.04, 0.05, GOLD, { x: 0.21, y: 0.22, z: 0.08 });
+        b.box(0.26, 0.32, 0.05, '#3a5fb1', { x: -0.2, y: 0.3, z: 0.08, ry: 0.3 });
+        break;
+      case 'mage':
+        b.cone(0.22, 0.5, 7, '#7d43b3', { y: 0.25 });
+        b.ball(0.12, 0, '#f1c9a0', { y: 0.53 });
+        b.cone(0.17, 0.32, 7, '#5e2f8a', { y: 0.75, rz: 0.15 });
+        b.cyl(0.02, 0.02, 0.7, 4, WOOD, { x: 0.2, y: 0.35 });
+        b.octa(0.07, '#ff9b4a', { x: 0.2, y: 0.74 });
+        break;
+      case 'champion':
+        b.box(0.36, 0.32, 0.22, '#e8c547', { y: 0.32 });
+        b.cyl(0.14, 0.14, 0.2, 8, '#f6dc7a', { y: 0.58 });
+        b.cone(0.06, 0.24, 4, '#e84a3a', { y: 0.78 });
+        b.box(0.05, 0.55, 0.05, '#ffffff', { x: 0.24, y: 0.46, z: 0.08 });
+        b.box(0.4, 0.4, 0.04, '#c0392b', { y: 0.36, z: -0.13 });
+        break;
+    }
+    return b.build();
+  });
+}
+
+// --- Map pieces ---------------------------------------------------------------
+
+export function castleModel(wall: string): THREE.BufferGeometry {
+  return cached(`castle-${wall}`, () => {
+    const b = new ModelBuilder();
+    const c = new THREE.Color(wall);
+    const dark = '#' + c.clone().multiplyScalar(0.78).getHexString();
+    b.box(1.3, 0.12, 1.3, '#8f8576', { y: 0.06 });
+    b.box(1.0, 0.6, 1.0, wall, { y: 0.42 });
+    for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
+      b.cyl(0.2, 0.22, 0.95, 8, wall, { x, y: 0.6, z });
+      b.cone(0.26, 0.36, 8, ROOF, { x, y: 1.25, z });
+      b.cyl(0.24, 0.24, 0.06, 8, dark, { x, y: 1.05, z });
+    }
+    b.box(0.5, 0.9, 0.5, wall, { y: 0.9 });
+    b.cone(0.42, 0.5, 4, '#3f6fd1', { y: 1.6, ry: Math.PI / 4 });
+    b.cyl(0.015, 0.015, 0.5, 4, WOOD_D, { y: 2.05 });
+    b.box(0.26, 0.15, 0.02, '#e84a3a', { x: 0.13, y: 2.2 });
+    b.box(0.3, 0.38, 0.05, WOOD_D, { y: 0.31, z: 0.5 });
+    for (let i = 0; i < 4; i++) b.box(0.12, 0.1, 0.06, dark, { x: -0.36 + i * 0.24, y: 0.77, z: 0.5 });
+    return b.build();
+  });
+}
+
+export function spawnModel(theme: string): THREE.BufferGeometry {
+  return cached(`spawn-${theme}`, () => {
+    const b = new ModelBuilder();
+    const rock = theme === 'volcano' ? '#2a2024' : theme === 'snow' ? '#8a9ab0' : '#7a6a58';
+    b.dodec(0.38, rock, { x: -0.5, y: 0.2, sy: 1.5 });
+    b.dodec(0.38, rock, { x: 0.5, y: 0.2, sy: 1.5 });
+    b.box(1.3, 0.28, 0.4, rock, { y: 0.7 });
+    b.box(0.7, 0.55, 0.05, '#1a1218', { y: 0.32, z: -0.1 });
+    return b.build();
+  });
+}
+
+export function padModel(): THREE.BufferGeometry {
+  return cached('pad', () => {
+    const b = new ModelBuilder();
+    b.cyl(0.44, 0.47, 0.1, 8, '#9a9184', { y: 0.05 });
+    b.cyl(0.38, 0.4, 0.04, 8, '#ffffff', { y: 0.11 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      b.box(0.1, 0.05, 0.1, '#7d7468', { x: Math.cos(a) * 0.3, y: 0.14, z: Math.sin(a) * 0.3, ry: a });
+    }
+    return b.build();
+  });
+}
+
+export function propModel(type: ChapterTheme['props'][number]): THREE.BufferGeometry {
+  return cached(`prop-${type}`, () => {
+    const b = new ModelBuilder();
+    switch (type) {
+      case 'tree':
+        b.cyl(0.05, 0.07, 0.3, 5, WOOD, { y: 0.15 });
+        b.ball(0.26, 0, '#5fae4a', { y: 0.45 });
+        b.ball(0.18, 0, '#6fbe55', { y: 0.65, x: 0.05 });
+        break;
+      case 'pine':
+        b.cyl(0.04, 0.06, 0.2, 5, WOOD_D, { y: 0.1 });
+        b.cone(0.28, 0.4, 6, '#3f7a5a', { y: 0.38 });
+        b.cone(0.21, 0.34, 6, '#4a8a68', { y: 0.6 });
+        b.cone(0.13, 0.26, 6, '#f4f8fb', { y: 0.8 });
+        break;
+      case 'rock':
+        b.dodec(0.18, '#9b958c', { y: 0.1, sy: 0.7 });
+        b.dodec(0.1, '#aaa49a', { x: 0.16, y: 0.06, z: 0.06, sy: 0.7 });
+        break;
+      case 'cactus':
+        b.cyl(0.07, 0.08, 0.5, 6, '#4f9d4a', { y: 0.25 });
+        b.cyl(0.045, 0.05, 0.2, 6, '#4f9d4a', { x: 0.12, y: 0.32 });
+        b.cyl(0.045, 0.05, 0.08, 6, '#4f9d4a', { x: 0.08, y: 0.22, rz: Math.PI / 2 });
+        b.ball(0.04, 0, '#f07aa0', { y: 0.52 });
+        break;
+      case 'bush':
+        b.ball(0.16, 0, '#4f9a3f', { y: 0.1 });
+        b.ball(0.12, 0, '#5aa848', { x: 0.14, y: 0.08 });
+        b.ball(0.03, 0, '#e8463a', { x: 0.05, y: 0.22, z: 0.1 });
+        break;
+      case 'flower':
+        for (let i = 0; i < 3; i++) {
+          const x = (i - 1) * 0.12;
+          b.cyl(0.01, 0.01, 0.14, 3, '#3f8a3a', { x, y: 0.07 });
+          b.ball(0.045, 0, ['#ff8fb0', '#ffe066', '#ffffff'][i], { x, y: 0.15 });
+        }
+        break;
+      case 'dune':
+        b.ball(0.35, 1, '#e6be78', { y: -0.05, sy: 0.35 });
+        break;
+      case 'snowman':
+        b.ball(0.16, 1, '#f8fbff', { y: 0.14 });
+        b.ball(0.11, 1, '#f8fbff', { y: 0.36 });
+        b.cone(0.025, 0.1, 4, '#f08a2a', { y: 0.37, z: 0.12, rx: Math.PI / 2 });
+        b.cyl(0.07, 0.07, 0.08, 6, '#333', { y: 0.5 });
+        break;
+      case 'crystal':
+        b.octa(0.12, '#9fe0ff', { y: 0.18, sy: 2 });
+        b.octa(0.07, '#c7b3ff', { x: 0.12, y: 0.1, sy: 2, rz: -0.4 });
+        break;
+      case 'lavarock':
+        b.dodec(0.22, '#2c2226', { y: 0.12, sy: 0.8 });
+        b.octa(0.06, '#ff7a2a', { x: 0.08, y: 0.24, z: 0.08 });
+        break;
+      case 'deadtree':
+        b.cyl(0.04, 0.07, 0.5, 5, '#5a4636', { y: 0.25 });
+        b.cyl(0.02, 0.03, 0.24, 4, '#5a4636', { x: 0.08, y: 0.4, rz: -0.8 });
+        b.cyl(0.02, 0.03, 0.2, 4, '#5a4636', { x: -0.07, y: 0.32, rz: 0.9 });
+        break;
+      case 'mushroom':
+        b.cyl(0.03, 0.04, 0.12, 5, '#f4eedc', { y: 0.06 });
+        b.cone(0.11, 0.08, 7, '#e8463a', { y: 0.15 });
+        break;
+    }
+    return b.build();
+  });
+}

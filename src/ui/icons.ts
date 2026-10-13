@@ -1,0 +1,38 @@
+// Inline SVG icon set (no external assets).
+
+export const ICONS = {
+  coin: `<svg viewBox="0 0 32 32"><circle cx="16" cy="17" r="13" fill="#e09a12"/><circle cx="16" cy="15" r="13" fill="#ffcf3f"/><circle cx="16" cy="15" r="9" fill="#ffe27a"/><path d="M16 9v12M12.5 12.5h5a2 2 0 010 4h-3a2 2 0 000 4h5" stroke="#e09a12" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>`,
+  gem: `<svg viewBox="0 0 32 32"><path d="M8 5h16l6 8-14 16L2 13z" fill="#7a4fe0"/><path d="M8 5h16l6 8H2z" fill="#b48cff"/><path d="M11 13l5-8 5 8-5 14z" fill="#d6c2ff" opacity=".8"/></svg>`,
+  heart: `<svg viewBox="0 0 32 32"><path d="M16 29S3 20.5 3 11.5A7 7 0 0116 7a7 7 0 0113 4.5C29 20.5 16 29 16 29z" fill="#b8382c" transform="translate(0 1.5)"/><path d="M16 29S3 20.5 3 11.5A7 7 0 0116 7a7 7 0 0113 4.5C29 20.5 16 29 16 29z" fill="#ef5b4c"/><ellipse cx="10" cy="11" rx="3" ry="2" fill="#fff" opacity=".6"/></svg>`,
+  star: `<svg viewBox="0 0 32 32"><path d="M16 3l3.9 8.2 9 1.1-6.6 6.2 1.7 8.9L16 23l-8 4.4 1.7-8.9L3.1 12.3l9-1.1z" fill="#e09a12" transform="translate(0 1.5)"/><path d="M16 3l3.9 8.2 9 1.1-6.6 6.2 1.7 8.9L16 23l-8 4.4 1.7-8.9L3.1 12.3l9-1.1z" fill="#ffcf3f"/><path d="M16 7l2.4 5 5.4.7" stroke="#fff" stroke-width="2" fill="none" opacity=".6" stroke-linecap="round"/></svg>`,
+  starEmpty: `<svg viewBox="0 0 32 32"><path d="M16 3l3.9 8.2 9 1.1-6.6 6.2 1.7 8.9L16 23l-8 4.4 1.7-8.9L3.1 12.3l9-1.1z" fill="#000" opacity=".22"/></svg>`,
+  pause: `<svg viewBox="0 0 32 32"><rect x="8" y="6" width="6" height="20" rx="2" fill="#fff"/><rect x="18" y="6" width="6" height="20" rx="2" fill="#fff"/></svg>`,
+  play: `<svg viewBox="0 0 32 32"><path d="M10 6l16 10-16 10z" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>`,
+  gear: `<svg viewBox="0 0 32 32"><path d="M13.5 3h5l.8 3.6 2.6 1.1 3.2-2 3.5 3.5-2 3.2 1.1 2.6 3.6.8v5l-3.6.8-1.1 2.6 2 3.2-3.5 3.5-3.2-2-2.6 1.1-.8 3.6h-5l-.8-3.6-2.6-1.1-3.2 2-3.5-3.5 2-3.2-1.1-2.6L1.5 18.5v-5l3.6-.8 1.1-2.6-2-3.2 3.5-3.5 3.2 2 2.6-1.1z" fill="#8a7fa6"/><circle cx="16" cy="16" r="5" fill="#fff8ea"/></svg>`,
+  shop: `<svg viewBox="0 0 32 32"><path d="M5 12h22l-2 16H7z" fill="#9a6a3f"/><path d="M3 8h26l-2 6H5z" fill="#ef5b4c"/><path d="M8 8l2 6M14 8l1 6M18 8l-1 6M24 8l-2 6" stroke="#fff" stroke-width="2"/><circle cx="16" cy="21" r="4" fill="#ffcf3f"/></svg>`,
+  hero: `<svg viewBox="0 0 32 32"><path d="M8 28c0-6 3.6-9 8-9s8 3 8 9z" fill="#3f7d3a"/><circle cx="16" cy="13" r="6" fill="#f1c9a0"/><path d="M9 13c0-6 3-9 7-9s7 3 7 9l-3-3h-8z" fill="#2f6a2c"/></svg>`,
+  scroll: `<svg viewBox="0 0 32 32"><rect x="6" y="5" width="20" height="23" rx="3" fill="#f3e6cc"/><rect x="4" y="3" width="24" height="5" rx="2.5" fill="#c9a66b"/><rect x="4" y="25" width="24" height="5" rx="2.5" fill="#c9a66b"/><path d="M10 12h12M10 16h12M10 20h8" stroke="#9a6a3f" stroke-width="2" stroke-linecap="round"/><path d="M19 19l2 2 4-5" stroke="#37933b" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`,
+  calendar: `<svg viewBox="0 0 32 32"><rect x="4" y="6" width="24" height="22" rx="4" fill="#fff8ea" stroke="#9a6a3f" stroke-width="2"/><rect x="4" y="6" width="24" height="7" rx="3" fill="#ef5b4c"/><text x="16" y="25" text-anchor="middle" font-size="11" font-weight="900" fill="#2b2340" font-family="sans-serif">7</text></svg>`,
+  chest: `<svg viewBox="0 0 32 32"><rect x="4" y="14" width="24" height="14" rx="3" fill="#9a6a3f"/><path d="M4 15a12 9 0 0124 0z" fill="#b5803f"/><rect x="4" y="13" width="24" height="3" fill="#e09a12"/><rect x="14" y="13" width="4" height="15" fill="#e09a12"/><rect x="13" y="16" width="6" height="6" rx="1.5" fill="#ffcf3f"/></svg>`,
+  castle: `<svg viewBox="0 0 32 32"><rect x="6" y="12" width="20" height="16" rx="2" fill="#d9cbb0"/><rect x="3" y="8" width="7" height="20" rx="2" fill="#c9b996"/><rect x="22" y="8" width="7" height="20" rx="2" fill="#c9b996"/><path d="M2 9l4.5-6L11 9zM21 9l4.5-6L30 9z" fill="#d9573f"/><rect x="13" y="19" width="6" height="9" rx="3" fill="#74492a"/></svg>`,
+  lock: `<svg viewBox="0 0 32 32"><rect x="6" y="14" width="20" height="15" rx="4" fill="#8a7fa6"/><path d="M10 14v-4a6 6 0 0112 0v4" stroke="#8a7fa6" stroke-width="4" fill="none"/><circle cx="16" cy="21" r="2.5" fill="#fff"/></svg>`,
+  skull: `<svg viewBox="0 0 32 32"><path d="M16 3C9 3 5 8 5 14c0 4 2 6 4 7v5h14v-5c2-1 4-3 4-7 0-6-4-11-11-11z" fill="#fff"/><circle cx="11.5" cy="14" r="3" fill="#2b2340"/><circle cx="20.5" cy="14" r="3" fill="#2b2340"/><path d="M13 22v4M16 22v4M19 22v4" stroke="#2b2340" stroke-width="1.6"/></svg>`,
+  tv: `<svg viewBox="0 0 32 32"><rect x="3" y="7" width="26" height="18" rx="4" fill="#fff"/><path d="M13 12l7 4-7 4z" fill="#6f43c8"/><path d="M11 3l5 4 5-4" stroke="#fff" stroke-width="2" fill="none"/></svg>`,
+  sword: `<svg viewBox="0 0 32 32"><path d="M24 3l5 0 0 5-13 13-5-5z" fill="#e8ecf2"/><path d="M8 17l7 7-2 2-2-2-4 4-2-2 4-4-2-2z" fill="#9a6a3f"/><path d="M7 15l10 10" stroke="#ffcf3f" stroke-width="3" stroke-linecap="round"/></svg>`,
+  bolt: `<svg viewBox="0 0 32 32"><path d="M18 2L6 18h8l-2 12 12-17h-8z" fill="#ffd84a" stroke="#e09a12" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+  arrows: `<svg viewBox="0 0 32 32"><path d="M6 4l4 22M14 4l2 22M22 4l0 22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M8 26l2 4 2-4M14 26l2 4 2-4M20 26l2 4 2-4" fill="#fff"/></svg>`,
+  shield: `<svg viewBox="0 0 32 32"><path d="M16 3l11 4v8c0 7-5 12-11 14C10 27 5 22 5 15V7z" fill="#8fb4ff" stroke="#fff" stroke-width="2"/></svg>`,
+  meteor: `<svg viewBox="0 0 32 32"><path d="M4 4l12 8M8 2l10 10M2 9l12 6" stroke="#ffb347" stroke-width="2.5" stroke-linecap="round"/><circle cx="20" cy="20" r="8" fill="#ff6a2a"/><circle cx="18" cy="18" r="3" fill="#ffd27a"/></svg>`,
+  fast: `<svg viewBox="0 0 32 32"><path d="M4 7l11 9-11 9zM16 7l11 9-11 9z" fill="#fff"/></svg>`,
+  map: `<svg viewBox="0 0 32 32"><path d="M3 7l8-3 10 3 8-3v21l-8 3-10-3-8 3z" fill="#9de36a"/><path d="M11 4v21M21 7v21" stroke="#37933b" stroke-width="2"/><path d="M6 20c4-6 8 2 14-6" stroke="#ef5b4c" stroke-width="2" stroke-dasharray="2 2" fill="none"/></svg>`,
+  infinity: `<svg viewBox="0 0 32 32"><path d="M9 11c-3 0-5 2-5 5s2 5 5 5c5 0 9-10 14-10 3 0 5 2 5 5s-2 5-5 5c-5 0-9-10-14-10z" stroke="#fff" stroke-width="3.5" fill="none"/></svg>`,
+  trophy: `<svg viewBox="0 0 32 32"><path d="M9 4h14v7a7 7 0 01-14 0z" fill="#ffcf3f"/><path d="M9 6H4c0 5 3 7 5 7M23 6h5c0 5-3 7-5 7" stroke="#e09a12" stroke-width="2" fill="none"/><rect x="14" y="17" width="4" height="6" fill="#e09a12"/><rect x="9" y="23" width="14" height="5" rx="2" fill="#9a6a3f"/></svg>`,
+  restart: `<svg viewBox="0 0 32 32"><path d="M25 16a9 9 0 11-3-6.7" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M24 3v8h-8" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  home: `<svg viewBox="0 0 32 32"><path d="M4 15L16 4l12 11v13H20v-8h-8v8H4z" fill="#fff"/></svg>`,
+};
+
+export type IconName = keyof typeof ICONS;
+
+export function icon(name: IconName, cls = ''): string {
+  return `<span class="ico ${cls}">${ICONS[name]}</span>`;
+}
