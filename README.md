@@ -2,6 +2,8 @@
 
 A 3D tower defence game for the web, built with **Three.js + TypeScript + Vite**. It's designed to be wrapped for iOS/Android with Capacitor.
 
+You don't play separate levels. You build **one persistent kingdom** that is besieged by waves that never end. Your towers, gold and cleared land stay with you forever. Every 10 waves is a checkpoint. If the castle falls, you regroup at the last checkpoint with everything you've built, upgrade, and push further.
+
 There are no external assets. Every model is low-poly geometry built in code, and every sound effect and music track is synthesised with the Web Audio API. The game runs fully offline as a single-player game, and saves progress to `localStorage`.
 
 ```bash
@@ -9,7 +11,7 @@ npm install
 npm run dev        # play at http://localhost:5173
 npm run build      # typecheck + static build in dist/
 npm run preview    # serve the production build
-npm test           # unit tests (save migrations, ad rules, economy, levels, sim)
+npm test           # unit tests (save migrations, ad rules, economy, towers, siege)
 npm run sim        # headless balance simulator (see "Balancing")
 ```
 
@@ -17,22 +19,25 @@ npm run sim        # headless balance simulator (see "Balancing")
 
 | Area | Contents |
 |---|---|
-| Campaign | 4 chapters × 15 levels (Meadow, Desert, Snow, Volcano). Each chapter has its own palette, props and music. Later chapters have multiple roads that merge or fork. There's a boss every 5th level. |
-| Towers | Archer, Cannon, Frost, Lightning. Each has 3 tiers, then a choice of 2 specialisations (e.g. Longbow / Volley). You can sell towers for a 70% refund, set targeting to first / strongest / closest, and see the range when placing or selecting a tower. |
+| The kingdom | One 15×15 map with the castle in the centre. You start with 6 build pads. 28 more are covered in overgrowth and can be **cleared with gold**, and each clearing costs more than the last. Roads that haven't opened yet show as overgrown trails, so you can plan ahead. |
+| Endless siege | Waves never stop. A boss comes every 10 waves. **Checkpoints** are every 10 waves: if the castle falls you regroup there, keeping all towers and gold. The game saves at the start of every wave, and resuming replays that wave. |
+| Roads | The West Road is open from wave 1. The North-East Road opens at wave 25 and the South Road at wave 50. |
+| Ages | Every 25 waves the land changes: Age of Meadows → Sands → Frost → Fire, then repeats harder (II, III…). Each Age has its own palette, props, sky, music and enemy mix. |
+| Towers | Archer, Cannon, Frost, Lightning. Each has **10 material tiers**, and each upgrade rebuilds the tower in a new material: **Wood → Stone → Iron → Bronze → Silver → Gold → Jade → Crystal → Obsidian → Celestial**. Every tier adds ornaments: a roof, then a flag, banners, trim bands, a floating gem, spikes and finally a halo. Precious materials sparkle. Upgrading from tier 3 picks one of 2 specialisations (e.g. Longbow / Volley). After Celestial, towers keep growing with **star levels** (★1 … ★30) as an endless gold sink. You can sell towers for a 70% refund and set targeting to first / strongest / closest. |
 | Enemies | Grunt, Runner, Knight (resists physical damage), Bat (flies), Shaman (heals others), Shield-bearer (shields allies behind it), Imp (summoned). |
 | Bosses | Ogre Warchief (summons imps), Sand Colossus (becomes immune for a while, summons), Frost Yeti (charges), Magma Drake (does all three). |
 | Heroes | Robin the ranger (Arrow Storm), Sir Bramble the knight (Taunt, which stuns), Elowen the mage (Meteor). Tap a hero to select it, then tap the map to move it. |
-| Modes | Campaign, Endless Siege (unlocks after level 5), and a Weekly Challenge with a modifier picked from the date. |
-| Meta | Coins, permanent tower/castle/start-gold/hero upgrades (cost = `base × 1.35^level`), a Lightning unlock, hero unlocks, cosmetics (castle skins and projectile trails, bought with coins or shards). |
-| Retention | Treasury (idle income, capped at 8 h), a free chest every 4 h, milestone chests, a 7-day login cycle, 3 daily missions, red-dot indicators. |
+| Meta | Coins come from every wave cleared and every checkpoint. They buy permanent upgrades (tower damage and range, castle HP, War Chest +gold%, hero power; cost = `base × 1.35^level`), the Lightning unlock, heroes and cosmetics (castle skins and projectile trails, bought with coins or shards). You can open the Shop mid-siege from the HUD. |
+| Retention | Treasury (idle income, capped at 8 h, grows with your best wave), a free chest every 4 h, a milestone chest at each new checkpoint, a 7-day login cycle, 3 daily missions, red-dot indicators. |
 | Ads | `AdManager` plus a mock provider, 7 rewarded placements, interstitial rules, and a "Remove ads" flag. |
 | Analytics | `Analytics` interface with a console/local implementation, plus a hidden debug screen. |
 
 ### Controls
 * **Tap** a stone pad to build. Tap a card once to preview its range, then tap it again to build. Tap a tower to upgrade or sell it.
+* **Tap overgrown land** (bushes and rocks on a pad) to clear it for gold.
 * **Tap your hero**, then tap the ground to move them. The purple button triggers the hero's ability.
 * **Pinch or mouse wheel** zooms in. **Drag** pans while zoomed in.
-* **Start / Next** sends the next wave. Calling it early gives bonus gold. **1x/2x** changes game speed.
+* **Start / Resume** begins the siege, and after that waves follow automatically. **Next** calls a wave early for bonus gold. **1x/2x** changes game speed.
 * The game pauses automatically when the tab or app loses focus.
 
 ## Architecture
@@ -40,9 +45,11 @@ npm run sim        # headless balance simulator (see "Balancing")
 ```
 src/
   core/        Renderer, CameraRig (auto-framing), Input (tap/pinch/pan), Save (versioned), Emitter, Random
-  data/        ALL balance/config: towers, enemies, levels, economy, heroes, ads, missions, onboarding
-  game/        Run (pure simulation), LevelMap, WaveComposer, Levels, AutoPlayer (AI),
-               Battle (controller), BattleView (3D), Tutorial, Meta (economy/progression), Game (orchestrator)
+  data/        ALL balance/config: base (map, roads, land, siege scaling, unlocks), towers (tiers/materials),
+               enemies, themes (Ages), economy, heroes, ads, missions, onboarding
+  game/        Run (pure simulation + kingdom snapshot), Siege (waves, Ages, roads, checkpoints), LevelMap,
+               WaveComposer, AutoPlayer (AI), Battle (controller + saving), BattleView (3D), Tutorial,
+               Meta (coins/progression), Game (orchestrator)
   entities/    ModelBuilder + Models: every mesh, built from merged primitives with vertex colours
   systems/     Audio (Web Audio synth + sequencer), Effects (instanced particles, rings, lightning)
   ui/          DOM overlay: UI (screens/modals/toasts/float text), Hud, Screens (title, world map), Modals, Thumbnails
@@ -52,14 +59,14 @@ tools/sim.ts   headless balance simulator
 tests/         vitest unit tests
 ```
 
-**The core rule:** `game/Run.ts` is pure logic and imports no Three.js or DOM code. It owns enemies, towers, projectiles, the hero, waves and gold, and it emits typed events (`enemyDeath`, `towerFire`, `waveCleared`, and so on). Three things drive it:
-* `Battle` steps it at a fixed 60 Hz (1x or 2x), sends input to it, and turns its events into analytics, mission progress and UI.
+**The core rule:** `game/Run.ts` is pure logic and imports no Three.js or DOM code. It owns enemies, towers, projectiles, the hero, waves, gold and unlocked land. It emits typed events (`enemyDeath`, `waveCleared`, `checkpoint`, `ageChange`, `roadOpened`, `retreat`, and so on). It starts from a `BaseSnapshot`: the persisted kingdom, holding the wave, last checkpoint, gold, castle HP, towers, unlocked pads and the once-per-checkpoint ad flags. `snapshot()` produces the next one. Three things drive it:
+* `Battle` steps it at a fixed 60 Hz (1x or 2x), sends input to it, and turns its events into analytics, mission progress and UI. It also saves the kingdom: at the start of every wave (snapshotted with that wave, so resuming replays it), and whenever the field is quiet after building or upgrading.
 * `BattleView` reads its state every frame to draw it, and turns its events into effects: particles, screen shake, floating numbers, coin flights and sound.
-* `tools/sim.ts` runs the same `Run` with no rendering, played by `AutoPlayer`.
+* `tools/sim.ts` runs the same `Run` with no rendering, played by `AutoPlayer` for many hours of game time.
 
 So the balance simulator and the real game run exactly the same rules.
 
-**Rendering budget.** All enemies of one type share a single `InstancedMesh` (11 meshes in total). Health bars, blob shadows and shield bubbles are instanced too, and so are projectiles (3 meshes) and particles (1 mesh). The static board, all props and all pads are merged into a few meshes. A typical frame is about 60–80 draw calls. Objects are pooled: enemies, projectiles, particles, rings, lightning bolts, floating-text DOM nodes and coin sprites.
+**Rendering budget.** All enemies of one type share a single `InstancedMesh` (11 meshes in total). Waves are capped at 70 enemies (`maxEnemiesPerWave`): beyond that, counts shrink and each enemy gets proportionally more HP and gold, so very late waves stay phone-friendly. Tower models (40 material/branch/star variants per type) are built lazily and cached. Health bars, blob shadows and shield bubbles are instanced too, and so are projectiles (3 meshes) and particles (1 mesh). The static board, all props and all pads are merged into a few meshes. A typical frame is about 60–80 draw calls. Objects are pooled: enemies, projectiles, particles, rings, lightning bolts, floating-text DOM nodes and coin sprites.
 
 **Responsive layout.** `CameraRig.frame()` binary-searches the camera distance until the whole diorama fits inside the screen area the HUD leaves free. It then uses `setViewOffset` to centre the board in that area. The HUD reserves the bottom strip in portrait, and the side columns in landscape. Rotating the device re-frames the board immediately. CSS switches between `body.portrait` and `body.landscape` layouts. Safe-area insets come from `env(safe-area-inset-*)`, and touch targets are at least 44 px.
 
@@ -69,116 +76,82 @@ Every gameplay number lives in `src/data/`. The gameplay code has no magic numbe
 
 | File | What it controls |
 |---|---|
-| `data/towers.ts` | Cost, per-tier stats, upgrade cost chain (each step ≈1.6×), specialisation stats, sell refund |
-| `data/enemies.ts` | HP, speed, armour/magic resist, bounty, leak damage, wave-budget cost, `unlockLevel` and `minWave` gating, healer/shield/boss mechanics, boss HP per tier, `bountyHpExponent` |
-| `data/levels.ts` | Map layouts, chapter themes, per-chapter wave budgets (`budgetBase/PerWave/PerLevel`), `hpMult`, `startGoldBonus`, `WAVE_COMPOSER` knobs (boss budget, path-length scaling, multi-road gold bonus), `LEVEL_OVERRIDES` for per-level tuning, onboarding unlock levels, weekly modifiers |
-| `data/economy.ts` | Starting gold, wave-clear and early-call gold, star thresholds, the meta cost curve (`COST_GROWTH = 1.35`), upgrade definitions, level rewards (40–60 per win, 30% on loss, star bonus on first clear only), endless scaling and milestones, treasury, chests, daily login, ad rewards, cosmetics |
+| `data/base.ts` | Roads and the waves they open on, land (`totalSpots`, `initialSpots`, clearing cost curve), `SIEGE` (start gold, castle HP, wave gap, checkpoint/age/boss intervals, wave budget curve, HP curve, bounty exponent, gold scaling, Gold Rush), `SIEGE_COINS` (coins per wave/checkpoint), `UNLOCK_WAVE` (when towers and features unlock), `ENEMY_FIRST_WAVE`, `WAVE_COMPOSER` (groups, boss budget, enemy cap) |
+| `data/towers.ts` | Cost, tier-1 stats, per-tier growth, specialisation modifiers, `TIER_MATERIALS` (name and colours of each material), `UPGRADE_COST_GROWTH`, star levels (`MAX_LEVEL`, `STAR_DAMAGE`, `STAR_COST_GROWTH`), sell refund |
+| `data/enemies.ts` | HP, speed, armour/magic resist, bounty, leak damage, wave-budget cost, healer/shield/boss mechanics |
+| `data/themes.ts` | The four Ages: colours, props, music, enemy weights |
+| `data/economy.ts` | Permanent upgrades and their cost curve (`COST_GROWTH = 1.35`), Lightning/hero unlock prices, treasury, chests, daily login, ad rewards, cosmetics |
 | `data/heroes.ts` | Hero stats and abilities, the Reinforcements champion |
 | `data/ads.ts` | Rewarded placements, interstitial rules, mock ad duration |
 | `data/missions.ts` | Mission pool |
 
-**How waves are built.** Each wave has a point budget: `(budgetBase + budgetPerLevel·levelInChapter + budgetPerWave·wave) × pathLengthFactor`. That budget is spent on enemies whose `cost` and chapter weights decide the mix, in up to 3 groups spread across the roads. Enemy HP is `chapter.hpMult × (1 + 0.04·level) × (1 + 0.03·wave)`. Bounties scale with `hp^0.6`, so tougher enemies pay more, but gold per HP still falls. That falling gold-per-HP is what makes meta upgrades matter.
+**How waves are built.** Wave *n* has a point budget of `(budgetBase + budgetPerWave · n^budgetExp) × (1 + roadBudgetBonus · (openRoads − 1))`, ×1.5 on boss waves. It's spent on enemies by the current Age's weights and each enemy's first wave, in groups spread across the open roads. Waves are deterministic per index, so a replayed wave is the same wave.
+* **Enemy HP:** `(1 + 0.05n) × 1.022^n`.
+* **Bounties:** scale with `hp^0.35`, and battle gold tapers from ×1 (wave 1) to ×0.45 (wave 30+).
+* **Tier costs:** grow ×1.8 per tier while damage grows ×1.4.
+
+So gold per HP keeps falling and tiers keep getting pricier. Every wall is beaten by replaying earlier waves for gold (after a fall), buying permanent upgrades with coins, or Gold Rush.
 
 ## Balancing tool
 
-`npm run sim` plays every campaign level headlessly. `AutoPlayer` is a greedy AI: it builds on the pads that cover the most road, rotates through tower types, buys the cheapest upgrade, picks specialisations and uses the hero ability whenever it's ready. Each level is played over several seeds, with three meta profiles:
+`npm run sim` plays the kingdom headlessly. `AutoPlayer` is a greedy AI: it builds on the pads that cover the most open road, clears land when it runs out of pads, buys the cheapest upgrade, picks specialisations and uses the hero ability on cooldown.
 
-* **none**: no permanent upgrades.
-* **typ**: a typical player who doesn't watch ads. It estimates the coins earned before each level (win rewards, stars, about 30 coins per level from missions, treasury and daily rewards) and spends them greedily on the cheapest upgrade. It unlocks Lightning when it can afford it.
-* **high**: tower, castle, start-gold and hero upgrades all at level 8, with Lightning unlocked.
+Modes:
+* **Career (default).** One persistent kingdom over many hours of game time, played the way a player would. When the castle falls it regroups at the checkpoint with towers and gold kept. Coins from waves and checkpoints, plus about 60/hour from missions, daily rewards and treasury (no ads), go into permanent upgrades. It reports how long it takes to first reach each checkpoint and what the kingdom looks like then.
+* `--push`: single attempts from a fresh kingdom with all permanent upgrades at a fixed level.
+* `--waves`: the wave table (enemy mix, HP and gold multipliers).
 
-Options:
-* `--seeds N`: seeds per cell.
-* `--levels 16-30`: limit the range of levels.
-* `--profiles none,typ`: limit the profiles.
-* `--endless` / `--weekly`: simulate those modes instead.
-* `--debug 55 [--profile typ] [--seed 0]`: print a wave-by-wave trace of one level, including leaks per enemy type.
+Options: `--hours N`, `--seeds N`.
 
-The AI plays worse than a real player, so treat these numbers as a lower bound.
+Two career profiles are compared: a typical player who spends coins, and one who never buys permanent upgrades. The AI is greedy and doesn't move the hero, so a real player will be faster. Treat the times as an upper bound. They're in game time at 1x; at 2x speed they're roughly halved in real time.
 
-### Final balance report (6 seeds per cell; win % and average castle HP % remaining)
+### Balance report
 
 ```
-Level  Name                    Boss  Waves | none win  hp%  | typ  win  hp%  | high win  hp%  |
-----------------------------------------------------------------------------------------------------
-   1   Greenford Road                  8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   2   Willow Bend                     8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   3   Miller's Crossing               8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   4   Bramble Hollow                  8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   5   Ogre's Approach          B      9  |   100%   73%  |   100%   86%  |   100%  100%  |
-   6   Sunny Fields                    9  |   100%  100%  |   100%  100%  |   100%  100%  |
-   7   Old Oak Path                    9  |   100%   99%  |   100%  100%  |   100%  100%  |
-   8   Foxglove Lane                   9  |   100%  100%  |   100%  100%  |   100%  100%  |
-   9   Riverside                       9  |   100%  100%  |   100%  100%  |   100%  100%  |
-  10   Shepherd's Rest          B      9  |   100%   64%  |   100%   91%  |   100%  100%  |
-  11   Thistle Ridge                   9  |   100%   98%  |   100%  100%  |   100%  100%  |
-  12   Copperwood                     10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  13   Daisy Downs                    10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  14   Hilltop Watch                  10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  15   Warchief's End           B     10  |   100%   44%  |   100%   54%  |   100%   77%  |
-----------------------------------------------------------------------------------------------------
-  16   Dusty Trail                     9  |   100%  100%  |   100%  100%  |   100%  100%  |
-  17   Oasis Gate                      9  |   100%  100%  |   100%  100%  |   100%  100%  |
-  18   Mirage Fork                     9  |   100%   68%  |   100%   85%  |   100%  100%  |
-  19   Scorpion Pass                   9  |   100%   73%  |   100%   93%  |   100%  100%  |
-  20   Colossus Rising          B     10  |   100%   51%  |   100%   98%  |   100%  100%  |
-  21   Sandstone Steps                10  |   100%   74%  |   100%  100%  |   100%  100%  |
-  22   Twin Dunes                     10  |   100%   94%  |   100%  100%  |   100%  100%  |
-  23   Sunken Temple                  10  |   100%   98%  |   100%  100%  |   100%  100%  |
-  24   Caravan Road                   10  |   100%   58%  |   100%   94%  |   100%  100%  |
-  25   Shifting Sands           B     10  |    83%   18%  |   100%   92%  |   100%  100%  |
-  26   Vulture Rock                   10  |   100%   91%  |   100%  100%  |   100%  100%  |
-  27   Bone Canyon                    11  |     0%    0%  |   100%   51%  |   100%  100%  |
-  28   Pharaoh's Way                  11  |    83%   13%  |   100%   51%  |   100%  100%  |
-  29   Dune Sea                       11  |   100%   18%  |   100%   99%  |   100%  100%  |
-  30   Heart of the Storm       B     11  |    67%   11%  |   100%   55%  |   100%   74%  |
-----------------------------------------------------------------------------------------------------
-  31   Icicle Gate                    10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  32   Frozen Lake                    10  |   100%   83%  |   100%  100%  |   100%  100%  |
-  33   Pine Hollow                    10  |     0%    0%  |   100%   94%  |   100%  100%  |
-  34   Avalanche Run                  10  |    67%   47%  |   100%   94%  |   100%  100%  |
-  35   Yeti Tracks              B     11  |     0%    0%  |    83%   37%  |   100%   81%  |
-  36   Glacier Steps                  11  |   100%   93%  |   100%  100%  |   100%  100%  |
-  37   Snowdrift                      11  |   100%   75%  |   100%  100%  |   100%  100%  |
-  38   Crystal Caves                  11  |   100%   75%  |   100%  100%  |   100%  100%  |
-  39   Howling Ridge                  11  |     0%    0%  |   100%   46%  |   100%   94%  |
-  40   Frostbite Pass           B     11  |     0%    0%  |    83%   78%  |   100%   98%  |
-  41   Polar Keep                     11  |     0%    0%  |   100%   71%  |   100%   96%  |
-  42   Blizzard Crossing              12  |    17%   17%  |   100%  100%  |   100%  100%  |
-  43   Winter's Teeth                 12  |     0%    0%  |   100%   97%  |   100%  100%  |
-  44   The Long Night                 12  |     0%    0%  |    67%   34%  |   100%   91%  |
-  45   Yeti King                B     12  |     0%    0%  |   100%   45%  |   100%   95%  |
-----------------------------------------------------------------------------------------------------
-  46   Ashen Road                     10  |   100%   75%  |   100%  100%  |   100%  100%  |
-  47   Ember Fields                   10  |   100%   63%  |   100%   99%  |   100%  100%  |
-  48   Obsidian Fork                  10  |    83%   42%  |   100%   99%  |   100%   99%  |
-  49   Magma Falls                    10  |     0%    0%  |   100%   76%  |   100%   88%  |
-  50   Drake's Nest             B     11  |     0%    0%  |   100%   73%  |   100%   97%  |
-  51   Cinder Steps                   11  |    83%   37%  |   100%  100%  |   100%  100%  |
-  52   Smoke Hollow                   11  |    17%    6%  |   100%   92%  |   100%  100%  |
-  53   Brimstone Gate                 11  |     0%    0%  |   100%   89%  |   100%  100%  |
-  54   Lava Lake                      11  |     0%    0%  |    83%   39%  |   100%   82%  |
-  55   Scorched Spire           B     11  |     0%    0%  |    50%    6%  |   100%   44%  |
-  56   Molten Maze                    11  |     0%    0%  |   100%   80%  |   100%   94%  |
-  57   Fire Gardens                   12  |    67%    8%  |   100%   99%  |   100%  100%  |
-  58   Caldera Rim                    12  |     0%    0%  |   100%   67%  |   100%   82%  |
-  59   Crown of Flame                 12  |     0%    0%  |   100%   99%  |   100%  100%  |
-  60   The Magma Drake          B     12  |     0%    0%  |    67%   15%  |   100%   69%  |
-----------------------------------------------------------------------------------------------------
+== Typical player (spends coins on upgrades, no ads) ==
+Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
+  wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
+  wave  20   11m (1)               8m (0)                8 towers, avg Bronze (3.8), best Bronze; meta Lv 1
+  wave  30   23m (2)               28m (3)               11 towers, avg Silver (4.6), best Silver; meta Lv 1
+  wave  40   33m (3)               38m (4)               13 towers, avg Silver (5.2), best Gold; meta Lv 2
+  wave  50   40m (4)               51m (6)               14 towers, avg Gold (5.7), best Gold; meta Lv 2
+  wave  60   60m (9)               1.8h (17)             17 towers, avg Jade (6.8), best Jade; meta Lv 3
+  wave  70   2.1h (21)             2.8h (28)             21 towers, avg Obsidian (8.5), best Obsidian; meta Lv 4
+  wave  80   4.0h (57)             3.7h (39)             24 towers, avg Celestial (10.0), best Celestial; meta Lv 5
+  wave  90   4.3h (60)             4.1h (43)             24 towers, avg Celestial (10.3), best Celestial; meta Lv 5
+  wave 100   8.9h (105)            8.7h (108)            27 towers, avg Celestial (13.0), best Celestial; meta Lv 7
+  wave 110   9.9h (117)            14.8h (177)           28 towers, avg Celestial (13.5), best Celestial; meta Lv 7
+  wave 120   13.6h (181)           19.5h (273)           30 towers, avg Celestial (14.8), best Celestial; meta Lv 7
+  best wave after 20h: 122, 122 · castle falls: 322, 283
+== Never buys permanent upgrades ==
+Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
+  wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
+  wave  20   11m (1)               11m (1)               8 towers, avg Bronze (3.9), best Bronze; meta Lv 0
+  wave  30   29m (3)               44m (7)               13 towers, avg Silver (4.8), best Silver; meta Lv 0
+  wave  40   41m (4)               60m (9)               13 towers, avg Gold (5.8), best Gold; meta Lv 0
+  wave  50   53m (5)               1.4h (12)             16 towers, avg Gold (6.0), best Gold; meta Lv 0
+  wave  60   1.5h (15)             2.8h (26)             18 towers, avg Crystal (7.7), best Crystal; meta Lv 0
+  wave  70   2.4h (26)             4.3h (42)             21 towers, avg Obsidian (8.6), best Obsidian; meta Lv 0
+  wave  80   4.1h (82)             6.4h (71)             24 towers, avg Celestial (9.6), best Celestial; meta Lv 0
+  wave  90   8.2h (132)            9.8h (108)            26 towers, avg Celestial (12.0), best Celestial; meta Lv 0
+  wave 100   10.1h (155)           —                     27 towers, avg Celestial (12.7), best Celestial; meta Lv 0
+  wave 110   19.0h (263)           —                     30 towers, avg Celestial (15.4), best Celestial; meta Lv 0
+  best wave after 20h: 116, 94 · castle falls: 285, 264
 
-Overall win rate: none 64% · typ 97% · high 100%
-
-Endless Siege, waves reached (4 seeds): none 7–40 · typ 43–54 · high 46–68
-Weekly challenge (Ice & Iron): none 0/4 · typ 4/4 · high 4/4
+Single push from a fresh kingdom, no retreats (waves survived):
+  all permanent upgrades at Lv  0: waves 18, 18, 17  (avg 7m)
+  all permanent upgrades at Lv  5: waves 31, 40, 37  (avg 17m)
+  all permanent upgrades at Lv 10: waves 40, 54, 60  (avg 25m)
+  all permanent upgrades at Lv 15: waves 60, 69, 69  (avg 33m)
+  all permanent upgrades at Lv 20: waves 89, 69, 71  (avg 39m)
 ```
 
-How this lines up with the design goals:
-* **Early levels are easy wins.** Levels 1–14 are 100% for every profile.
-* **Each chapter ramps steadily.** HP remaining falls across each chapter. Each new chapter opens slightly easier, as a breather, before ramping again.
-* **Bosses are a clear spike.** Boss levels (5, 10, 15, …) always show a drop in HP remaining, and levels 35, 55 and 60 are the walls of the late game.
-* **No-upgrade players start to struggle mid-chapter 2.** From level 18 they start losing stars (castle HP mostly 50–75%). The first losses come at the level 25 boss. From level 27 on, they either lose or barely survive (castle HP at or below 20%). This is the point where the shop and the rewarded ads (revive, reinforcements, +50% start gold) start to matter.
-
-With typical upgrades and no early wave calls, a level lasts 3–4.5 minutes (level 1 is a shorter 2.5-minute tutorial).
+The numbers above are game time at 1x speed for a greedy AI. In short:
+* **The first ten minutes are smooth.** Wave 10 takes about 4 minutes, and there are 0–1 castle falls before wave 20.
+* **Steady progress to wave 50.** It takes about 45 minutes, with towers reaching Gold.
+* **Then the siege gets serious.** Celestial towers arrive around wave 80, after about 4 hours. Wave 100 takes about 9 hours, and wave 120 about 13–20 hours. It is still climbing after 20 hours.
+* **Permanent upgrades matter.** A player who never buys them is several hours behind by wave 100. A single push from a fresh kingdom reaches wave 18 with no upgrades and about wave 75 with every upgrade at level 20.
+* **Falls are part of the loop.** Late-game progress comes from replaying the last checkpoint segment for gold and coins. The fall counts are high because the AI keeps pushing into the wall; a person would also use Gold Rush, the hero and smarter placement.
 
 The full output is saved in `docs/balance-report.txt`.
 
@@ -191,22 +164,22 @@ The full output is saved in `docs/balance-report.txt`.
 * **Pause and mute.** It pauses the battle and mutes audio while an ad is showing, then restores both.
 * **Analytics.** It logs `ad_offer_shown`, `ad_offer_clicked`, `ad_result` and `interstitial_shown`.
 * **Interstitial rules.** It applies them through the pure function `evaluateInterstitial()`, which is covered by unit tests. The rules live in `data/ads.ts`:
-  * only after a **win**, every 3rd win;
-  * never before 5 levels are cleared, and never in the first 3 minutes of a session;
+  * only when a **checkpoint** is reached (the game's "win"), every 2nd checkpoint;
+  * never before your best wave is 30, and never in the first 3 minutes of a session;
   * skipped if a rewarded ad was watched in the last 3 minutes;
-  * never after a revive offer or a loss;
+  * never if the castle fell or a revive was offered since the previous checkpoint;
   * the `removeAds` flag (placeholder purchase in Shop → Free) turns interstitials off. Rewarded ads stay available.
 
 **Rewarded placements:**
 
 | Placement | Reward |
 |---|---|
-| `level_end_double` | Double the coins earned |
-| `revive` | Restore 50% castle HP and clear the gate. Once per level |
-| `reinforcements` | A Royal Champion fights for 30 s. Once per level |
+| `checkpoint_double` | Double the checkpoint coins |
+| `revive` | Restore 50% castle HP and clear the gate. Once per checkpoint segment (10 waves) |
+| `reinforcements` | A Royal Champion fights for 30 s. Once per checkpoint segment |
 | `treasury_double` | Double the idle coins |
 | `chest_skip` | Open the free chest now |
-| `prelevel_gold` | +50% starting gold |
+| `gold_rush` | Double gold from enemies for 3 waves. Once per checkpoint segment |
 | `shop_bundle` | +60 coins, 3 times per day |
 
 The mock provider shows a fullscreen overlay with a 5 s countdown and a close button. Closing a rewarded ad early counts as `skipped`. To test failures, go to **Settings → Developer → Mock ad result**, which can force Complete, Skip, Fail or Random. The same section has an "Ads unavailable" toggle.
@@ -251,20 +224,21 @@ The mock provider shows a fullscreen overlay with a 5 s countdown and a close bu
 
 To use a real backend (Firebase, GameAnalytics, Amplitude and so on), implement the same interface and swap it in at `Game.ts`.
 
-Events logged: `session_start`, `level_start`, `level_end` (result, stars, wave reached, duration, castle HP), `wave_complete`, `tower_built`, `tower_upgraded`, `hero_ability_used`, `ad_offer_shown`, `ad_offer_clicked`, `ad_result`, `interstitial_shown`, `coins_earned` (with source), `coins_spent` (with sink), `upgrade_purchased`, `mission_complete`, `daily_reward_claimed`.
+Events logged: `session_start`, `level_start` (entering the kingdom), `level_end` (a push ending at a `checkpoint` or a `retreat`, with wave reached, duration and castle HP), `wave_complete`, `tower_built`, `tower_upgraded`, `hero_ability_used`, `ad_offer_shown`, `ad_offer_clicked`, `ad_result`, `interstitial_shown`, `coins_earned` (with source), `coins_spent` (with sink), `upgrade_purchased`, `mission_complete`, `daily_reward_claimed`.
 
 **Hidden debug screen.** Tap the version label on the title screen 5 times, press `~`, or open **Settings → Analytics debug**. It shows:
 * ad views per placement (offered / clicked / completed / skipped / failed);
 * coins by source and by sink;
-* win rate by level;
+* checkpoint rate per 10-wave segment (pushes vs. checkpoints reached);
 * recent raw events.
 
-It also has testing cheats: +1000 coins, unlock all levels, fill the treasury, make a chest ready, advance a day, and "autoplay battle" (the simulator AI plays the current battle).
+It also has testing cheats: +1000 coins, +10 waves, +5000 gold, fill the treasury, make a chest ready, advance a day, and "autoplay battle" (the simulator AI plays the current battle).
 
 ## Save system
 
 `src/core/Save.ts` handles saving and loading.
-* **Versioning.** Saves are versioned (`SAVE_VERSION = 3`). `MIGRATIONS[n]` upgrades a version-n save to version n+1. To change the format, add a migration and bump the version.
+* **Versioning.** Saves are versioned (`SAVE_VERSION = 4`). `MIGRATIONS[n]` upgrades a version-n save to version n+1. To change the format, add a migration and bump the version. v3→v4 converts the old campaign saves: level records are dropped, players get 25 coins per level won, permanent upgrades are kept, and "start gold" becomes "War Chest".
+* **The kingdom.** It's stored as `base` (a `BaseSnapshot`). Progress is in `progress` (best wave, best checkpoint, falls).
 * **Missing fields.** After migration, any missing field is filled in from `defaultSave()`.
 * **Backups.** Each write keeps the previous good save under `tkd_save_backup`.
 * **Corrupt saves.** If the main save is corrupt, it's copied to `tkd_save_corrupt` and the backup is loaded. If the backup is also unusable, the game resets, and a toast tells the player what happened.
@@ -298,5 +272,8 @@ Notes:
 * **Flying enemies follow the road** at height instead of flying straight to the castle. This keeps placement readable and fair on small mobile screens. Only Archer, Frost, Lightning and some heroes can hit them.
 * **Heroes don't block enemies.** They deal and take contact damage, and the Knight's Taunt provides the crowd control. This keeps tap-to-move simple and the simulation deterministic.
 * **The UI is built in DOM/CSS** over the WebGL canvas, rather than in WebGL. Text stays crisp, accessibility is better, and it's easier to change. UI portraits of towers, enemies and heroes are rendered from the same procedural 3D models at boot (`ui/Thumbnails.ts`).
-* **Balance comes from the AI**, which is greedy and worse than a human player. Late-game bosses (levels 35, 55, 60) are deliberately hard for an AI with typical upgrades. They're meant to reward good play, upgrades and the optional ads. `LEVEL_OVERRIDES` in `data/levels.ts` exists for hand-tuning individual levels.
+* **Offline behaviour.** The siege pauses while you're away and resumes from the start of the wave you were on, so quitting mid-wave can't be used to re-farm gold. The Treasury keeps earning idle coins. I chose this over towers defending on their own while you're away: that is hard to make fair and easy to exploit.
+* **Falling isn't a reset.** Losing the castle only sends you back to the last checkpoint. Replaying those waves earns gold and coins, and that grind loop is what makes the siege "endless in theory". The difficulty curve outgrows any fixed set of towers, so permanent upgrades, star levels and land are what push the frontier further.
+* **The campaign was removed** (60 levels, world map, stars, weekly challenge and the separate endless mode) in favour of the single kingdom.
+* **Balance comes from the AI**, which is greedy and worse than a human player.
 * **Real purchases aren't implemented.** "Remove Ads" is a placeholder flag. Wire it to a real in-app purchase plugin (for example `@capacitor-community/in-app-purchases`) before shipping.

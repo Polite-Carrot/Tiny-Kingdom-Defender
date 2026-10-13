@@ -256,6 +256,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
             ${d.ads.removeAds ? `<button class="btn small gold disabled" disabled>Owned</button>` : `<button class="btn small gold" data-removeads>$2.99</button>`}</div>`;
       }
       m.innerHTML = `<div class="ribbon">Shop</div>${currencyBar(game)}
+        <div class="muted" style="text-align:center;margin:-4px 0 8px">Permanent upgrades paid with coins. They boost every tower, forever.</div>
         <div class="tabs">${(['towers', 'kingdom', 'cosmetics', 'free'] as const).map((t) => `<button class="tab ${t === current ? 'on' : ''}" data-tab="${t}">${{ towers: 'Towers', kingdom: 'Kingdom', cosmetics: 'Style', free: 'Free' }[t]}</button>`).join('')}</div>
         <div class="list">${body}</div>`;
       m.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.onclick = () => {
@@ -433,7 +434,7 @@ export function chest(game: Game): void {
           <div class="body"><div class="name">Free Chest</div><div class="desc">${ready ? 'Ready to open!' : `Opens in ${fmtTime(meta.freeChestRemaining())}`}<br/>Coins and cosmetic shards</div></div>
           <div class="slot"></div></div>
         <div class="list-item"><div class="thumb">${icon('chest').replace('class="ico ', 'class="ico " style="width:44px;height:44px;filter:hue-rotate(200deg)"')}</div>
-          <div class="body"><div class="name">Milestone Chests</div><div class="desc">Earned every 5 levels cleared. You have ${pending}.</div></div>
+          <div class="body"><div class="name">Milestone Chests</div><div class="desc">Earned the first time you reach each checkpoint. You have ${pending}.</div></div>
           ${pending > 0 ? `<button class="btn small gold ms">Open</button>` : `<button class="btn small disabled" disabled>0</button>`}</div>
       </div>`;
     const slot = $(m, '.slot');
@@ -477,7 +478,7 @@ export function treasury(game: Game): void {
     m.innerHTML = `<div class="ribbon">Royal Treasury</div>
       <div style="text-align:center">${icon('castle').replace('class="ico ', 'class="ico " style="width:80px;height:80px;display:inline-block"')}</div>
       <div class="reward-row">${icon('coin')}${amt}</div>
-      <div class="muted" style="text-align:center">Your kingdom earns ${meta.treasuryRate().toFixed(1)} coins/hour while you're away (up to ${TREASURY.capHours}h). Clear more levels to raise it.</div>
+      <div class="muted" style="text-align:center">Your kingdom earns ${meta.treasuryRate().toFixed(1)} coins/hour while you're away (up to ${TREASURY.capHours}h). Reach further waves to raise it.</div>
       <div class="progress" style="margin:10px 0"><div style="width:${(hours / TREASURY.capHours) * 100}%"></div></div>
       <div class="stack slot"></div>
       <div class="actions"><button class="btn collect ${amt < 1 ? 'disabled' : ''}">Collect</button></div>`;

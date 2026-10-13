@@ -1,82 +1,72 @@
 
-Tiny Kingdom Defender — balance simulation (6 seeds per cell)
+> tiny-kingdom-defender@1.0.0 sim
+> tsx tools/sim.ts --hours 20 --seeds 2
 
-Level  Name                    Boss  Waves | none win  hp%  | typ  win  hp%  | high win  hp%  |
-----------------------------------------------------------------------------------------------------
-   1   Greenford Road                  8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   2   Willow Bend                     8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   3   Miller's Crossing               8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   4   Bramble Hollow                  8  |   100%  100%  |   100%  100%  |   100%  100%  |
-   5   Ogre's Approach          B      9  |   100%   73%  |   100%   86%  |   100%  100%  |
-   6   Sunny Fields                    9  |   100%  100%  |   100%  100%  |   100%  100%  |
-   7   Old Oak Path                    9  |   100%   99%  |   100%  100%  |   100%  100%  |
-   8   Foxglove Lane                   9  |   100%  100%  |   100%  100%  |   100%  100%  |
-   9   Riverside                       9  |   100%  100%  |   100%  100%  |   100%  100%  |
-  10   Shepherd's Rest          B      9  |   100%   64%  |   100%   91%  |   100%  100%  |
-  11   Thistle Ridge                   9  |   100%   98%  |   100%  100%  |   100%  100%  |
-  12   Copperwood                     10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  13   Daisy Downs                    10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  14   Hilltop Watch                  10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  15   Warchief's End           B     10  |   100%   44%  |   100%   54%  |   100%   77%  |
-----------------------------------------------------------------------------------------------------
-  16   Dusty Trail                     9  |   100%  100%  |   100%  100%  |   100%  100%  |
-  17   Oasis Gate                      9  |   100%  100%  |   100%  100%  |   100%  100%  |
-  18   Mirage Fork                     9  |   100%   68%  |   100%   85%  |   100%  100%  |
-  19   Scorpion Pass                   9  |   100%   73%  |   100%   93%  |   100%  100%  |
-  20   Colossus Rising          B     10  |   100%   51%  |   100%   98%  |   100%  100%  |
-  21   Sandstone Steps                10  |   100%   74%  |   100%  100%  |   100%  100%  |
-  22   Twin Dunes                     10  |   100%   94%  |   100%  100%  |   100%  100%  |
-  23   Sunken Temple                  10  |   100%   98%  |   100%  100%  |   100%  100%  |
-  24   Caravan Road                   10  |   100%   58%  |   100%   94%  |   100%  100%  |
-  25   Shifting Sands           B     10  |    83%   18%  |   100%   92%  |   100%  100%  |
-  26   Vulture Rock                   10  |   100%   91%  |   100%  100%  |   100%  100%  |
-  27   Bone Canyon                    11  |     0%    0%  |   100%   51%  |   100%  100%  |
-  28   Pharaoh's Way                  11  |    83%   13%  |   100%   51%  |   100%  100%  |
-  29   Dune Sea                       11  |   100%   18%  |   100%   99%  |   100%  100%  |
-  30   Heart of the Storm       B     11  |    67%   11%  |   100%   55%  |   100%   74%  |
-----------------------------------------------------------------------------------------------------
-  31   Icicle Gate                    10  |   100%  100%  |   100%  100%  |   100%  100%  |
-  32   Frozen Lake                    10  |   100%   83%  |   100%  100%  |   100%  100%  |
-  33   Pine Hollow                    10  |     0%    0%  |   100%   94%  |   100%  100%  |
-  34   Avalanche Run                  10  |    67%   47%  |   100%   94%  |   100%  100%  |
-  35   Yeti Tracks              B     11  |     0%    0%  |    83%   37%  |   100%   81%  |
-  36   Glacier Steps                  11  |   100%   93%  |   100%  100%  |   100%  100%  |
-  37   Snowdrift                      11  |   100%   75%  |   100%  100%  |   100%  100%  |
-  38   Crystal Caves                  11  |   100%   75%  |   100%  100%  |   100%  100%  |
-  39   Howling Ridge                  11  |     0%    0%  |   100%   46%  |   100%   94%  |
-  40   Frostbite Pass           B     11  |     0%    0%  |    83%   78%  |   100%   98%  |
-  41   Polar Keep                     11  |     0%    0%  |   100%   71%  |   100%   96%  |
-  42   Blizzard Crossing              12  |    17%   17%  |   100%  100%  |   100%  100%  |
-  43   Winter's Teeth                 12  |     0%    0%  |   100%   97%  |   100%  100%  |
-  44   The Long Night                 12  |     0%    0%  |    67%   34%  |   100%   91%  |
-  45   Yeti King                B     12  |     0%    0%  |   100%   45%  |   100%   95%  |
-----------------------------------------------------------------------------------------------------
-  46   Ashen Road                     10  |   100%   75%  |   100%  100%  |   100%  100%  |
-  47   Ember Fields                   10  |   100%   63%  |   100%   99%  |   100%  100%  |
-  48   Obsidian Fork                  10  |    83%   42%  |   100%   99%  |   100%   99%  |
-  49   Magma Falls                    10  |     0%    0%  |   100%   76%  |   100%   88%  |
-  50   Drake's Nest             B     11  |     0%    0%  |   100%   73%  |   100%   97%  |
-  51   Cinder Steps                   11  |    83%   37%  |   100%  100%  |   100%  100%  |
-  52   Smoke Hollow                   11  |    17%    6%  |   100%   92%  |   100%  100%  |
-  53   Brimstone Gate                 11  |     0%    0%  |   100%   89%  |   100%  100%  |
-  54   Lava Lake                      11  |     0%    0%  |    83%   39%  |   100%   82%  |
-  55   Scorched Spire           B     11  |     0%    0%  |    50%    6%  |   100%   44%  |
-  56   Molten Maze                    11  |     0%    0%  |   100%   80%  |   100%   94%  |
-  57   Fire Gardens                   12  |    67%    8%  |   100%   99%  |   100%  100%  |
-  58   Caldera Rim                    12  |     0%    0%  |   100%   67%  |   100%   82%  |
-  59   Crown of Flame                 12  |     0%    0%  |   100%   99%  |   100%  100%  |
-  60   The Magma Drake          B     12  |     0%    0%  |    67%   15%  |   100%   69%  |
-----------------------------------------------------------------------------------------------------
+Tiny Kingdom Defender — career simulation (20h of play at 1x per kingdom, 2 seeds)
 
-Overall win rate: none 64% · typ 97% · high 100%
-Done in 42.3s
+== Typical player (spends coins on upgrades, no ads) ==
+Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
+  wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
+  wave  20   11m (1)               8m (0)                8 towers, avg Bronze (3.8), best Bronze; meta Lv 1
+  wave  30   23m (2)               28m (3)               11 towers, avg Silver (4.6), best Silver; meta Lv 1
+  wave  40   33m (3)               38m (4)               13 towers, avg Silver (5.2), best Gold; meta Lv 2
+  wave  50   40m (4)               51m (6)               14 towers, avg Gold (5.7), best Gold; meta Lv 2
+  wave  60   60m (9)               1.8h (17)             17 towers, avg Jade (6.8), best Jade; meta Lv 3
+  wave  70   2.1h (21)             2.8h (28)             21 towers, avg Obsidian (8.5), best Obsidian; meta Lv 4
+  wave  80   4.0h (57)             3.7h (39)             24 towers, avg Celestial (10.0), best Celestial; meta Lv 5
+  wave  90   4.3h (60)             4.1h (43)             24 towers, avg Celestial (10.3), best Celestial; meta Lv 5
+  wave 100   8.9h (105)            8.7h (108)            27 towers, avg Celestial (13.0), best Celestial; meta Lv 7
+  wave 110   9.9h (117)            14.8h (177)           28 towers, avg Celestial (13.5), best Celestial; meta Lv 7
+  wave 120   13.6h (181)           19.5h (273)           30 towers, avg Celestial (14.8), best Celestial; meta Lv 7
+  best wave after 20h: 122, 122 · castle falls: 322, 283
 
-Endless Siege (waves reached, 4 seeds):
-Endless [none] waves reached: 7, 7, 40, 7
-Endless [typ] waves reached: 46, 54, 46, 43
-Endless [high] waves reached: 46, 68, 68, 68
+== Never buys permanent upgrades ==
+Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
+  wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
+  wave  20   11m (1)               11m (1)               8 towers, avg Bronze (3.9), best Bronze; meta Lv 0
+  wave  30   29m (3)               44m (7)               13 towers, avg Silver (4.8), best Silver; meta Lv 0
+  wave  40   41m (4)               60m (9)               13 towers, avg Gold (5.8), best Gold; meta Lv 0
+  wave  50   53m (5)               1.4h (12)             16 towers, avg Gold (6.0), best Gold; meta Lv 0
+  wave  60   1.5h (15)             2.8h (26)             18 towers, avg Crystal (7.7), best Crystal; meta Lv 0
+  wave  70   2.4h (26)             4.3h (42)             21 towers, avg Obsidian (8.6), best Obsidian; meta Lv 0
+  wave  80   4.1h (82)             6.4h (71)             24 towers, avg Celestial (9.6), best Celestial; meta Lv 0
+  wave  90   8.2h (132)            9.8h (108)            26 towers, avg Celestial (12.0), best Celestial; meta Lv 0
+  wave 100   10.1h (155)           —                     27 towers, avg Celestial (12.7), best Celestial; meta Lv 0
+  wave 110   19.0h (263)           —                     30 towers, avg Celestial (15.4), best Celestial; meta Lv 0
+  best wave after 20h: 116, 94 · castle falls: 285, 264
 
-Weekly challenge (2026-10-13):
-Weekly Weekly: Ice & Iron [none] win 0/4
-Weekly Weekly: Ice & Iron [typ] win 4/4
-Weekly Weekly: Ice & Iron [high] win 4/4
+Times are game time at 1x speed (2x halves them). Wave gap 12s.
+Done in 391.5s
+
+> tiny-kingdom-defender@1.0.0 sim
+> tsx tools/sim.ts --push --seeds 3
+
+Single push from a fresh kingdom, no retreats (waves survived):
+  all permanent upgrades at Lv  0: waves 18, 18, 17  (avg 7m)
+  all permanent upgrades at Lv  5: waves 31, 40, 37  (avg 17m)
+  all permanent upgrades at Lv 10: waves 40, 54, 60  (avg 25m)
+  all permanent upgrades at Lv 15: waves 60, 69, 69  (avg 33m)
+  all permanent upgrades at Lv 20: waves 89, 69, 71  (avg 39m)
+Done in 7.4s
+
+> tiny-kingdom-defender@1.0.0 sim
+> tsx tools/sim.ts --waves
+
+Wave  Age                   HP×    Gold×  Enemies
+   1  Age of Meadows         1.00   1.00  6×grunt
+   2  Age of Meadows         1.07   1.03  8×grunt
+   3  Age of Meadows         1.15   1.05  9×runner
+   5  Age of Meadows         1.31   1.10  7×grunt, 7×runner
+  10  Age of Meadows         1.76   1.22  1×boss_ogre, 8×runner, 3×knight
+  15  Age of Meadows         2.31   1.34  17×grunt, 9×runner, 4×knight
+  20  Age of Meadows         2.95   1.46  1×boss_scorpion, 16×grunt, 18×runner
+  25  Age of Meadows         3.71   1.58  9×shaman, 43×grunt
+  30  Age of Sands           4.61   1.71  1×boss_yeti, 6×shaman, 25×bat, 17×runner
+  40  Age of Sands           6.89   1.97  1×boss_dragon, 43×grunt, 20×knight
+  50  Age of Sands          10.02   3.49  1×boss_ogre, 32×grunt, 19×bat, 19×runner
+  60  Age of Frost          14.26   3.84  1×boss_scorpion, 13×bat, 13×knight, 34×grunt, 10×shield
+  75  Age of Frost          23.52  11.91  29×grunt, 5×shield, 15×bat, 21×runner
+ 100  Age of Fire           51.30  11.17  1×boss_scorpion, 11×shaman, 44×grunt, 15×knight
+ 125  Age of Meadows II     106.97  38.49  25×bat, 29×grunt, 16×runner
+ 150  Age of Sands II       216.29  37.33  1×boss_yeti, 12×bat, 33×grunt, 7×shaman, 17×runner
+ 200  Age of Fire II        832.04  79.81  1×boss_dragon, 9×shield, 61×grunt
