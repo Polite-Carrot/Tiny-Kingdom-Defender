@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "sim": "tsx tools/sim.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pages": "tsc --noEmit && node tools/build-pages.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

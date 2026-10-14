@@ -10,13 +10,16 @@ There are no external assets. Every model is low-poly geometry built in code, an
 npm install
 npm run dev        # play at http://localhost:5173
 npm run build      # typecheck + static build in dist/
+npm run pages      # rebuild the self-contained index.html that GitHub Pages serves
 npm run preview    # serve the production build
 npm test           # unit tests (save migrations, ad rules, economy, towers, siege)
 npm run sim        # headless balance simulator (see "Balancing")
 ```
 
 ### Play it on GitHub Pages
-The repo includes `.github/workflows/deploy-pages.yml`, which tests, builds and publishes the game on every push to `main`. Turn it on once: **Settings → Pages → Build and deployment → Source: GitHub Actions**. The game is then at `https://<user>.github.io/Tiny-Kingdom-Defender/`. (Pointing Pages at the branch itself won't work: `index.html` loads TypeScript source, which only runs after `npm run build`.)
+`index.html` at the repo root is the whole game built into one self-contained file, so GitHub Pages can serve it straight from `main` (**Settings → Pages → Deploy from a branch → main / (root)**). The game is at `https://<user>.github.io/Tiny-Kingdom-Defender/`.
+
+The editable source page is `game.html` (`npm run dev` opens it). After changing the code, run `npm run pages` to rebuild `index.html`, then commit it.
 
 ## What's in the game
 
@@ -265,7 +268,7 @@ npx cap open ios        # or: npx cap open android
 
 Notes:
 * **Asset paths.** `vite.config.ts` uses `base: './'`, so asset paths work from the `file://` / `capacitor://` origin.
-* **Safe areas.** `index.html` sets `viewport-fit=cover`, and the CSS uses `env(safe-area-inset-*)`, so notches are already handled.
+* **Safe areas.** `game.html` sets `viewport-fit=cover`, and the CSS uses `env(safe-area-inset-*)`, so notches are already handled.
 * **Pausing.** The game already pauses on `visibilitychange` and `blur`. For extra safety on native, you can also listen to `App.addListener('appStateChange', ...)` and call `tkd.openPause()`.
 * **Orientation.** Both orientations are supported. Leave rotation unlocked in Xcode / AndroidManifest, or lock it if you prefer.
 * **Storage.** `localStorage` persists inside the WebView. To get cloud backup, you can mirror the save JSON into `@capacitor/preferences`.
