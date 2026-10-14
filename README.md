@@ -15,6 +15,9 @@ npm test           # unit tests (save migrations, ad rules, economy, towers, sie
 npm run sim        # headless balance simulator (see "Balancing")
 ```
 
+### Play it on GitHub Pages
+The repo includes `.github/workflows/deploy-pages.yml`, which tests, builds and publishes the game on every push to `main`. Turn it on once: **Settings → Pages → Build and deployment → Source: GitHub Actions**. The game is then at `https://<user>.github.io/Tiny-Kingdom-Defender/`. (Pointing Pages at the branch itself won't work: `index.html` loads TypeScript source, which only runs after `npm run build`.)
+
 ## What's in the game
 
 | Area | Contents |
