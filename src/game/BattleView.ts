@@ -6,6 +6,7 @@ import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
 import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
 import { Particles, Rings, Bolts } from '../systems/Effects';
+import { Scenery } from '../systems/Scenery';
 import type { AudioSystem } from '../systems/Audio';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { GRID_SIZE, ROADS } from '../data/base';
@@ -81,6 +82,7 @@ export class BattleView {
   private board = new THREE.Group();
   private boardDisposables: { dispose(): void }[] = [];
   private overgrowth: THREE.Mesh | null = null;
+  private scenery: Scenery | null = null;
   private castleColor: string;
   private roadCells: Map<number, number>;
   private padColor = new THREE.Color();
@@ -153,6 +155,7 @@ export class BattleView {
 
   private buildBoard(): void {
     for (const d of this.boardDisposables) d.dispose();
+    this.scenery?.dispose();
     this.boardDisposables = [];
     this.board.clear();
     this.overgrowth = null;
@@ -162,9 +165,10 @@ export class BattleView {
     const wave = this.run.waveIndex;
     const b = new ModelBuilder();
     const half = GRID_SIZE / 2 + 1;
-    // Diorama body.
-    b.box(half * 2, 1.0, half * 2, t.cliff, { y: -0.62 });
-    b.box(half * 2 - 0.5, 0.8, half * 2 - 0.5, t.cliffDark, { y: -1.4 });
+    // Diorama body: a raised plateau with layered rock strata.
+    b.box(half * 2, 0.55, half * 2, t.cliff, { y: -0.4 });
+    b.box(half * 2 - 0.12, 0.5, half * 2 - 0.12, new THREE.Color(t.cliff).lerp(new THREE.Color(t.cliffDark), 0.5), { y: -0.92 });
+    b.box(half * 2 - 0.3, 0.8, half * 2 - 0.3, t.cliffDark, { y: -1.5 });
     const rnd = (i: number) => ((Math.sin(i * 91.7) * 43758.5453) % 1 + 1) % 1;
     const grass = new THREE.Color(t.grass);
     const grassAlt = new THREE.Color(t.grassAlt);
@@ -177,19 +181,52 @@ export class BattleView {
         const inside = c >= 0 && r >= 0 && c < GRID_SIZE && r < GRID_SIZE;
         const road = this.roadCells.get((r + 1) * 64 + (c + 1));
         const i = (r + 2) * 37 + c;
+        const isOpenRoad = (cc: number, rr: number) => {
+          const rd = this.roadCells.get((rr + 1) * 64 + (cc + 1));
+          return rd !== undefined && ROADS[rd].openWave <= wave;
+        };
         if (road !== undefined && ROADS[road].openWave <= wave) {
-          b.box(1, 0.12, 1, t.path, { x, y: -0.1, z });
-          if (rnd(i) > 0.6) b.box(0.12, 0.04, 0.1, t.pathEdge, { x: x + (rnd(i + 3) - 0.5) * 0.7, y: -0.03, z: z + (rnd(i + 5) - 0.5) * 0.7, ry: rnd(i) * 3 });
+          tmp.copy(pathCol).multiplyScalar(0.96 + rnd(i) * 0.08);
+          b.box(1, 0.12, 1, tmp.getStyle(), { x, y: -0.1, z });
+          if (rnd(i) > 0.6) b.box(0.12, 0.04, 0.1, t.pathEdge, { x: x + (rnd(i + 3) - 0.5) * 0.6, y: -0.03, z: z + (rnd(i + 5) - 0.5) * 0.6, ry: rnd(i) * 3 });
+          // Kerb stones where the road meets grass.
+          for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (isOpenRoad(c + dc, r + dr) || c + dc < -1 || r + dr < -1 || c + dc > GRID_SIZE || r + dr > GRID_SIZE) continue;
+            for (let k = 0; k < 3; k++) {
+              const along = (k - 1) * 0.32 + (rnd(i + k * 7 + dc * 3 + dr * 5) - 0.5) * 0.08;
+              const sx = dc !== 0 ? dc * 0.46 : along;
+              const sz = dr !== 0 ? dr * 0.46 : along;
+              b.dodec(0.075 + rnd(i + k) * 0.03, t.pathEdge, { x: x + sx, y: -0.02, z: z + sz, sy: 0.55, ry: rnd(i + k * 3) * 3 });
+            }
+          }
         } else if (road !== undefined) {
           // A road that hasn't opened yet: an overgrown trail you can plan around.
           tmp.copy(grass).lerp(pathCol, 0.35).multiplyScalar(0.95 + rnd(i) * 0.06);
           b.box(1, 0.16, 1, tmp.getStyle(), { x, y: -0.1, z });
           if (rnd(i + 7) > 0.55) b.dodec(0.12, '#8a8378', { x: x + (rnd(i + 2) - 0.5) * 0.6, y: 0.0, z: z + (rnd(i + 4) - 0.5) * 0.6, sy: 0.6 });
         } else {
-          tmp.copy((c + r) % 2 === 0 ? grass : grassAlt).multiplyScalar(0.96 + rnd(i) * 0.08);
-          if (!inside) tmp.multiplyScalar(0.9);
-          const h = 0.2 + rnd(i + 11) * 0.03;
+          // Soft, noisy grass instead of a hard checkerboard.
+          const n = (Math.sin(c * 0.9 + r * 0.4) + Math.cos(r * 0.8 - c * 0.3)) * 0.25 + 0.5;
+          tmp.copy(grass).lerp(grassAlt, n * 0.8 + rnd(i) * 0.2).multiplyScalar(0.97 + rnd(i + 1) * 0.06);
+          if (!inside) tmp.multiplyScalar(0.92);
+          const h = 0.2 + rnd(i + 11) * 0.025;
           b.box(1, h, 1, tmp.getStyle(), { x, y: -0.12 + h / 2 - 0.04, z });
+          // Grass tufts, flowers or pebbles depending on the Age.
+          const tuftCol = new THREE.Color(t.grassAlt).multiplyScalar(t.id === 'snow' ? 0.93 : 0.82);
+          const tufts = rnd(i + 21) > 0.35 ? 1 + Math.floor(rnd(i + 22) * 3) : 0;
+          for (let k = 0; k < tufts; k++) {
+            const tx = x + (rnd(i + 30 + k) - 0.5) * 0.8;
+            const tz = z + (rnd(i + 40 + k) - 0.5) * 0.8;
+            const ty = -0.12 + h - 0.04;
+            if (t.id === 'meadow' && rnd(i + 50 + k) > 0.8) {
+              b.ball(0.035, 0, ['#ffffff', '#ffe066', '#ff9fc0', '#b7a6ff'][Math.floor(rnd(i + 60 + k) * 4)], { x: tx, y: ty + 0.05, z: tz });
+            } else if (t.id === 'meadow' || t.id === 'snow') {
+              b.cone(0.05, 0.12, 3, tuftCol, { x: tx, y: ty + 0.05, z: tz, ry: rnd(i + k) * 3 });
+              b.cone(0.04, 0.09, 3, tuftCol, { x: tx + 0.05, y: ty + 0.04, z: tz + 0.03, ry: rnd(i + k + 1) * 3, rz: 0.3 });
+            } else {
+              b.dodec(0.04 + rnd(i + 70 + k) * 0.03, t.id === 'volcano' && rnd(i + 80 + k) > 0.7 ? new THREE.Color('#ff7a2a').multiplyScalar(1.5) : t.pathEdge, { x: tx, y: ty + 0.01, z: tz, sy: 0.6 });
+            }
+          }
         }
       }
     }
@@ -197,12 +234,11 @@ export class BattleView {
     board.receiveShadow = true;
     this.board.add(board);
 
-    // Sea / sand / ice / lava around the diorama.
-    const planeMat = this.boardTrack(t.groundGlow ? new THREE.MeshBasicMaterial({ color: t.ground }) : new THREE.MeshLambertMaterial({ color: t.ground }));
-    const plane = new THREE.Mesh(this.boardTrack(new THREE.PlaneGeometry(160, 160)), planeMat);
-    plane.rotation.x = -Math.PI / 2;
-    plane.position.y = -1.3;
-    this.board.add(plane);
+    // The world around the board: island, sea, mountains, sky, clouds, particles.
+    this.scenery?.dispose();
+    if (this.scenery) this.root.remove(this.scenery.group);
+    this.scenery = new Scenery(t, this.renderer.quality === 'high');
+    this.root.add(this.scenery.group);
 
     // Props merged into one draw call; the Age decides which prop each slot shows.
     const pick = (v: number) => t.props[Math.min(t.props.length - 1, Math.floor(v * t.props.length))];
@@ -796,6 +832,7 @@ export class BattleView {
     // Spot marker pulse.
     if (this.spotMarker.visible) this.spotMarker.scale.setScalar(1 + Math.sin(this.time * 6) * 0.08);
 
+    this.scenery?.update(dt);
     this.particles.update(dt);
     this.rings.update(dt);
     this.bolts.update(dt);
@@ -892,6 +929,7 @@ export class BattleView {
     this.renderer.scene.remove(this.root);
     for (const d of this.disposables) d.dispose();
     for (const d of this.boardDisposables) d.dispose();
+    this.scenery?.dispose();
     this.overgrowth?.geometry.dispose();
     for (const m of this.enemyMeshes.values()) m.dispose();
     this.particles.dispose();

@@ -29,7 +29,7 @@ export class Renderer {
     this.sun.target.position.set(0, 0, 0);
     const sc = this.sun.shadow.camera;
     sc.left = -9; sc.right = 9; sc.top = 9; sc.bottom = -9; sc.near = 1; sc.far = 40;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0008;
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun, this.sun.target);

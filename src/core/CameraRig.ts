@@ -80,9 +80,14 @@ export class CameraRig {
     this.clampPan();
   }
 
-  private place(dist: number, px: number, pz: number, extraY: number): void {
+  /** Menu mode: slowly circle the kingdom. */
+  orbit = false;
+  private yaw = 0;
+
+  private place(dist: number, px: number, pz: number, extraY: number, yaw = 0, pitch = PITCH): void {
     const cam = this.camera;
-    cam.position.set(px, Math.sin(PITCH) * dist + extraY, pz + Math.cos(PITCH) * dist);
+    const h = Math.cos(pitch) * dist;
+    cam.position.set(px + Math.sin(yaw) * h, Math.sin(pitch) * dist + extraY, pz + Math.cos(yaw) * h);
     cam.lookAt(px, extraY, pz);
   }
 
@@ -133,7 +138,15 @@ export class CameraRig {
     const s = this.shakeAmt * this.shakeAmt * 2;
     const sx = Math.sin(this.shakeT * 53) * s;
     const sz = Math.cos(this.shakeT * 47) * s;
-    this.place(this.baseDist / this.zoom, this.pan.x + sx, this.pan.y + sz, 0);
+    if (this.orbit) {
+      this.yaw += dt * 0.07;
+    } else {
+      // Ease back to the standard view.
+      const target = Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
+      this.yaw += (target - this.yaw) * Math.min(1, dt * 4);
+    }
+    const pitch = this.orbit ? PITCH - 0.42 : PITCH;
+    this.place(this.baseDist / this.zoom * (this.orbit ? 1.12 : 1), this.pan.x + sx, this.pan.y + sz, 0, this.yaw, pitch);
     this.camera.updateMatrixWorld();
   }
 }

@@ -113,8 +113,8 @@ export class Game {
     void ads.init();
     this.onResize();
     // First launch goes straight into founding the kingdom, with guided hints.
-    if (!save.data.base) this.enterKingdom();
-    else this.goTitle();
+    // Always open on the main menu; Play / Begin takes you into the kingdom.
+    this.goTitle();
     requestAnimationFrame(this.frame);
   }
 
@@ -167,9 +167,9 @@ export class Game {
     }
     rig.frame(w, h, safe);
     const fog = renderer.scene.fog as import('three').Fog;
-    fog.near = rig.distance * 1.4;
-    fog.far = rig.distance * 3.2;
-    renderer.camera.far = rig.distance * 4;
+    fog.near = rig.distance * 1.15;
+    fog.far = rig.distance + 120;
+    renderer.camera.far = Math.max(rig.distance * 4, 600);
     renderer.camera.updateProjectionMatrix();
   }
 
@@ -193,6 +193,7 @@ export class Game {
     this.title.render();
     this.s.ui.show('title');
     this.input.enabled = false;
+    this.s.rig.orbit = true;
     this.music('menu');
     this.title.onEnter();
   }
@@ -228,6 +229,7 @@ export class Game {
     this.onResize();
     this.s.ui.show('battle');
     this.input.enabled = true;
+    this.s.rig.orbit = false;
     this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
   }
 
