@@ -21,11 +21,11 @@ export const ROADS: Road[] = [
     points: [[-1, 1], [5, 1], [5, 4], [1, 4], [1, 12], [5, 12], [5, 7], [7, 7]],
   },
   {
-    name: 'North-East Road', openWave: 25,
+    name: 'North-East Road', openWave: 20,
     points: [[12, -1], [12, 2], [8, 2], [8, 5], [12, 5], [12, 7], [7, 7]],
   },
   {
-    name: 'South Road', openWave: 50,
+    name: 'South Road', openWave: 40,
     points: [[9, 15], [9, 13], [13, 13], [13, 9], [7, 9], [7, 7]],
   },
 ];
@@ -48,8 +48,8 @@ export const SIEGE = {
   waveGap: 12,
   /** Losing sends you back to the last multiple of this (towers and gold are kept). */
   checkpointEvery: 10,
-  /** A new Age (theme, music, enemy mix) every N waves. */
-  ageEvery: 25,
+  /** A new Age (theme, music, enemy mix) every N waves. A multiple of checkpointEvery, so every Age starts on a checkpoint and a fall never drops you back an Age. */
+  ageEvery: 20,
   bossEvery: 10,
   /** Wave budget: (base + perWave × n^exp) × (1 + roadBonus × (openRoads - 1)). */
   budgetBase: 6,
@@ -92,7 +92,7 @@ export const SIEGE_COINS = {
 };
 
 /** Best wave reached (0-based count of waves cleared) needed to unlock things. */
-export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning', number> = {
+export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist', number> = {
   cannon: 2,
   frost: 5,
   dailyLogin: 1,
@@ -102,6 +102,11 @@ export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dai
   chests: 6,
   heroes: 12,
   lightning: 15, // also needs a coin purchase in the Shop
+  mage: 8,
+  ballista: 12,
+  // Each new Age brings a new tower.
+  flame: 20,
+  alchemist: 40,
 };
 
 export const TOWER_UNLOCK_WAVE: Record<TowerId, number> = {
@@ -109,6 +114,10 @@ export const TOWER_UNLOCK_WAVE: Record<TowerId, number> = {
   cannon: UNLOCK_WAVE.cannon,
   frost: UNLOCK_WAVE.frost,
   lightning: UNLOCK_WAVE.lightning,
+  mage: UNLOCK_WAVE.mage,
+  ballista: UNLOCK_WAVE.ballista,
+  flame: UNLOCK_WAVE.flame,
+  alchemist: UNLOCK_WAVE.alchemist,
 };
 
 /** Enemy introduction: earliest wave index each enemy type may appear. */

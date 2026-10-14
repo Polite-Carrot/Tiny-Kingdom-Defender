@@ -1,72 +1,39 @@
-
-> tiny-kingdom-defender@1.0.0 sim
-> tsx tools/sim.ts --hours 20 --seeds 2
-
 Tiny Kingdom Defender — career simulation (20h of play at 1x per kingdom, 2 seeds)
 
 == Typical player (spends coins on upgrades, no ads) ==
 Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
   wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
-  wave  20   11m (1)               8m (0)                8 towers, avg Bronze (3.8), best Bronze; meta Lv 1
-  wave  30   23m (2)               28m (3)               11 towers, avg Silver (4.6), best Silver; meta Lv 1
-  wave  40   33m (3)               38m (4)               13 towers, avg Silver (5.2), best Gold; meta Lv 2
-  wave  50   40m (4)               51m (6)               14 towers, avg Gold (5.7), best Gold; meta Lv 2
-  wave  60   60m (9)               1.8h (17)             17 towers, avg Jade (6.8), best Jade; meta Lv 3
-  wave  70   2.1h (21)             2.8h (28)             21 towers, avg Obsidian (8.5), best Obsidian; meta Lv 4
-  wave  80   4.0h (57)             3.7h (39)             24 towers, avg Celestial (10.0), best Celestial; meta Lv 5
-  wave  90   4.3h (60)             4.1h (43)             24 towers, avg Celestial (10.3), best Celestial; meta Lv 5
-  wave 100   8.9h (105)            8.7h (108)            27 towers, avg Celestial (13.0), best Celestial; meta Lv 7
-  wave 110   9.9h (117)            14.8h (177)           28 towers, avg Celestial (13.5), best Celestial; meta Lv 7
-  wave 120   13.6h (181)           19.5h (273)           30 towers, avg Celestial (14.8), best Celestial; meta Lv 7
-  best wave after 20h: 122, 122 · castle falls: 322, 283
+  wave  20   13m (1)               13m (1)               9 towers, avg Bronze (3.8), best Bronze; meta Lv 1
+  wave  30   18m (1)               24m (2)               10 towers, avg Bronze (4.4), best Silver; meta Lv 1
+  wave  40   53m (6)               36m (3)               15 towers, avg Gold (5.9), best Gold; meta Lv 2
+  wave  50   1.4h (26)             1.1h (20)             17 towers, avg Jade (6.7), best Jade; meta Lv 2
+  wave  60   2.0h (32)             1.6h (26)             20 towers, avg Crystal (7.7), best Crystal; meta Lv 3
+  wave  70   2.9h (42)             1.9h (30)             22 towers, avg Obsidian (8.7), best Obsidian; meta Lv 3
+  wave  80   3.7h (51)             2.6h (37)             23 towers, avg Obsidian (9.4), best Celestial; meta Lv 4
+  wave  90   5.4h (103)            3.2h (44)             25 towers, avg Celestial (10.6), best Celestial; meta Lv 4
+  wave 100   5.9h (108)            4.3h (59)             25 towers, avg Celestial (11.0), best Celestial; meta Lv 4
+  wave 110   13.6h (218)           8.1h (126)            30 towers, avg Celestial (14.3), best Celestial; meta Lv 7
+  wave 120   17.8h (303)           13.7h (248)           31 towers, avg Celestial (15.4), best Celestial; meta Lv 7
+  best wave after 20h: 125, 127 · castle falls: 338, 342
 
 == Never buys permanent upgrades ==
 Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
   wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
-  wave  20   11m (1)               11m (1)               8 towers, avg Bronze (3.9), best Bronze; meta Lv 0
-  wave  30   29m (3)               44m (7)               13 towers, avg Silver (4.8), best Silver; meta Lv 0
-  wave  40   41m (4)               60m (9)               13 towers, avg Gold (5.8), best Gold; meta Lv 0
-  wave  50   53m (5)               1.4h (12)             16 towers, avg Gold (6.0), best Gold; meta Lv 0
-  wave  60   1.5h (15)             2.8h (26)             18 towers, avg Crystal (7.7), best Crystal; meta Lv 0
-  wave  70   2.4h (26)             4.3h (42)             21 towers, avg Obsidian (8.6), best Obsidian; meta Lv 0
-  wave  80   4.1h (82)             6.4h (71)             24 towers, avg Celestial (9.6), best Celestial; meta Lv 0
-  wave  90   8.2h (132)            9.8h (108)            26 towers, avg Celestial (12.0), best Celestial; meta Lv 0
-  wave 100   10.1h (155)           —                     27 towers, avg Celestial (12.7), best Celestial; meta Lv 0
-  wave 110   19.0h (263)           —                     30 towers, avg Celestial (15.4), best Celestial; meta Lv 0
-  best wave after 20h: 116, 94 · castle falls: 285, 264
+  wave  20   13m (1)               13m (1)               9 towers, avg Bronze (3.8), best Bronze; meta Lv 0
+  wave  30   24m (2)               24m (2)               12 towers, avg Silver (4.7), best Silver; meta Lv 0
+  wave  40   52m (6)               34m (3)               15 towers, avg Gold (5.9), best Gold; meta Lv 0
+  wave  50   1.5h (31)             1.3h (39)             18 towers, avg Jade (6.7), best Jade; meta Lv 0
+  wave  60   2.4h (42)             1.8h (46)             21 towers, avg Crystal (8.0), best Crystal; meta Lv 0
+  wave  70   3.6h (55)             2.3h (53)             23 towers, avg Obsidian (9.0), best Obsidian; meta Lv 0
+  wave  80   5.6h (84)             4.0h (77)             25 towers, avg Celestial (10.3), best Celestial; meta Lv 0
+  wave  90   8.9h (150)            6.2h (130)            27 towers, avg Celestial (11.7), best Celestial; meta Lv 0
+  wave 100   10.2h (170)           9.3h (170)            27 towers, avg Celestial (12.5), best Celestial; meta Lv 0
+  best wave after 20h: 106, 107 · castle falls: 393, 391
 
 Times are game time at 1x speed (2x halves them). Wave gap 12s.
-Done in 391.5s
-
-> tiny-kingdom-defender@1.0.0 sim
-> tsx tools/sim.ts --push --seeds 3
-
 Single push from a fresh kingdom, no retreats (waves survived):
   all permanent upgrades at Lv  0: waves 18, 18, 17  (avg 7m)
-  all permanent upgrades at Lv  5: waves 31, 40, 37  (avg 17m)
-  all permanent upgrades at Lv 10: waves 40, 54, 60  (avg 25m)
-  all permanent upgrades at Lv 15: waves 60, 69, 69  (avg 33m)
-  all permanent upgrades at Lv 20: waves 89, 69, 71  (avg 39m)
-Done in 7.4s
-
-> tiny-kingdom-defender@1.0.0 sim
-> tsx tools/sim.ts --waves
-
-Wave  Age                   HP×    Gold×  Enemies
-   1  Age of Meadows         1.00   1.00  6×grunt
-   2  Age of Meadows         1.07   1.03  8×grunt
-   3  Age of Meadows         1.15   1.05  9×runner
-   5  Age of Meadows         1.31   1.10  7×grunt, 7×runner
-  10  Age of Meadows         1.76   1.22  1×boss_ogre, 8×runner, 3×knight
-  15  Age of Meadows         2.31   1.34  17×grunt, 9×runner, 4×knight
-  20  Age of Meadows         2.95   1.46  1×boss_scorpion, 16×grunt, 18×runner
-  25  Age of Meadows         3.71   1.58  9×shaman, 43×grunt
-  30  Age of Sands           4.61   1.71  1×boss_yeti, 6×shaman, 25×bat, 17×runner
-  40  Age of Sands           6.89   1.97  1×boss_dragon, 43×grunt, 20×knight
-  50  Age of Sands          10.02   3.49  1×boss_ogre, 32×grunt, 19×bat, 19×runner
-  60  Age of Frost          14.26   3.84  1×boss_scorpion, 13×bat, 13×knight, 34×grunt, 10×shield
-  75  Age of Frost          23.52  11.91  29×grunt, 5×shield, 15×bat, 21×runner
- 100  Age of Fire           51.30  11.17  1×boss_scorpion, 11×shaman, 44×grunt, 15×knight
- 125  Age of Meadows II     106.97  38.49  25×bat, 29×grunt, 16×runner
- 150  Age of Sands II       216.29  37.33  1×boss_yeti, 12×bat, 33×grunt, 7×shaman, 17×runner
- 200  Age of Fire II        832.04  79.81  1×boss_dragon, 9×shield, 61×grunt
+  all permanent upgrades at Lv  5: waves 23, 31, 40  (avg 14m)
+  all permanent upgrades at Lv 10: waves 51, 42, 54  (avg 24m)
+  all permanent upgrades at Lv 15: waves 72, 68, 78  (avg 37m)
+  all permanent upgrades at Lv 20: waves 79, 72, 78  (avg 39m)

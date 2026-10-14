@@ -88,6 +88,13 @@ export interface Enemy {
   stunTimer: number;
   shred: number;
   shredTimer: number;
+  /** Damage over time (burning / poison): damage per second, seconds left, source. */
+  dotDps: number;
+  dotTimer: number;
+  dotTick: number;
+  dotType: DamageType;
+  dotKind: 'burn' | 'poison';
+  dotTowerId: number;
   flash: number;
   /** Damage reduction from a shield-bearer ahead (0 = none). */
   shielded: number;
@@ -122,7 +129,14 @@ export interface Tower {
   lastFire: number;
 }
 
-export type ProjectileKind = 'arrow' | 'cannon' | 'frost' | 'heroArrow' | 'heroBolt' | 'champion';
+const DOT_TICK = 0.5;
+const BOLT_HIT_RADIUS = 0.38;
+/** Projectile each tower type fires. */
+const PROJECTILE_OF: Partial<Record<TowerId, ProjectileKind>> = {
+  cannon: 'cannon', frost: 'frost', mage: 'arcane', ballista: 'bolt', flame: 'fire', alchemist: 'poison',
+};
+
+export type ProjectileKind = 'arrow' | 'cannon' | 'frost' | 'arcane' | 'bolt' | 'fire' | 'poison' | 'heroArrow' | 'heroBolt' | 'champion';
 
 export interface Projectile {
   id: number;
@@ -147,6 +161,11 @@ export interface Projectile {
   hitsGround: boolean;
   towerId: number;
   arc: boolean;
+  /** Piercing bolts: enemies left to pass through, and those already hit. */
+  pierce: number;
+  pierced: number[];
+  dot: number;
+  dotDuration: number;
 }
 
 export interface Hero {
@@ -269,6 +288,8 @@ export class Run {
   private waveRemaining = new Map<number, number>();
   private waveSpawnDone = new Map<number, boolean>();
   private nextId = 1;
+  /** Index in `projectiles` of the most recent launch. */
+  private lastLaunched = 0;
   private rng: Random;
   private tmp: PathPoint = { x: 0, z: 0, dx: 0, dz: 0 };
 
@@ -705,6 +726,7 @@ export class Run {
       id: this.nextId++, def, alive: true, hp, maxHp: hp, path, dist, lane: this.rng.range(-0.22, 0.22),
       x: 0, y: def.flying ? ENEMY_RULES.flyHeight : 0, z: 0, dirX: 1, dirZ: 0,
       slowFactor: 1, slowTimer: 0, stunTimer: 0, shred: 0, shredTimer: 0, flash: 0, shielded: 0,
+      dotDps: 0, dotTimer: 0, dotTick: 0, dotType: 'magic', dotKind: 'burn', dotTowerId: -1,
       abilityTimer: def.heal ? def.heal.interval * this.rng.range(0.5, 1) : 0,
       summonTimer: def.boss?.summonInterval ?? 0,
       chargeTimer: def.boss?.chargeInterval ?? 0,
@@ -746,6 +768,21 @@ export class Run {
       if (e.shredTimer > 0 && (e.shredTimer -= dt) <= 0) e.shred = 0;
       if (e.slowTimer > 0 && (e.slowTimer -= dt) <= 0) e.slowFactor = 1;
       if (e.immuneTimer > 0) e.immuneTimer -= dt;
+      if (e.dotTimer > 0) {
+        e.dotTimer -= dt;
+        e.dotTick += dt;
+        if (e.dotTick >= DOT_TICK || e.dotTimer <= 0) {
+          const amount = e.dotDps * Math.min(e.dotTick, DOT_TICK);
+          e.dotTick = 0;
+          this.damage(e, amount, e.dotType);
+          if (!e.alive) {
+            const tw = this.towers.find((t) => t.id === e.dotTowerId);
+            if (tw) tw.kills++;
+            continue;
+          }
+        }
+        if (e.dotTimer <= 0) e.dotDps = 0;
+      }
       const def = e.def;
 
       // Healer.
@@ -1004,11 +1041,21 @@ export class Run {
 
   private fireProjectile(t: Tower, target: Enemy): void {
     const st = t.stats;
-    const kind: ProjectileKind = t.def.id === 'cannon' ? 'cannon' : t.def.id === 'frost' ? 'frost' : 'arrow';
-    this.launch(kind, t.x, 1.25 + t.tier * 0.12, t.z, target, st.projectileSpeed, st.damage, t.def.damageType, st.splash, t.id, {
+    const kind = PROJECTILE_OF[t.def.id] ?? 'arrow';
+    const y = t.def.id === 'ballista' ? 0.8 + t.tier * 0.05 : t.def.id === 'flame' ? 0.9 + t.tier * 0.06 : 1.25 + t.tier * 0.12;
+    this.launch(kind, t.x, y, t.z, target, st.projectileSpeed, st.damage, t.def.damageType, st.splash, t.id, {
       slowFactor: st.slowFactor, slowDuration: st.slowDuration, stun: st.stun, freezeChance: st.freezeChance, shred: st.shred,
-      hitsAir: t.def.hitsAir, hitsGround: t.def.hitsGround,
+      hitsAir: t.def.hitsAir, hitsGround: t.def.hitsGround, pierce: st.pierce, dot: st.dot, dotDuration: st.dotDuration,
     });
+    if (st.pierce > 0) {
+      // Bolts fly in a straight line through the target and on to the edge of the range.
+      const p = this.projectiles[this.lastLaunched];
+      const dx = target.x - t.x, dz = target.z - t.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const reach = st.range + 1.2;
+      p.tx = t.x + (dx / d) * reach;
+      p.tz = t.z + (dz / d) * reach;
+    }
   }
 
   private launch(
@@ -1016,7 +1063,8 @@ export class Run {
     extra: Partial<Projectile>,
   ): void {
     const p = this.allocProjectile();
-    const arc = kind === 'cannon';
+    this.lastLaunched = this.projectiles.indexOf(p);
+    const arc = kind === 'cannon' || kind === 'poison';
     // Lead the target for arcing shots.
     let tx = target.x;
     let tz = target.z;
@@ -1032,7 +1080,7 @@ export class Run {
     Object.assign(p, {
       id: this.nextId++, active: true, kind, x, y, z, sx: x, sy: y, sz: z, tx, tz, targetId: target.id, speed, t: 0, duration,
       damage, damageType: type, splash, slowFactor: 1, slowDuration: 0, stun: 0, freezeChance: 0, shred: 0, hitsAir: true, hitsGround: true,
-      towerId, arc, ...extra,
+      towerId, arc, pierce: 0, pierced: [], dot: 0, dotDuration: 0, ...extra,
     } satisfies Partial<Projectile>);
   }
 
@@ -1046,6 +1094,10 @@ export class Run {
         p.z = p.sz + (p.tz - p.sz) * k;
         p.y = p.sy * (1 - k) + Math.sin(k * Math.PI) * (1.2 + p.duration * 1.2);
         if (k >= 1) this.impact(p, null);
+        continue;
+      }
+      if (p.pierce > 0) {
+        this.updateBolt(p, dt);
         continue;
       }
       const target = this.enemies.find((e) => e.id === p.targetId && e.alive);
@@ -1078,6 +1130,7 @@ export class Run {
         e.shredTimer = TOWER_RULES.shredDuration;
       }
       if (p.freezeChance > 0 && this.rng.next() < p.freezeChance && !e.def.boss) e.stunTimer = Math.max(e.stunTimer, p.stun);
+      if (p.dot > 0) this.applyDot(e, dmg * p.dot, p.dotDuration, p.damageType, p.kind === 'poison' ? 'poison' : 'burn', p.towerId);
       const wasAlive = e.alive;
       this.damage(e, dmg, p.damageType);
       if (wasAlive && !e.alive && tower) tower.kills++;
@@ -1096,6 +1149,48 @@ export class Run {
     } else if (target && target.alive) {
       apply(target, p.damage);
     }
+  }
+
+  /** Moves a piercing bolt in a straight line, hitting each enemy it passes once. */
+  private updateBolt(p: Projectile, dt: number): void {
+    const dx = p.tx - p.x, dz = p.tz - p.z;
+    const d = Math.hypot(dx, dz);
+    const step = Math.min(d, p.speed * dt);
+    const tower = this.towers.find((t) => t.id === p.towerId);
+    if (d > 1e-4) {
+      p.x += (dx / d) * step;
+      p.z += (dz / d) * step;
+    }
+    // Sink gently towards body height.
+    p.y += (0.35 - p.y) * Math.min(1, dt * 3);
+    const r2 = BOLT_HIT_RADIUS * BOLT_HIT_RADIUS;
+    for (const e of this.enemies) {
+      if (!e.alive || p.pierced.includes(e.id)) continue;
+      if (e.def.flying ? !p.hitsAir : !p.hitsGround) continue;
+      if ((e.x - p.x) ** 2 + (e.z - p.z) ** 2 > r2) continue;
+      p.pierced.push(e.id);
+      if (p.shred > 0) {
+        e.shred = Math.max(e.shred, p.shred);
+        e.shredTimer = TOWER_RULES.shredDuration;
+      }
+      // Each enemy pierced takes a little less.
+      this.damage(e, p.damage * Math.pow(0.9, p.pierced.length - 1), p.damageType);
+      this.events.emit('projectileHit', { p, x: e.x, z: e.z });
+      if (!e.alive && tower) tower.kills++;
+      if (--p.pierce <= 0) break;
+    }
+    if (p.pierce <= 0 || d <= step + 1e-4) p.active = false;
+  }
+
+  private applyDot(e: Enemy, dps: number, duration: number, type: DamageType, kind: 'burn' | 'poison', towerId: number): void {
+    // The strongest effect wins; re-applying refreshes the timer.
+    if (dps >= e.dotDps || e.dotTimer <= 0) {
+      e.dotDps = dps;
+      e.dotType = type;
+      e.dotKind = kind;
+      e.dotTowerId = towerId;
+    }
+    e.dotTimer = Math.max(e.dotTimer, duration);
   }
 
   private applySlow(e: Enemy, factor: number, duration: number): void {

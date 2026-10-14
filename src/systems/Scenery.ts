@@ -7,6 +7,7 @@ import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
 import { propModel } from '../entities/Models';
 import type { Theme } from '../data/themes';
 import { Water } from './Water';
+import { Grass, type BladeSpot } from './Grass';
 
 /** Smooth 2D value noise in [0, 1]. */
 function hash(x: number, y: number): number {
@@ -56,6 +57,7 @@ export class Scenery {
   readonly group = new THREE.Group();
   private disposables: { dispose(): void }[] = [];
   private water: Water;
+  private grass: Grass | null = null;
   private clouds = new THREE.Group();
   private particles: THREE.Points;
   private pVel: Float32Array;
@@ -73,6 +75,9 @@ export class Scenery {
     const cloudMat = this.track(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, emissive: new THREE.Color(theme.id === 'volcano' ? '#2a1a1e' : '#9aa6b8') }));
     this.buildClouds(cloudMat);
     this.group.add(this.clouds);
+
+    if (animated) this.buildGrass();
+    this.group.add(this.buildSunGlow());
 
     // Sea (or lava), with waves; a lighter grid on low quality.
     this.water = this.track(new Water(theme, WATER_Y, BOARD_HALF, (x, z) => this.groundHeight(x, z), TERRAIN_SIZE, animated ? 200 : 110));
@@ -119,6 +124,59 @@ export class Scenery {
     const sky = new THREE.Mesh(geo, mat);
     sky.renderOrder = -10;
     return sky;
+  }
+
+  /** A soft glow where the sun sits in the sky (picked up by the bloom on high quality). */
+  private buildSunGlow(): THREE.Sprite {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.12, 'rgba(255,248,225,0.95)');
+    grad.addColorStop(0.35, 'rgba(255,230,170,0.35)');
+    grad.addColorStop(1, 'rgba(255,220,150,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    const tex = this.track(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const volcano = this.theme.id === 'volcano';
+    const mat = this.track(new THREE.SpriteMaterial({
+      map: tex, color: new THREE.Color(volcano ? '#ff9a5a' : this.theme.sun).multiplyScalar(volcano ? 1.2 : 1.6),
+      transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+    }));
+    const sprite = new THREE.Sprite(mat);
+    // Same direction as the scene's directional light, just above the horizon so it is in view.
+    const dir = new THREE.Vector3(-6, 3.2, 7).normalize();
+    sprite.position.copy(dir.multiplyScalar(200));
+    sprite.scale.setScalar(volcano ? 40 : 55);
+    sprite.renderOrder = -9;
+    return sprite;
+  }
+
+  /** Grass blades across the island's meadows. */
+  private buildGrass(): void {
+    const id = this.theme.id;
+    const density = ({ meadow: 1, desert: 0.2, snow: 0.12, volcano: 0.08 } as const)[id];
+    const base = new THREE.Color(id === 'desert' ? '#c9b26a' : id === 'snow' ? '#a9c2a0' : id === 'volcano' ? '#7a6a4a' : this.look.low);
+    const spots: BladeSpot[] = [];
+    const target = Math.round(16000 * density);
+    for (let i = 0; i < target * 3 && spots.length < target; i++) {
+      const a = hash(i, 0.71) * Math.PI * 2;
+      const r = BOARD_HALF + 0.4 + Math.sqrt(hash(i, 1.93)) * 26;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.abs(x) < BOARD_HALF + 0.2 && Math.abs(z) < BOARD_HALF + 0.2) continue;
+      const y = this.height(x, z);
+      if (y < WATER_Y + 0.55 || y > 1.6) continue;
+      // Skip steep slopes.
+      if (Math.abs(this.height(x + 0.4, z) - y) + Math.abs(this.height(x, z + 0.4) - y) > 0.5) continue;
+      // Patchy meadows rather than an even carpet.
+      if (fbm(x * 0.2 + 5, z * 0.2) < 0.38) continue;
+      spots.push({ x, y: y - 0.02, z, h: 0.9 + hash(i, 3.1) * 1.1, color: base.clone().multiplyScalar(0.78 * (0.85 + hash(i, 5.3) * 0.35)) });
+    }
+    if (!spots.length) return;
+    this.grass = this.track(new Grass(spots, id === 'meadow' ? 1 : 0.6));
+    this.group.add(this.grass.mesh);
   }
 
   // --- Island terrain ---------------------------------------------------------------
@@ -282,6 +340,7 @@ export class Scenery {
     this.time += dt;
     this.clouds.rotation.y += dt * 0.006;
     this.water.update(this.time);
+    this.grass?.update(this.time);
     if (!this.animated) return;
     const attr = this.particles.geometry.attributes.position as THREE.BufferAttribute;
     const pos = attr.array as Float32Array;

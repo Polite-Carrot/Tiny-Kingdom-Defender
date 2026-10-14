@@ -213,6 +213,98 @@ function buildTowerBase(id: TowerId, tier: number, branch: number): { geo: THREE
       headY = 0.2 + h + 0.38;
       break;
     }
+    case 'mage': {
+      plinth(b, t, m, 0.38);
+      const h = 0.75 + grow * 1.3;
+      const wall = t === 1 ? WOOD : m.body;
+      b.cyl(0.24, 0.31, h, 8, wall, { y: 0.16 + h / 2 });
+      // Window slits and a balcony.
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        b.box(0.06, 0.16, 0.04, '#2b2340', { x: Math.sin(a) * 0.27, y: 0.16 + h * 0.55, z: Math.cos(a) * 0.27, ry: a });
+      }
+      b.cyl(0.34, 0.3, 0.07, 8, t === 1 ? WOOD_D : m.trim, { y: 0.16 + h });
+      // Tall wizard roof, slightly bent at the tip.
+      const roof = t > BRANCH_TIER && branch === 1 ? '#3a5fd1' : t === 1 ? '#6a4fb0' : m.roof;
+      b.cone(0.33, 0.55 + t * 0.02, 8, roof, { y: 0.16 + h + 0.3 + t * 0.01 });
+      b.cone(0.1, 0.22, 6, roof, { x: 0.05, y: 0.16 + h + 0.66 + t * 0.02, rz: -0.35 });
+      // Orb pedestals around the balcony.
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        b.cyl(0.025, 0.03, 0.12, 4, t === 1 ? WOOD_D : m.trim, { x: Math.cos(a) * 0.3, y: 0.16 + h + 0.08, z: Math.sin(a) * 0.3 });
+        b.ball(0.04, 0, t >= 5 ? m.glow : '#b9a2ff', { x: Math.cos(a) * 0.3, y: 0.16 + h + 0.17, z: Math.sin(a) * 0.3 });
+      }
+      if (t > BRANCH_TIER && branch === 0) b.torus(0.4, 0.03, 4, 16, '#c8a6ff', { y: 0.16 + h * 0.4, rx: Math.PI / 2 });
+      ornaments(b, t, m, 0.16 + h + 0.7, 0.28, 0.16 + h);
+      // The orb floats above the roof tip.
+      headY = 0.16 + h + 0.62 + t * 0.02;
+      break;
+    }
+    case 'ballista': {
+      plinth(b, t, m, 0.48);
+      const h = 0.22 + grow * 0.6;
+      if (t === 1) {
+        // Timber deck on short posts.
+        for (const [x, z] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) b.box(0.09, h + 0.12, 0.09, WOOD_D, { x, y: (h + 0.12) / 2 + 0.06, z });
+        for (let i = 0; i < 5; i++) b.box(0.15, 0.05, 0.74, i % 2 ? WOOD : WOOD_D, { x: -0.3 + i * 0.15, y: h + 0.16 });
+      } else {
+        b.box(0.8, h, 0.8, m.body, { y: 0.14 + h / 2 });
+        b.box(0.86, 0.06, 0.86, m.trim, { y: 0.14 + h });
+        // Corner merlons.
+        for (const [x, z] of [[-0.36, -0.36], [0.36, -0.36], [-0.36, 0.36], [0.36, 0.36]]) b.box(0.14, 0.16, 0.14, m.trim, { x, y: 0.22 + h, z });
+        // Stone courses.
+        b.box(0.82, 0.03, 0.82, m.trim, { y: 0.14 + h * 0.5 });
+      }
+      // Bolt rack.
+      for (let i = 0; i < 3; i++) b.cyl(0.015, 0.015, 0.5, 4, WOOD, { x: -0.3 + i * 0.05, y: 0.25 + h, z: -0.25, rz: Math.PI / 2 - 0.2 });
+      if (t > BRANCH_TIER && branch === 1) b.box(0.2, 0.18, 0.2, WOOD_D, { x: 0.28, y: 0.3 + h, z: -0.28 });
+      ornaments(b, t, m, 0.3 + h, 0.42, 0.14 + h);
+      headY = 0.2 + h;
+      break;
+    }
+    case 'flame': {
+      plinth(b, t, m, 0.42);
+      const h = 0.38 + grow;
+      const wall = t === 1 ? '#8a7a6a' : m.body;
+      b.cyl(0.26, 0.36, h, 8, wall, { y: 0.16 + h / 2 });
+      // Iron bands and glowing vents.
+      b.cyl(0.33, 0.33, 0.05, 8, t === 1 ? '#4a4048' : m.trim, { y: 0.16 + h * 0.3 });
+      b.cyl(0.3, 0.3, 0.05, 8, t === 1 ? '#4a4048' : m.trim, { y: 0.16 + h * 0.75 });
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        b.box(0.08, 0.06, 0.03, new THREE.Color('#ff8a2a').multiplyScalar(1.6), { x: Math.sin(a) * 0.32, y: 0.16 + h * 0.52, z: Math.cos(a) * 0.32, ry: a });
+      }
+      // Fuel barrels.
+      b.cyl(0.08, 0.08, 0.18, 7, WOOD_D, { x: 0.36, y: 0.24, z: -0.24 });
+      b.cyl(0.085, 0.085, 0.02, 7, '#4a4048', { x: 0.36, y: 0.3, z: -0.24 });
+      if (t > BRANCH_TIER && branch === 0) for (let i = 0; i < 4; i++) b.cone(0.05, 0.2, 4, '#ffb347', { x: Math.cos(i * 1.57 + 0.78) * 0.3, y: 0.24 + h, z: Math.sin(i * 1.57 + 0.78) * 0.3 });
+      ornaments(b, t, m, 0.3 + h + 0.35, 0.3, 0.16 + h);
+      headY = 0.16 + h;
+      break;
+    }
+    case 'alchemist': {
+      plinth(b, t, m, 0.44);
+      const h = 0.45 + grow;
+      const wall = t === 1 ? WOOD : m.body;
+      // A crooked workshop: square body, sloped roof, chimney.
+      b.box(0.56, h, 0.56, wall, { y: 0.16 + h / 2 });
+      b.box(0.6, 0.05, 0.6, t === 1 ? WOOD_D : m.trim, { y: 0.16 + h });
+      b.box(0.14, 0.2, 0.04, '#2b2340', { y: 0.16 + h * 0.45, z: 0.29 });
+      b.box(0.1, 0.1, 0.03, '#9cff6a', { x: 0.29, y: 0.16 + h * 0.6, ry: Math.PI / 2 });
+      b.cyl(0.06, 0.07, 0.36, 6, t === 1 ? '#7a6a5a' : m.trim, { x: -0.2, y: 0.16 + h + 0.18, z: -0.2 });
+      // Shelf of flasks.
+      const flask = ['#7fd65a', '#c86af0', '#ffcf3f'];
+      for (let i = 0; i < 3; i++) {
+        b.ball(0.045, 0, flask[i], { x: -0.12 + i * 0.12, y: 0.24, z: 0.36 });
+        b.cyl(0.012, 0.012, 0.05, 4, '#e8e0d0', { x: -0.12 + i * 0.12, y: 0.29, z: 0.36 });
+      }
+      b.box(0.42, 0.03, 0.1, WOOD_D, { y: 0.19, z: 0.36 });
+      if (t > BRANCH_TIER && branch === 0) b.ball(0.12, 1, new THREE.Color('#7fd65a').multiplyScalar(1.4), { x: 0.3, y: 0.16 + h + 0.15, z: 0.3, sy: 0.6 });
+      if (t > BRANCH_TIER && branch === 1) for (let i = 0; i < 2; i++) b.cyl(0.04, 0.04, 0.4, 5, '#5d6470', { x: 0.3 - i * 0.6, y: 0.16 + h * 0.5, z: -0.32 });
+      ornaments(b, t, m, 0.16 + h + 0.4, 0.3, 0.16 + h);
+      headY = 0.16 + h + 0.03;
+      break;
+    }
   }
   return { geo: b.build(), headY };
 }
@@ -259,6 +351,55 @@ function buildTowerHead(id: TowerId, tier: number, branch: number): THREE.Buffer
       if (t >= 5) b.torus(r * 1.6, 0.018, 3, 10, m.accent, { y: r, rx: -0.8, ry: 1 });
       break;
     }
+    case 'mage': {
+      // Floating arcane orb inside rune rings.
+      const r = 0.1 + t * 0.01 + (spec && branch === 0 ? 0.04 : 0);
+      const orb = new THREE.Color(t >= 7 ? m.accent : '#a98bff').multiplyScalar(1.5);
+      b.ball(r, 1, orb, { y: 0.32 });
+      b.torus(r * 1.7, 0.016, 3, 14, '#e6dcff', { y: 0.32, rx: Math.PI / 2 });
+      b.torus(r * 1.9, 0.014, 3, 14, t >= 5 ? m.accent : '#c8a6ff', { y: 0.32, rx: 0.5 });
+      if (spec && branch === 1) for (let i = 0; i < 3; i++) b.ball(0.045, 0, orb, { x: Math.cos(i * 2.1) * r * 2.4, y: 0.32, z: Math.sin(i * 2.1) * r * 2.4 });
+      break;
+    }
+    case 'ballista': {
+      // Crossbow on a swivel: stock, bow arms, string and a loaded bolt.
+      const big = spec && branch === 0 ? 1.25 : 1;
+      const wood = t === 1 ? WOOD : t >= 4 ? m.trim : WOOD;
+      b.cyl(0.1, 0.13, 0.12, 6, WOOD_D, { y: 0.06 });
+      b.box(0.12 * big, 0.1, 0.7 * big, wood, { y: 0.17, z: 0.02 });
+      for (const sx of [-1, 1]) {
+        b.box(0.36 * big, 0.05, 0.06, t >= 3 ? m.body : WOOD_D, { x: sx * 0.18 * big, y: 0.2, z: 0.3 * big, ry: sx * 0.35 });
+        b.cyl(0.012, 0.012, 0.42 * big, 3, '#f3e6cc', { x: sx * 0.17 * big, y: 0.2, z: 0.1 * big, rx: Math.PI / 2, rz: sx * 0.8 });
+      }
+      b.cyl(0.02, 0.02, 0.62 * big, 4, '#6e4527', { y: 0.24, z: 0.08, rx: Math.PI / 2 });
+      b.cone(0.04, 0.1, 4, t >= 6 ? m.accent : '#8a929e', { y: 0.24, z: 0.42 * big, rx: Math.PI / 2 });
+      if (spec && branch === 1) b.box(0.16, 0.12, 0.2, WOOD_D, { y: 0.3, z: -0.12 });
+      break;
+    }
+    case 'flame': {
+      // Brazier with a dragon-head nozzle.
+      const bowl = t >= 4 ? m.trim : '#4a4048';
+      b.cyl(0.24, 0.15, 0.14, 8, bowl, { y: 0.07 });
+      const fire = new THREE.Color('#ff6a1a').multiplyScalar(1.8);
+      const hot = new THREE.Color('#ffd36a').multiplyScalar(2);
+      b.cone(0.17, 0.3, 6, fire, { y: 0.28 });
+      b.cone(0.09, 0.24, 5, hot, { y: 0.3, x: 0.04 });
+      const dragon = spec && branch === 1;
+      b.box(0.12, 0.12, 0.3, dragon ? '#a8452a' : bowl, { y: 0.12, z: 0.22 });
+      b.cone(0.07, 0.14, 5, dragon ? '#a8452a' : bowl, { y: 0.12, z: 0.42, rx: Math.PI / 2 });
+      if (dragon) for (const sx of [-1, 1]) b.cone(0.03, 0.12, 4, '#f3e6cc', { x: sx * 0.05, y: 0.22, z: 0.18, rx: -0.6 });
+      break;
+    }
+    case 'alchemist': {
+      // Cauldron of bubbling poison with a flask-flinging arm.
+      const pot = t >= 4 ? m.trim : '#3a3f49';
+      b.cyl(0.2, 0.15, 0.2, 9, pot, { y: 0.1 });
+      b.cyl(0.18, 0.18, 0.02, 9, new THREE.Color('#7fd65a').multiplyScalar(1.5), { y: 0.19 });
+      for (let i = 0; i < 3; i++) b.ball(0.035, 0, new THREE.Color('#b8ff8a').multiplyScalar(1.4), { x: Math.cos(i * 2) * 0.09, y: 0.22, z: Math.sin(i * 2) * 0.09 });
+      b.box(0.05, 0.05, 0.4, WOOD, { y: 0.28, z: -0.02, rx: -0.6 });
+      b.ball(0.06, 0, spec && branch === 1 ? '#c86af0' : '#7fd65a', { y: 0.42, z: 0.15 });
+      break;
+    }
   }
   return b.build();
 }
@@ -269,13 +410,34 @@ export function enemyModel(id: EnemyId): THREE.BufferGeometry {
   return cached(`enemy-${id}`, () => buildEnemy(id));
 }
 
-function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; w?: number } = {}) {
+function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; w?: number; eyes?: boolean } = {}) {
   const h = o.h ?? 1;
   const w = o.w ?? 1;
-  b.box(0.08 * w, 0.14 * h, 0.08, '#4a3a2a', { x: -0.07 * w, y: 0.07 * h });
-  b.box(0.08 * w, 0.14 * h, 0.08, '#4a3a2a', { x: 0.07 * w, y: 0.07 * h });
-  b.box(0.26 * w, 0.22 * h, 0.18, body, { y: 0.25 * h });
-  b.ball(0.13, 0, skin, { y: 0.47 * h });
+  const dark = '#' + new THREE.Color(body).multiplyScalar(0.7).getHexString();
+  // Legs with boots.
+  for (const sx of [-1, 1]) {
+    b.cyl(0.035 * w, 0.04 * w, 0.12 * h, 6, '#4a3a2a', { x: sx * 0.07 * w, y: 0.09 * h });
+    b.box(0.08 * w, 0.05, 0.11, '#2e241c', { x: sx * 0.07 * w, y: 0.025, z: 0.015 });
+  }
+  // Tapered torso, belt with buckle, shoulders.
+  b.cyl(0.12 * w, 0.14 * w, 0.24 * h, 8, body, { y: 0.27 * h, sz: 0.75 });
+  b.cyl(0.145 * w, 0.145 * w, 0.035, 8, '#3a2a1e', { y: 0.17 * h, sz: 0.78 });
+  b.box(0.04, 0.03, 0.02, GOLD, { y: 0.17 * h, z: 0.11 });
+  for (const sx of [-1, 1]) {
+    b.ball(0.05 * w, 0, dark, { x: sx * 0.14 * w, y: 0.36 * h });
+    // Arms and hands.
+    b.cyl(0.028, 0.032, 0.17 * h, 5, body, { x: sx * 0.165 * w, y: 0.28 * h, rz: sx * 0.15 });
+    b.ball(0.035, 0, skin, { x: sx * 0.18 * w, y: 0.19 * h, z: 0.01 });
+  }
+  // Head on a short neck, with eyes.
+  b.cyl(0.04, 0.05, 0.04, 6, skin, { y: 0.39 * h });
+  b.ball(0.13, 1, skin, { y: 0.48 * h });
+  if (o.eyes !== false) {
+    for (const sx of [-1, 1]) {
+      b.ball(0.028, 0, '#ffffff', { x: sx * 0.05, y: 0.5 * h, z: 0.11 });
+      b.ball(0.016, 0, '#1a1218', { x: sx * 0.05, y: 0.5 * h, z: 0.132 });
+    }
+  }
 }
 
 function buildEnemy(id: EnemyId): THREE.BufferGeometry {
@@ -286,9 +448,11 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       humanoid(b, '#a8643a', SKIN);
       b.cone(0.04, 0.12, 4, SKIN, { x: -0.13, y: 0.5, rz: 1.2 });
       b.cone(0.04, 0.12, 4, SKIN, { x: 0.13, y: 0.5, rz: -1.2 });
-      b.cyl(0.035, 0.06, 0.3, 5, WOOD_D, { x: 0.18, y: 0.3, z: 0.08, rx: 0.6 });
-      b.ball(0.025, 0, '#222', { x: -0.05, y: 0.5, z: 0.12 });
-      b.ball(0.025, 0, '#222', { x: 0.05, y: 0.5, z: 0.12 });
+      // Spiked club.
+      b.cyl(0.035, 0.06, 0.3, 6, WOOD_D, { x: 0.2, y: 0.3, z: 0.08, rx: 0.6 });
+      for (let k = 0; k < 4; k++) b.cone(0.015, 0.05, 3, '#d9dde3', { x: 0.2 + Math.cos(k * 1.57) * 0.05, y: 0.42, z: 0.17 + Math.sin(k * 1.57) * 0.05, rz: Math.cos(k * 1.57) * -1.2, rx: Math.sin(k * 1.57) * 1.2 });
+      // Little tusks.
+      for (const sx of [-1, 1]) b.cone(0.012, 0.04, 3, '#f4f0e0', { x: sx * 0.04, y: 0.44, z: 0.12 });
       break;
     case 'runner':
       humanoid(b, '#e0913a', '#c7d36a', { h: 0.95, w: 0.85 });
@@ -427,19 +591,72 @@ export function castleModel(wall: string): THREE.BufferGeometry {
     const b = new ModelBuilder();
     const c = new THREE.Color(wall);
     const dark = '#' + c.clone().multiplyScalar(0.78).getHexString();
-    b.box(1.3, 0.12, 1.3, '#8f8576', { y: 0.06 });
-    b.box(1.0, 0.6, 1.0, wall, { y: 0.42 });
-    for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
-      b.cyl(0.2, 0.22, 0.95, 8, wall, { x, y: 0.6, z });
-      b.cone(0.26, 0.36, 8, ROOF, { x, y: 1.25, z });
-      b.cyl(0.24, 0.24, 0.06, 8, dark, { x, y: 1.05, z });
+    const light = '#' + c.clone().lerp(new THREE.Color('#ffffff'), 0.18).getHexString();
+    const slit = '#2b2340';
+    // Stepped stone foundation.
+    b.box(1.36, 0.08, 1.36, '#7d7468', { y: 0.04 });
+    b.box(1.24, 0.06, 1.24, '#8f8576', { y: 0.11 });
+    // Curtain walls with a walkway, crenellations and a stone course.
+    b.box(1.0, 0.6, 1.0, wall, { y: 0.44 });
+    b.box(1.04, 0.04, 1.04, dark, { y: 0.3 });
+    b.box(1.06, 0.05, 1.06, light, { y: 0.76 });
+    for (const side of [0, 1, 2, 3]) {
+      const a = (side * Math.PI) / 2;
+      for (let k = 0; k < 4; k++) {
+        const along = -0.33 + k * 0.22;
+        const nx = Math.sin(a), nz = Math.cos(a);
+        b.box(0.11, 0.1, 0.07, wall, { x: nx * 0.5 + nz * along, y: 0.83, z: nz * 0.5 - nx * along, ry: a });
+      }
+      // Arrow slits.
+      if (side !== 0) for (const along of [-0.2, 0.2]) b.box(0.04, 0.14, 0.02, slit, { x: Math.sin(a) * 0.505 + Math.cos(a) * along, y: 0.5, z: Math.cos(a) * 0.505 - Math.sin(a) * along, ry: a });
     }
-    b.box(0.5, 0.9, 0.5, wall, { y: 0.9 });
-    b.cone(0.42, 0.5, 4, '#3f6fd1', { y: 1.6, ry: Math.PI / 4 });
-    b.cyl(0.015, 0.015, 0.5, 4, WOOD_D, { y: 2.05 });
-    b.box(0.26, 0.15, 0.02, '#e84a3a', { x: 0.13, y: 2.2 });
-    b.box(0.3, 0.38, 0.05, WOOD_D, { y: 0.31, z: 0.5 });
-    for (let i = 0; i < 4; i++) b.box(0.12, 0.1, 0.06, dark, { x: -0.36 + i * 0.24, y: 0.77, z: 0.5 });
+    // Corner turrets: banded, windowed, with conical roofs and pennants.
+    const pennant = ['#e84a3a', '#f2c94c', '#e84a3a', '#f2c94c'];
+    [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].forEach(([x, z], i) => {
+      b.cyl(0.2, 0.23, 0.95, 10, wall, { x, y: 0.6, z });
+      b.cyl(0.235, 0.235, 0.04, 10, dark, { x, y: 0.35, z });
+      b.cyl(0.25, 0.22, 0.08, 10, light, { x, y: 1.06, z });
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        b.box(0.07, 0.08, 0.06, wall, { x: x + Math.cos(a) * 0.22, y: 1.13, z: z + Math.sin(a) * 0.22, ry: -a });
+      }
+      const out = Math.atan2(x, z);
+      b.box(0.05, 0.12, 0.02, slit, { x: x + Math.sin(out) * 0.215, y: 0.78, z: z + Math.cos(out) * 0.215, ry: out });
+      b.cone(0.27, 0.42, 10, ROOF, { x, y: 1.37, z });
+      b.cyl(0.008, 0.008, 0.22, 3, WOOD_D, { x, y: 1.65, z });
+      b.box(0.13, 0.07, 0.01, pennant[i], { x: x + 0.065, y: 1.72, z });
+    });
+    // Keep: windows, a balcony ring and a tall blue spire with the royal banner.
+    b.box(0.52, 0.95, 0.52, wall, { y: 0.93 });
+    b.box(0.56, 0.05, 0.56, dark, { y: 1.1 });
+    for (let k = 0; k < 4; k++) {
+      const a = (k * Math.PI) / 2;
+      const nx = Math.sin(a), nz = Math.cos(a);
+      b.box(0.1, 0.16, 0.02, '#ffd36a', { x: nx * 0.265, y: 1.22, z: nz * 0.265, ry: a });
+      b.box(0.14, 0.03, 0.04, light, { x: nx * 0.27, y: 1.13, z: nz * 0.27, ry: a });
+      for (const along of [-0.18, 0, 0.18]) b.box(0.09, 0.09, 0.07, wall, { x: nx * 0.26 + nz * along, y: 1.45, z: nz * 0.26 - nx * along, ry: a });
+    }
+    b.box(0.56, 0.05, 0.56, light, { y: 1.41 });
+    b.cone(0.38, 0.62, 4, '#3f6fd1', { y: 1.72, ry: Math.PI / 4 });
+    b.ball(0.04, 0, GOLD, { y: 2.05 });
+    b.cyl(0.012, 0.012, 0.45, 4, WOOD_D, { y: 2.25 });
+    b.box(0.28, 0.16, 0.015, '#e84a3a', { x: 0.14, y: 2.38 });
+    b.box(0.08, 0.08, 0.02, GOLD, { x: 0.14, y: 2.38, z: 0.006 });
+    // Gatehouse: arch, portcullis, lanterns and hanging banners.
+    b.box(0.42, 0.52, 0.12, dark, { y: 0.36, z: 0.5 });
+    b.box(0.26, 0.34, 0.03, '#1a1218', { y: 0.28, z: 0.565 });
+    b.cyl(0.13, 0.13, 0.03, 10, '#1a1218', { y: 0.45, z: 0.565, rx: Math.PI / 2, sy: 1 });
+    for (let k = 0; k < 4; k++) b.box(0.015, 0.36, 0.015, '#5d6470', { x: -0.09 + k * 0.06, y: 0.3, z: 0.585 });
+    for (let k = 0; k < 3; k++) b.box(0.24, 0.015, 0.015, '#5d6470', { y: 0.18 + k * 0.1, z: 0.585 });
+    for (const sx of [-1, 1]) {
+      b.box(0.12, 0.3, 0.012, '#3f6fd1', { x: sx * 0.32, y: 0.56, z: 0.51 });
+      b.cone(0.06, 0.06, 3, '#3f6fd1', { x: sx * 0.32, y: 0.38, z: 0.51, rx: Math.PI });
+      b.box(0.05, 0.05, 0.012, GOLD, { x: sx * 0.32, y: 0.6, z: 0.518 });
+      b.ball(0.035, 0, new THREE.Color('#ffc46a').multiplyScalar(1.8), { x: sx * 0.19, y: 0.5, z: 0.6 });
+    }
+    // Steps up to the gate.
+    b.box(0.34, 0.04, 0.14, '#8f8576', { y: 0.16, z: 0.66 });
+    b.box(0.3, 0.04, 0.1, '#9a9184', { y: 0.2, z: 0.6 });
     return b.build();
   });
 }
@@ -473,31 +690,60 @@ export function propModel(type: PropType): THREE.BufferGeometry {
   return cached(`prop-${type}`, () => {
     const b = new ModelBuilder();
     switch (type) {
-      case 'tree':
-        b.cyl(0.05, 0.07, 0.3, 5, WOOD, { y: 0.15 });
-        b.ball(0.26, 0, '#5fae4a', { y: 0.45 });
-        b.ball(0.18, 0, '#6fbe55', { y: 0.65, x: 0.05 });
+      case 'tree': {
+        // Trunk with a root flare and two branches, under a lumpy crown of leaf clusters.
+        b.cyl(0.045, 0.075, 0.36, 6, WOOD, { y: 0.18 });
+        b.cyl(0.09, 0.0, 0.06, 6, WOOD_D, { y: 0.03 });
+        b.cyl(0.018, 0.028, 0.18, 4, WOOD, { x: 0.06, y: 0.36, rz: -0.7 });
+        b.cyl(0.016, 0.026, 0.16, 4, WOOD, { x: -0.05, y: 0.33, z: 0.03, rz: 0.8 });
+        const leaves = ['#4f9d3f', '#5fae4a', '#6fbe55', '#58a646'];
+        const clusters: [number, number, number, number][] = [
+          [0, 0.5, 0, 0.22], [0.13, 0.46, 0.05, 0.15], [-0.12, 0.47, -0.04, 0.15], [0.02, 0.48, 0.14, 0.14],
+          [-0.03, 0.47, -0.14, 0.14], [0.04, 0.66, 0.02, 0.16], [-0.06, 0.6, 0.08, 0.11], [0.08, 0.6, -0.08, 0.11],
+        ];
+        clusters.forEach(([x, y, z, r], k) => b.ball(r, 1, leaves[k % leaves.length], { x, y, z }));
+        b.ball(0.05, 0, '#79c95c', { x: 0.05, y: 0.76, z: 0.03 });
         break;
+      }
       case 'pine':
-        b.cyl(0.04, 0.06, 0.2, 5, WOOD_D, { y: 0.1 });
-        b.cone(0.28, 0.4, 6, '#3f7a5a', { y: 0.38 });
-        b.cone(0.21, 0.34, 6, '#4a8a68', { y: 0.6 });
-        b.cone(0.13, 0.26, 6, '#f4f8fb', { y: 0.8 });
+        b.cyl(0.035, 0.06, 0.24, 6, WOOD_D, { y: 0.12 });
+        b.cone(0.3, 0.32, 8, '#3a7254', { y: 0.32 });
+        b.cone(0.25, 0.3, 8, '#3f7a5a', { y: 0.48 });
+        b.cone(0.19, 0.27, 8, '#468462', { y: 0.63 });
+        b.cone(0.13, 0.22, 7, '#4f8f6c', { y: 0.77 });
+        // Snow on the tips of each tier.
+        b.cone(0.31, 0.06, 8, '#f4f8fb', { y: 0.2 });
+        b.cone(0.255, 0.05, 8, '#f4f8fb', { y: 0.36 });
+        b.cone(0.09, 0.12, 7, '#f4f8fb', { y: 0.86 });
         break;
       case 'rock':
-        b.dodec(0.18, '#9b958c', { y: 0.1, sy: 0.7 });
+        b.dodec(0.18, '#9b958c', { y: 0.1, sy: 0.7, ry: 0.4 });
         b.dodec(0.1, '#aaa49a', { x: 0.16, y: 0.06, z: 0.06, sy: 0.7 });
+        b.dodec(0.07, '#8d877d', { x: -0.14, y: 0.04, z: -0.08, sy: 0.6 });
+        // Moss cap.
+        b.dodec(0.12, '#6f9a4a', { y: 0.17, x: -0.02, sy: 0.25 });
         break;
       case 'cactus':
-        b.cyl(0.07, 0.08, 0.5, 6, '#4f9d4a', { y: 0.25 });
-        b.cyl(0.045, 0.05, 0.2, 6, '#4f9d4a', { x: 0.12, y: 0.32 });
-        b.cyl(0.045, 0.05, 0.08, 6, '#4f9d4a', { x: 0.08, y: 0.22, rz: Math.PI / 2 });
-        b.ball(0.04, 0, '#f07aa0', { y: 0.52 });
+        b.cyl(0.07, 0.08, 0.5, 8, '#4f9d4a', { y: 0.25 });
+        b.ball(0.07, 1, '#4f9d4a', { y: 0.5, sy: 0.6 });
+        b.cyl(0.045, 0.05, 0.2, 8, '#56a650', { x: 0.13, y: 0.33 });
+        b.ball(0.045, 1, '#56a650', { x: 0.13, y: 0.43, sy: 0.6 });
+        b.cyl(0.045, 0.05, 0.1, 8, '#4f9d4a', { x: 0.08, y: 0.22, rz: Math.PI / 2 });
+        b.cyl(0.04, 0.045, 0.14, 8, '#56a650', { x: -0.12, y: 0.27 });
+        b.cyl(0.04, 0.045, 0.08, 8, '#4f9d4a', { x: -0.08, y: 0.2, rz: Math.PI / 2 });
+        // Ribs.
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          b.box(0.012, 0.46, 0.012, '#3f8a3c', { x: Math.cos(a) * 0.075, y: 0.25, z: Math.sin(a) * 0.075 });
+        }
+        b.ball(0.04, 0, '#f07aa0', { y: 0.55 });
         break;
       case 'bush':
-        b.ball(0.16, 0, '#4f9a3f', { y: 0.1 });
-        b.ball(0.12, 0, '#5aa848', { x: 0.14, y: 0.08 });
-        b.ball(0.03, 0, '#e8463a', { x: 0.05, y: 0.22, z: 0.1 });
+        b.ball(0.16, 1, '#4f9a3f', { y: 0.1 });
+        b.ball(0.12, 1, '#5aa848', { x: 0.14, y: 0.08 });
+        b.ball(0.11, 1, '#478f39', { x: -0.12, y: 0.07, z: 0.05 });
+        b.ball(0.09, 1, '#62b24e', { x: 0.03, y: 0.2, z: -0.04 });
+        for (const [x, y, z] of [[0.05, 0.22, 0.1], [-0.1, 0.15, 0.1], [0.17, 0.15, 0.04], [-0.02, 0.12, -0.15]]) b.ball(0.028, 0, '#e8463a', { x, y, z });
         break;
       case 'flower':
         for (let i = 0; i < 3; i++) {

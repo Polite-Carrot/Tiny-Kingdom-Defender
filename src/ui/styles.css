@@ -259,13 +259,17 @@ body.landscape .rush-pill { top: calc(var(--sat) + 120px); }
 .ctx.hidden { opacity: 0; pointer-events: none; }
 body.portrait .ctx { left: calc(var(--sal) + 8px); right: calc(var(--sar) + 8px); bottom: calc(var(--sab) + 86px); }
 body.portrait .ctx.hidden { transform: translateY(30px); }
-body.landscape .ctx { right: calc(var(--sar) + 10px); top: calc(var(--sat) + 60px); width: 236px; max-height: calc(100% - 180px - var(--sat) - var(--sab)); overflow-y: auto; }
+body.landscape .ctx { right: calc(var(--sar) + 10px); top: calc(var(--sat) + 60px); width: 236px; max-height: calc(100% - 140px - var(--sat) - var(--sab)); overflow-y: auto; }
 body.landscape .ctx.hidden { transform: translateX(30px); }
 .ctx-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .ctx-head .name { font-weight: 900; font-size: 18px; flex: 1; }
 .ctx-head .x { width: 44px; height: 44px; border-radius: 50%; background: var(--paper-2); font-weight: 900; }
 .build-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-body.landscape .build-cards { grid-template-columns: 1fr 1fr; }
+body.landscape .build-cards { grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+body.landscape .build-cards .tcard { min-height: 66px; font-size: 11px; padding: 2px 1px 4px; border-radius: 12px; }
+body.landscape .build-cards .tcard img { width: 34px; height: 34px; }
+body.landscape .build-cards .tcard .cost { font-size: 12px; }
+body.landscape .build-cards .tcard .confirm { font-size: 12px; border-radius: 12px; }
 body.landscape .tstats { flex-wrap: wrap; }
 body.landscape .tstats div { flex: 1 1 40%; }
 body.landscape .ctx-row { flex-direction: column; }

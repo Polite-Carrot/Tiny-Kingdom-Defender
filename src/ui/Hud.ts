@@ -374,6 +374,11 @@ export class Hud {
     const dmgLabel = st.multishot > 1 ? `${Math.round(st.damage)}×${st.multishot}` : `${Math.round(st.damage)}`;
     let special = '';
     if (st.aura) special = `<div>Aura<small>slow ${Math.round((1 - st.slowFactor) * 100)}%</small></div>`;
+    else if (st.pierce > 0) special = `<div>${st.pierce}${delta(st.pierce, next?.pierce)}<small>PIERCE</small></div>`;
+    else if (st.dot > 0) {
+      const total = (s: TowerStats) => s.damage * s.dot * s.dotDuration;
+      special = `<div>${Math.round(total(st))}${delta(total(st), next ? total(next) : undefined)}<small>${id === 'alchemist' ? 'POISON' : 'BURN'}</small></div>`;
+    }
     else if (st.chains > 0) special = `<div>${st.chains}${delta(st.chains, next?.chains)}<small>CHAINS</small></div>`;
     else if (st.slowFactor < 1) special = `<div>${Math.round((1 - st.slowFactor) * 100)}%${delta((1 - st.slowFactor) * 100, next ? (1 - next.slowFactor) * 100 : undefined)}<small>SLOW</small></div>`;
     else if (st.splash > 0) special = `<div>${st.splash.toFixed(1)}${delta(st.splash, next?.splash, 1)}<small>SPLASH</small></div>`;

@@ -1,7 +1,7 @@
 // Tower balance data. Towers have 10 tiers; each tier is a new building material.
 // Distances are in tiles (1 tile = 1 world unit). Times are in seconds.
 
-export type TowerId = 'archer' | 'cannon' | 'frost' | 'lightning';
+export type TowerId = 'archer' | 'cannon' | 'frost' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist';
 export type DamageType = 'physical' | 'magic';
 export type TargetMode = 'first' | 'strongest' | 'closest';
 
@@ -30,6 +30,11 @@ export interface TowerStats {
   shred: number;
   /** Pulses damage+slow on all enemies in range instead of shooting. */
   aura: boolean;
+  /** Bolts fly straight through this many enemies (0 = normal homing shot). */
+  pierce: number;
+  /** Damage over time: per second, as a fraction of the hit damage, for dotDuration seconds. */
+  dot: number;
+  dotDuration: number;
 }
 
 /** How stats grow with each tier above 1. */
@@ -111,7 +116,7 @@ export const TIER_MATERIALS: TierMaterial[] = [
 
 const base = (o: Partial<TowerStats>): TowerStats => ({
   damage: 0, range: 0, cooldown: 1, splash: 0, projectileSpeed: 0, slowFactor: 1, slowDuration: 0,
-  chains: 0, chainRange: 0, multishot: 1, stun: 0, freezeChance: 0, shred: 0, aura: false, ...o,
+  chains: 0, chainRange: 0, multishot: 1, stun: 0, freezeChance: 0, shred: 0, aura: false, pierce: 0, dot: 0, dotDuration: 0, ...o,
 });
 
 export const TOWERS: Record<TowerId, TowerDef> = {
@@ -159,9 +164,53 @@ export const TOWERS: Record<TowerId, TowerDef> = {
       { id: 'tesla', name: 'Tesla Overload', description: 'Devastating bolt that stuns.', damageMult: 3.2, cooldownMult: 1.1, set: { stun: 0.8, chainRange: 1.6 } },
     ],
   },
+  mage: {
+    id: 'mage', name: 'Mage', role: 'Arcane bolts. Ignores armor.', cost: 110,
+    damageType: 'magic', hitsAir: true, hitsGround: true, color: '#9b7bff',
+    base: base({ damage: 15, range: 2.8, cooldown: 1.05, projectileSpeed: 10 }),
+    growth: { damage: 1.42, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 85,
+    branches: [
+      { id: 'archmage', name: 'Archmage', description: 'Huge arcane orbs that burst on impact.', damageMult: 2.2, cooldownMult: 1.25, set: { splash: 0.9 } },
+      { id: 'barrage', name: 'Arcane Barrage', description: 'Fires at 3 enemies at once.', damageMult: 0.9, cooldownMult: 0.8, set: { multishot: 3 } },
+    ],
+  },
+  ballista: {
+    id: 'ballista', name: 'Ballista', role: 'Long range. Bolts pierce a whole line.', cost: 140,
+    damageType: 'physical', hitsAir: true, hitsGround: true, color: '#b58a5a',
+    base: base({ damage: 22, range: 3.5, cooldown: 2.0, projectileSpeed: 18, pierce: 3 }),
+    growth: { damage: 1.42, range: 0.12, rangeMax: 1.2, cooldown: 0.97, splash: 0, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 105,
+    branches: [
+      { id: 'siege', name: 'Siege Bolt', description: 'Massive bolts that pierce everything and shred armor.', damageMult: 2.3, rangeAdd: 0.5, cooldownMult: 1.2, set: { pierce: 8, shred: 0.25, projectileSpeed: 24 } },
+      { id: 'repeater', name: 'Repeater', description: 'Rapid-fire bolts.', damageMult: 0.85, cooldownMult: 0.45 },
+    ],
+  },
+  flame: {
+    id: 'flame', name: 'Flame', role: 'Short range. Sets enemies burning.', cost: 130,
+    damageType: 'magic', hitsAir: false, hitsGround: true, color: '#ff7a2a',
+    base: base({ damage: 4, range: 2.1, cooldown: 0.45, splash: 0.5, projectileSpeed: 9, dot: 0.4, dotDuration: 2.5 }),
+    growth: { damage: 1.42, range: 0.08, rangeMax: 0.8, cooldown: 0.98, splash: 0.04, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 100,
+    branches: [
+      { id: 'inferno', name: 'Inferno', description: 'Bigger blasts that burn far longer.', damageMult: 1.4, splashAdd: 0.3, set: { dot: 0.6, dotDuration: 4 } },
+      { id: 'dragon', name: "Dragon's Breath", description: 'Long fiery reach and faster flames.', damageMult: 1.3, rangeAdd: 1.0, cooldownMult: 0.75 },
+    ],
+  },
+  alchemist: {
+    id: 'alchemist', name: 'Alchemist', role: 'Poison flasks. Melts armor over time.', cost: 125,
+    damageType: 'physical', hitsAir: false, hitsGround: true, color: '#7fd65a',
+    base: base({ damage: 6, range: 2.7, cooldown: 1.8, splash: 0.9, projectileSpeed: 6, dot: 0.9, dotDuration: 4, shred: 0.15 }),
+    growth: { damage: 1.42, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0.05, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 95,
+    branches: [
+      { id: 'plague', name: 'Plague', description: 'Huge toxic clouds and long-lasting poison.', damageMult: 1.6, splashAdd: 0.5, set: { dotDuration: 6 } },
+      { id: 'corrosive', name: 'Corrosive', description: 'Strips armor and slows.', damageMult: 1.3, set: { shred: 0.45, slowFactor: 0.75, slowDuration: 2 } },
+    ],
+  },
 };
 
-export const TOWER_ORDER: TowerId[] = ['archer', 'cannon', 'frost', 'lightning'];
+export const TOWER_ORDER: TowerId[] = ['archer', 'cannon', 'frost', 'mage', 'ballista', 'lightning', 'flame', 'alchemist'];
 
 export const TOWER_RULES = {
   sellRefund: 0.7,

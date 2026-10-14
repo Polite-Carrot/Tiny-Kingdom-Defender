@@ -5,7 +5,8 @@ import { THEMES } from '../data/themes';
 export type SfxName =
   | 'arrow' | 'cannon' | 'frost' | 'lightning' | 'hit' | 'death' | 'bossDeath' | 'leak' | 'coin' | 'build' | 'upgrade'
   | 'sell' | 'click' | 'waveStart' | 'waveClear' | 'victory' | 'defeat' | 'arrowRain' | 'meteor' | 'taunt' | 'heal'
-  | 'bossRoar' | 'error' | 'chest' | 'reward' | 'select' | 'heroHit' | 'immune' | 'star' | 'aura';
+  | 'bossRoar' | 'error' | 'chest' | 'reward' | 'select' | 'heroHit' | 'immune' | 'star' | 'aura'
+  | 'arcane' | 'ballista' | 'flame' | 'poison';
 
 export type MusicTrack = 'menu' | 'meadow' | 'desert' | 'snow' | 'volcano' | 'none';
 
@@ -138,7 +139,7 @@ export class AudioSystem {
     if (!this.ctx || this.ctx.state !== 'running' || this.sfxVol <= 0) return;
     // Throttle identical sounds so big fights don't clip.
     const now = this.ctx.currentTime;
-    const minGap = name === 'hit' || name === 'arrow' ? 0.05 : name === 'death' || name === 'coin' ? 0.04 : 0.02;
+    const minGap = name === 'hit' || name === 'arrow' ? 0.05 : name === 'flame' ? 0.12 : name === 'death' || name === 'coin' ? 0.04 : 0.02;
     if (now - (this.last.get(name) ?? -1) < minGap) return;
     this.last.set(name, now);
     const v = intensity;
@@ -157,6 +158,21 @@ export class AudioSystem {
       case 'lightning':
         this.noiseHit(0.22, 0.35 * v, 5000, 'highpass');
         this.tone(220, 0.18, 'sawtooth', 0.12 * v, { slide: 60, filter: 2400 });
+        break;
+      case 'arcane':
+        this.tone(520, 0.2, 'sine', 0.12 * v, { slide: 1040 });
+        this.tone(780, 0.25, 'triangle', 0.06 * v, { delay: 0.04, slide: 1560 });
+        break;
+      case 'ballista':
+        this.tone(160, 0.12, 'triangle', 0.25 * v, { slide: 70 });
+        this.noiseHit(0.16, 0.3 * v, 1400, 'bandpass', { slide: 500, q: 1.5 });
+        break;
+      case 'flame':
+        this.noiseHit(0.25, 0.18 * v, 700, 'lowpass', { slide: 1800 });
+        break;
+      case 'poison':
+        this.tone(300, 0.12, 'sine', 0.1 * v, { slide: 600 });
+        this.tone(460, 0.1, 'sine', 0.07 * v, { delay: 0.08, slide: 820 });
         break;
       case 'hit':
         this.noiseHit(0.05, 0.12 * v, 1800, 'bandpass', { q: 1 });

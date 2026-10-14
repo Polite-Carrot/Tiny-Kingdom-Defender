@@ -7,6 +7,7 @@ import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
 import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
 import { Particles, Rings, Bolts } from '../systems/Effects';
 import { Scenery } from '../systems/Scenery';
+import { Grass, type BladeSpot } from '../systems/Grass';
 import type { AudioSystem } from '../systems/Audio';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { GRID_SIZE, ROADS } from '../data/base';
@@ -44,6 +45,10 @@ const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
+/** Glowing projectile tints (values above 1 bloom). */
+const PROJ_COLORS: Partial<Record<ProjectileKind, number[]>> = {
+  frost: [0.7, 0.95, 1.4], heroBolt: [1.3, 0.6, 1.5], arcane: [1.2, 0.75, 1.8], fire: [1.9, 0.9, 0.25], poison: [0.6, 1.6, 0.35],
+};
 const _s = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -83,6 +88,7 @@ export class BattleView {
   private boardDisposables: { dispose(): void }[] = [];
   private overgrowth: THREE.Mesh | null = null;
   private scenery: Scenery | null = null;
+  private grass: Grass | null = null;
   private castleColor: string;
   private roadCells: Map<number, number>;
   private padColor = new THREE.Color();
@@ -156,6 +162,8 @@ export class BattleView {
   private buildBoard(): void {
     for (const d of this.boardDisposables) d.dispose();
     this.scenery?.dispose();
+    this.grass?.dispose();
+    this.grass = null;
     this.boardDisposables = [];
     this.board.clear();
     this.overgrowth = null;
@@ -174,6 +182,11 @@ export class BattleView {
     const grassAlt = new THREE.Color(t.grassAlt);
     const pathCol = new THREE.Color(t.path);
     const tmp = new THREE.Color();
+    // Swaying grass blades on open ground (not on pads), thick in the meadows, sparse elsewhere.
+    const blades: BladeSpot[] = [];
+    const padTiles = new Set(map.buildSpots.map((sp) => sp.row * 64 + sp.col));
+    const bladesPerTile = this.renderer.quality === 'high' ? ({ meadow: 22, desert: 5, snow: 4, volcano: 3 } as const)[t.id] : 0;
+    const bladeBase = new THREE.Color(t.id === 'desert' ? '#c9b26a' : t.id === 'snow' ? '#a9c2a0' : t.id === 'volcano' ? '#8a7a5a' : t.grass);
     for (let r = -1; r <= GRID_SIZE; r++) {
       for (let c = -1; c <= GRID_SIZE; c++) {
         const x = tileToWorld(c);
@@ -188,7 +201,22 @@ export class BattleView {
         if (road !== undefined && ROADS[road].openWave <= wave) {
           tmp.copy(pathCol).multiplyScalar(0.96 + rnd(i) * 0.08);
           b.box(1, 0.12, 1, tmp.getStyle(), { x, y: -0.1, z });
-          if (rnd(i) > 0.6) b.box(0.12, 0.04, 0.1, t.pathEdge, { x: x + (rnd(i + 3) - 0.5) * 0.6, y: -0.03, z: z + (rnd(i + 5) - 0.5) * 0.6, ry: rnd(i) * 3 });
+          if (t.id === 'desert') {
+            // Sandy track: a few loose stones and ruts.
+            if (rnd(i) > 0.6) b.box(0.12, 0.04, 0.1, t.pathEdge, { x: x + (rnd(i + 3) - 0.5) * 0.6, y: -0.03, z: z + (rnd(i + 5) - 0.5) * 0.6, ry: rnd(i) * 3 });
+          } else {
+            // Cobbles: a jittered 3×3 grid of rounded stones, a few missing or worn.
+            for (let gy = 0; gy < 3; gy++) {
+              for (let gx = 0; gx < 3; gx++) {
+                const ci = i * 13 + gy * 3 + gx;
+                if (rnd(ci + 0.5) < 0.12) continue;
+                const off = gy % 2 ? 0.08 : -0.04;
+                tmp.copy(pathCol).lerp(new THREE.Color(t.pathEdge), 0.15 + rnd(ci + 1.5) * 0.45).multiplyScalar(0.92 + rnd(ci + 2.5) * 0.16);
+                b.box(0.26 + rnd(ci + 3.5) * 0.04, 0.05, 0.25 + rnd(ci + 4.5) * 0.04, tmp.getStyle(),
+                  { x: x - 0.31 + gx * 0.31 + off + (rnd(ci + 5.5) - 0.5) * 0.03, y: -0.035, z: z - 0.31 + gy * 0.31 + (rnd(ci + 6.5) - 0.5) * 0.03, ry: (rnd(ci + 7.5) - 0.5) * 0.2 });
+              }
+            }
+          }
           // Kerb stones where the road meets grass.
           for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             if (isOpenRoad(c + dc, r + dr) || c + dc < -1 || r + dr < -1 || c + dc > GRID_SIZE || r + dr > GRID_SIZE) continue;
@@ -211,6 +239,15 @@ export class BattleView {
           if (!inside) tmp.multiplyScalar(0.92);
           const h = 0.2 + rnd(i + 11) * 0.025;
           b.box(1, h, 1, tmp.getStyle(), { x, y: -0.12 + h / 2 - 0.04, z });
+          if (!padTiles.has(r * 64 + c)) {
+            for (let k = 0; k < bladesPerTile; k++) {
+              const u = rnd(i * 7.3 + k * 1.91), v = rnd(i * 3.7 + k * 2.63 + 9);
+              blades.push({
+                x: x + (u - 0.5) * 0.96, y: -0.16 + h, z: z + (v - 0.5) * 0.96, h: 0.6 + rnd(i + k * 5.1) * 0.8,
+                color: bladeBase.clone().multiplyScalar(0.85 + rnd(i + k * 3.3) * 0.35),
+              });
+            }
+          }
           // Grass tufts, flowers or pebbles depending on the Age.
           const tuftCol = new THREE.Color(t.grassAlt).multiplyScalar(t.id === 'snow' ? 0.93 : 0.82);
           const tufts = rnd(i + 21) > 0.35 ? 1 + Math.floor(rnd(i + 22) * 3) : 0;
@@ -233,6 +270,10 @@ export class BattleView {
     const board = new THREE.Mesh(this.boardTrack(b.build()), this.material);
     board.receiveShadow = true;
     this.board.add(board);
+    if (blades.length) {
+      this.grass = new Grass(blades, t.id === 'meadow' ? 1 : 0.6);
+      this.board.add(this.grass.mesh);
+    }
 
     // The world around the board: island, sea, mountains, sky, clouds, particles.
     this.scenery?.dispose();
@@ -442,6 +483,18 @@ export class BattleView {
           this.particles.burst(tower.x + Math.sin(a) * 0.45, 0.9, tower.z + Math.cos(a) * 0.45, '#d8d8d8', 5, { speed: 0.8, up: 1, size: 0.12, gravity: -1, life: 0.5 });
         }
       } else if (id === 'frost') this.audio.play('frost');
+      else if (id === 'mage') this.audio.play('arcane');
+      else if (id === 'ballista') this.audio.play('ballista');
+      else if (id === 'flame') {
+        this.audio.play('flame');
+        if (target) {
+          // A gout of flame from the nozzle.
+          const a = tower.aim;
+          const v2 = this.towerViews.get(tower.id);
+          const hy = (v2?.headY ?? 0.8) + 0.12;
+          this.particles.burst(tower.x + Math.sin(a) * 0.45, hy, tower.z + Math.cos(a) * 0.45, '#ff8a2a', 4, { speed: 1.2, up: 0.6, size: 0.1, gravity: -0.6, life: 0.35 });
+        }
+      } else if (id === 'alchemist') this.audio.play('poison');
     });
     on('lightning', ({ points }) => {
       this.bolts.spawn(points, '#c8a6ff');
@@ -456,6 +509,20 @@ export class BattleView {
         this.rig.shake(0.13);
       } else if (p.kind === 'frost') {
         this.particles.burst(x, 0.4, z, '#bfeaff', 6, { speed: 1.5, up: 1.5, size: 0.06, life: 0.4 });
+      } else if (p.kind === 'fire') {
+        this.particles.burst(x, 0.2, z, '#ff7a1a', 8, { speed: 1.8, up: 2, size: 0.1, gravity: -0.8, life: 0.45 });
+        this.particles.burst(x, 0.2, z, '#ffd36a', 4, { speed: 1, up: 2.5, size: 0.06, gravity: -1, life: 0.35 });
+        this.rings.spawn(x, z, p.splash, '#ff9a3a', 0.25);
+      } else if (p.kind === 'poison') {
+        this.particles.burst(x, 0.15, z, '#7fd65a', 14, { speed: 1.2, up: 0.8, size: 0.16, gravity: -0.15, life: 1.1 });
+        this.particles.burst(x, 0.15, z, '#c8ff9a', 6, { speed: 0.6, up: 1.4, size: 0.07, gravity: -0.3, life: 0.8 });
+        this.rings.spawn(x, z, p.splash, '#8be05a', 0.6);
+        this.audio.play('poison', 0.5);
+      } else if (p.kind === 'arcane') {
+        this.particles.burst(x, 0.45, z, '#c8a6ff', p.splash > 0 ? 14 : 6, { speed: 1.8, up: 1.5, size: 0.07, life: 0.4 });
+        if (p.splash > 0) this.rings.spawn(x, z, p.splash, '#b48cf0', 0.35);
+      } else if (p.kind === 'bolt') {
+        this.particles.burst(x, 0.35, z, '#c9a66b', 4, { speed: 1.6, up: 1.2, size: 0.05, life: 0.3 });
       } else if (p.kind === 'champion') {
         this.particles.burst(x, 0.4, z, '#ffd84a', 8, { speed: 2, up: 2, size: 0.07, life: 0.4 });
         this.rings.spawn(x, z, p.splash, '#ffd84a', 0.3);
@@ -710,6 +777,11 @@ export class BattleView {
         y += bob * 0.05 * sc;
         rz = Math.sin(this.time * 9 * Math.max(0.6, speed) + e.phase) * 0.08;
       }
+      if (e.alive && e.dotTimer > 0 && Math.random() < dt * 9) {
+        const burn = e.dotKind === 'burn';
+        this.particles.burst(e.x + (Math.random() - 0.5) * 0.2 * sc, y + 0.3 * sc, e.z + (Math.random() - 0.5) * 0.2 * sc, burn ? (Math.random() < 0.5 ? '#ff7a1a' : '#ffd36a') : '#8be05a', 1,
+          { speed: 0.2, up: burn ? 1.4 : 0.6, size: burn ? 0.08 : 0.07, gravity: burn ? -1 : -0.3, life: burn ? 0.4 : 0.7 });
+      }
       _e.set(rx, yaw, rz, 'YXZ');
       _q.setFromEuler(_e);
       _p.set(e.x, y, e.z);
@@ -833,6 +905,7 @@ export class BattleView {
     if (this.spotMarker.visible) this.spotMarker.scale.setScalar(1 + Math.sin(this.time * 6) * 0.08);
 
     this.scenery?.update(dt);
+    this.grass?.update(this.time);
     this.particles.update(dt);
     this.rings.update(dt);
     this.bolts.update(dt);
@@ -846,14 +919,15 @@ export class BattleView {
       if (!p.active) continue;
       const kind: ProjectileKind = p.kind;
       _p.set(p.x, p.y, p.z);
-      if (kind === 'arrow' || kind === 'heroArrow') {
+      if (kind === 'arrow' || kind === 'heroArrow' || kind === 'bolt') {
         if (na >= 128) continue;
         const dx = p.tx - p.x, dz = p.tz - p.z;
         _e.set(0, Math.atan2(dx, dz), 0);
         _q.setFromEuler(_e);
-        _m.compose(_p, _q, _s.set(1, 1, kind === 'heroArrow' ? 1.2 : 1));
+        if (kind === 'bolt') _m.compose(_p, _q, _s.set(1.8, 1.8, 2.2));
+        else _m.compose(_p, _q, _s.set(1, 1, kind === 'heroArrow' ? 1.2 : 1));
         this.projArrow.setMatrixAt(na, _m);
-        const col = kind === 'heroArrow' ? [0.6, 1, 0.5] : [1, 0.95, 0.8];
+        const col = kind === 'heroArrow' ? [0.6, 1, 0.5] : kind === 'bolt' ? [0.75, 0.6, 0.45] : [1, 0.95, 0.8];
         ca[na * 3] = col[0]; ca[na * 3 + 1] = col[1]; ca[na * 3 + 2] = col[2];
         na++;
       } else if (kind === 'cannon') {
@@ -862,12 +936,15 @@ export class BattleView {
         this.projBall.setMatrixAt(nb++, _m);
       } else {
         if (ng >= 96) continue;
-        const s = kind === 'champion' ? 1.6 : kind === 'heroBolt' ? 1.3 : 1;
+        const s = kind === 'champion' ? 1.6 : kind === 'heroBolt' ? 1.3 : kind === 'fire' ? 1.25 : kind === 'poison' ? 1.15 : kind === 'arcane' && p.splash > 0 ? 1.5 : 1;
         _e.set(this.time * 8, this.time * 6, 0);
         _q.setFromEuler(_e);
         _m.compose(_p, _q, _s.setScalar(s));
         this.projGlow.setMatrixAt(ng, _m);
-        const col = kind === 'frost' ? [0.7, 0.95, 1.4] : kind === 'heroBolt' ? [1.3, 0.6, 1.5] : [1.5, 1.2, 0.4];
+        const col = PROJ_COLORS[kind] ?? [1.5, 1.2, 0.4];
+        if (kind === 'fire' && Math.random() < 0.7) this.particles.burst(p.x, p.y, p.z, Math.random() < 0.5 ? '#ff7a1a' : '#ffb347', 1, { speed: 0.2, up: 0.5, size: 0.08, gravity: -0.5, life: 0.25, spread: 0 });
+        else if (kind === 'poison' && Math.random() < 0.4) this.particles.burst(p.x, p.y, p.z, '#8be05a', 1, { speed: 0.1, up: 0.2, size: 0.05, gravity: 0.5, life: 0.3, spread: 0 });
+        else if (kind === 'arcane' && Math.random() < 0.5) this.particles.burst(p.x, p.y, p.z, '#c8a6ff', 1, { speed: 0.1, up: 0.1, size: 0.05, gravity: 0, life: 0.3, spread: 0 });
         cg[ng * 3] = col[0]; cg[ng * 3 + 1] = col[1]; cg[ng * 3 + 2] = col[2];
         ng++;
       }
@@ -905,6 +982,10 @@ export class BattleView {
       if (t.def.id === 'frost') {
         v.head.rotation.y += dt * 1.2;
         v.head.position.y = v.headY + Math.sin(this.time * 2 + t.id) * 0.04;
+      } else if (t.def.id === 'mage') {
+        v.head.rotation.y += dt * 1.6;
+        v.head.position.y = v.headY + Math.sin(this.time * 2.4 + t.id) * 0.05;
+        v.head.scale.setScalar(1 + v.recoil * 0.25);
       } else if (t.def.id === 'lightning') {
         v.head.rotation.y += dt * 2;
         const pulse = 1 + v.recoil * 0.3;
@@ -930,6 +1011,7 @@ export class BattleView {
     for (const d of this.disposables) d.dispose();
     for (const d of this.boardDisposables) d.dispose();
     this.scenery?.dispose();
+    this.grass?.dispose();
     this.overgrowth?.geometry.dispose();
     for (const m of this.enemyMeshes.values()) m.dispose();
     this.particles.dispose();

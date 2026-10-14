@@ -16,7 +16,7 @@ import { siegeWave, waveCoins, checkpointCoins, ageTitle, hpMultFor } from '../s
 import { waveSummary } from '../src/game/WaveComposer';
 import { META_UPGRADES, TOWER_META, UNLOCKS, metaCost } from '../src/data/economy';
 import { TOWER_UNLOCK_WAVE, SIEGE } from '../src/data/base';
-import { materialFor, type TowerId } from '../src/data/towers';
+import { materialFor, TOWER_ORDER, type TowerId } from '../src/data/towers';
 
 const args = process.argv.slice(2);
 const arg = (name: string, def: string) => {
@@ -34,7 +34,7 @@ interface MetaState {
   coins: number;
 }
 
-const freshMeta = (): MetaState => ({ towers: { archer: 0, cannon: 0, frost: 0, lightning: 0 }, castleHp: 0, warChest: 0, heroPower: 0, lightning: false, coins: 0 });
+const freshMeta = (): MetaState => ({ towers: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 }, castleHp: 0, warChest: 0, heroPower: 0, lightning: false, coins: 0 });
 
 function bonuses(m: MetaState): MetaBonuses {
   return {
@@ -47,7 +47,7 @@ function bonuses(m: MetaState): MetaBonuses {
 }
 
 function towersFor(m: MetaState, bestWave: number): TowerId[] {
-  return (['archer', 'cannon', 'frost', 'lightning'] as TowerId[]).filter((t) => (t !== 'lightning' || m.lightning) && TOWER_UNLOCK_WAVE[t] <= bestWave);
+  return TOWER_ORDER.filter((t) => (t !== 'lightning' || m.lightning) && TOWER_UNLOCK_WAVE[t] <= bestWave);
 }
 
 /** Greedy "typical player" spending: cheapest permanent upgrade first. */
@@ -59,7 +59,7 @@ function spend(m: MetaState, bestWave: number): void {
       continue;
     }
     const opts: { cost: number; buy: () => void }[] = [];
-    for (const t of ['archer', 'cannon', 'frost', 'lightning'] as const) {
+    for (const t of TOWER_ORDER) {
       if (t === 'lightning' && !m.lightning) continue;
       if (m.towers[t] < TOWER_META.maxLevel) opts.push({ cost: metaCost(TOWER_META.baseCost, m.towers[t]), buy: () => m.towers[t]++ });
     }
@@ -150,7 +150,7 @@ function career(hours: number, seed: number, spendCoins: boolean, coinsPerHour: 
 function push(seed: number, metaLevel: number): { wave: number; time: number } {
   const m = freshMeta();
   m.lightning = metaLevel > 0;
-  for (const k of ['archer', 'cannon', 'frost', 'lightning'] as const) m.towers[k] = metaLevel;
+  for (const k of TOWER_ORDER) m.towers[k] = metaLevel;
   m.castleHp = m.warChest = m.heroPower = Math.min(15, metaLevel);
   const run = new Run({ snapshot: newKingdom(), meta: bonuses(m), availableTowers: towersFor(m, 999), seed });
   const ai = new AutoPlayer(run, seed * 31 + 7);

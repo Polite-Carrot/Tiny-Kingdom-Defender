@@ -9,7 +9,7 @@ import {
 import { MISSION_POOL, MISSIONS_PER_DAY, type MissionDef, type MissionStat } from '../data/missions';
 import { TOWER_UNLOCK_WAVE, UNLOCK_WAVE } from '../data/base';
 import { HEROES, type HeroId } from '../data/heroes';
-import type { TowerId } from '../data/towers';
+import { TOWER_ORDER, type TowerId } from '../data/towers';
 import { Random, hashString } from '../core/Random';
 import { checkpointCoins, waveCoins } from './Siege';
 import type { MetaBonuses } from './Run';
@@ -73,7 +73,7 @@ export class Meta {
 
   /** Tower types usable now (unlock waves + Lightning purchase). */
   towersAvailable(): TowerId[] {
-    return (['archer', 'cannon', 'frost', 'lightning'] as TowerId[]).filter((t) => {
+    return TOWER_ORDER.filter((t) => {
       if (t === 'lightning' && !this.d.unlocks.lightning) return false;
       return TOWER_UNLOCK_WAVE[t] <= this.bestWave();
     });
@@ -211,7 +211,7 @@ export class Meta {
   /** Cheapest affordable meta purchase exists (for red dots). */
   hasAffordableUpgrade(): boolean {
     const c = this.d.coins;
-    for (const t of ['archer', 'cannon', 'frost', 'lightning'] as TowerId[]) {
+    for (const t of TOWER_ORDER) {
       if (t === 'lightning' && !this.d.unlocks.lightning) continue;
       const cost = this.towerUpgradeCost(t);
       if (cost !== null && cost <= c) return true;

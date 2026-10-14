@@ -4,8 +4,8 @@ import { evaluateInterstitial, type InterstitialState } from '../src/ads/AdManag
 import { metaCost } from '../src/data/economy';
 import { Run, newKingdom, type MetaBonuses } from '../src/game/Run';
 import { Meta } from '../src/game/Meta';
-import { siegeWave, openRoads, ageOf, kingdomMap, clearLandCost, initialSpots, checkpointCoins } from '../src/game/Siege';
-import { ROADS, LAND, WAVE_COMPOSER } from '../src/data/base';
+import { siegeWave, openRoads, ageOf, checkpointOf, kingdomMap, clearLandCost, initialSpots, checkpointCoins } from '../src/game/Siege';
+import { ROADS, LAND, WAVE_COMPOSER, SIEGE } from '../src/data/base';
 import { TOWERS, towerStats, upgradeCost, levelName, MAX_TIER, MAX_LEVEL } from '../src/data/towers';
 import type { Analytics } from '../src/analytics/Analytics';
 
@@ -15,7 +15,7 @@ function mem(init: Record<string, string> = {}): StorageLike & { m: Map<string, 
 }
 
 const nullAnalytics: Analytics = { track: () => {}, sessionEvents: () => [] };
-const noMeta: MetaBonuses = { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0 }, castleHpBonus: 0, goldBonus: 0, heroPower: 0, heroId: null };
+const noMeta: MetaBonuses = { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 }, castleHpBonus: 0, goldBonus: 0, heroPower: 0, heroId: null };
 
 describe('save system', () => {
   it('migrates a v1 save all the way to the current version', () => {
@@ -159,7 +159,15 @@ describe('kingdom siege', () => {
     expect(openRoads(ROADS[1].openWave)).toEqual([0, 1]);
     expect(openRoads(ROADS[2].openWave)).toEqual([0, 1, 2]);
     expect(ageOf(0)).toBe(0);
-    expect(ageOf(25)).toBe(1);
+    expect(ageOf(SIEGE.ageEvery - 1)).toBe(0);
+    expect(ageOf(SIEGE.ageEvery)).toBe(1);
+  });
+
+  it('every new Age starts on a checkpoint, so a fall never drops you back an Age', () => {
+    expect(SIEGE.ageEvery % SIEGE.checkpointEvery).toBe(0);
+    for (let w = 0; w < 200; w++) expect(ageOf(checkpointOf(w))).toBe(ageOf(w));
+    // New roads open as an Age begins.
+    for (const r of ROADS) expect(r.openWave % SIEGE.ageEvery).toBe(0);
   });
 
   it('waves are deterministic, endless, and capped in enemy count', () => {
@@ -204,6 +212,42 @@ describe('kingdom siege', () => {
     expect(run.gold).toBeGreaterThanOrEqual(gold);
     expect(run.castleHp).toBe(run.castleMaxHp);
     expect(run.state).toBe('prep');
+  });
+
+  it('ballista bolts pierce through a line of enemies', () => {
+    const snap = newKingdom();
+    snap.gold = 10000;
+    const run = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['ballista'] });
+    // Three enemies bunched together on the road, next to an unlocked pad.
+    const spot = run.map.buildSpots.find((s) => run.isSpotUnlocked(s.index))!;
+    let best = 0, bestD = Infinity;
+    for (let d = 0; d < 30; d += 0.1) {
+      const pt = run.map.pointAt(0, d, { x: 0, z: 0, dx: 0, dz: 0 });
+      const dd = Math.hypot(pt.x - spot.x, pt.z - spot.z);
+      if (dd < bestD) { bestD = dd; best = d; }
+    }
+    const foes = [0, 0.15, 0.3].map((o) => run.spawnEnemy('knight', 0, best + o, 0, 50));
+    for (const e of foes) e.lane = 0;
+    run.state = 'playing';
+    expect(run.build(spot.index, 'ballista')).not.toBeNull();
+    for (let i = 0; i < 30 && foes.some((e) => e.hp === e.maxHp); i++) run.update(1 / 30);
+    expect(foes.every((e) => e.hp < e.maxHp)).toBe(true);
+  });
+
+  it('burning and poison keep dealing damage over time', () => {
+    const run = new Run({ snapshot: newKingdom(), meta: noMeta, availableTowers: ['flame'] });
+    const e = run.spawnEnemy('grunt', 0, 0, 0, 100);
+    run.state = 'playing';
+    (run as unknown as { applyDot: (...a: unknown[]) => void }).applyDot(e, 20, 2, 'magic', 'burn', -1);
+    const hp0 = e.hp;
+    // Ticks every 0.5 s: two ticks in just over a second.
+    for (let i = 0; i < 35; i++) run.update(1 / 30);
+    expect(hp0 - e.hp).toBeGreaterThan(15);
+    for (let i = 0; i < 60; i++) run.update(1 / 30);
+    expect(e.dotTimer).toBeLessThanOrEqual(0);
+    const after = e.hp;
+    for (let i = 0; i < 30; i++) run.update(1 / 30);
+    expect(e.hp).toBe(after);
   });
 
   it('sell refunds 70% of the investment', () => {

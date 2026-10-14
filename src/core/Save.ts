@@ -64,7 +64,7 @@ export function defaultSave(now = Date.now()): SaveData {
     shards: 0,
     base: null,
     progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0 },
-    towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0 },
+    towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 },
     meta: { castleHp: 0, warChest: 0, heroPower: 0 },
     unlocks: { lightning: false, heroes: ['ranger'] },
     selectedHero: 'ranger',
