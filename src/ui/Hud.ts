@@ -8,6 +8,8 @@ import { TOWER_UNLOCK_WAVE } from '../data/base';
 import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf } from '../data/towers';
 import { ageTitle } from '../game/Siege';
 import { waveSummary } from '../game/WaveComposer';
+import { xpForLevel, HERO_LEVELS } from '../data/heroes';
+import { SYNERGIES, SYNERGY_BY_ID } from '../data/synergies';
 import type { Run, Tower } from '../game/Run';
 
 export interface HudCallbacks {
@@ -23,6 +25,9 @@ export interface HudCallbacks {
   targetMode(mode: TargetMode): void;
   closeCtx(): void;
   clearLand(): void;
+  buildWall(): void;
+  repairWall(): void;
+  removeWall(): void;
   shop(): void;
 }
 
@@ -48,7 +53,8 @@ export class Hud {
   private vignette: HTMLElement;
   private fpsEl: HTMLElement;
   private run: Run | null = null;
-  private ctxMode: 'none' | 'build' | 'tower' | 'land' = 'none';
+  private ctxMode: 'none' | 'build' | 'tower' | 'land' | 'wall' = 'none';
+  private ctxTile: [number, number] = [0, 0];
   private ctxSpot = -1;
   private ctxTower: Tower | null = null;
   private previewId: TowerId | null = null;
@@ -71,7 +77,7 @@ export class Hud {
         <button class="btn icon blue pause-btn" aria-label="Pause">${icon('pause')}</button>
       </div>
       <div class="hud-hero">
-        <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
+        <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div><span class="hlvl">1</span><i class="hxp"><b></b></i></button>
         <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
       </div>
       <div class="rush-pill" style="display:none"></div>
@@ -130,6 +136,14 @@ export class Hud {
   setSpeed(s: number): void {
     this.speedBtn.textContent = `${s}x`;
     this.speedBtn.classList.toggle('fast', s > 1);
+  }
+
+  /** Level badge and XP bar on the hero button. */
+  setHeroLevel(level: number, xp: number): void {
+    $(this.heroBtn, '.hlvl').textContent = String(level);
+    const lo = xpForLevel(level), hi = xpForLevel(level + 1);
+    const frac = level >= HERO_LEVELS.max ? 1 : Math.max(0, Math.min(1, (xp - lo) / Math.max(1, hi - lo)));
+    ($(this.heroBtn, '.hxp b') as HTMLElement).style.width = `${Math.round(frac * 100)}%`;
   }
 
   setHeroSelected(on: boolean): void {
@@ -238,8 +252,10 @@ export class Hud {
         ? TOWER_ORDER.map((id) => (run.gold >= TOWERS[id].cost ? 1 : 0)).join('') + run.config.availableTowers.join()
         : this.ctxMode === 'land'
           ? String(run.gold >= run.clearLandCost())
+          : this.ctxMode === 'wall'
+            ? this.wallKey()
           : String(t && run.gold >= (run.upgradeCost(t) ?? Infinity));
-      const ctxKey = `${this.ctxMode}|${performance.now() < this.sellArmedUntil}|${afford}|${t?.tier}|${t?.branch}|${t?.targetMode}|${this.previewId}`;
+      const ctxKey = `${this.ctxMode}|${performance.now() < this.sellArmedUntil}|${afford}|${t?.tier}|${t?.branch}|${t?.targetMode}|${t?.synergies.join()}|${this.previewId}`;
       if (t) {
         const k = this.ctx.querySelector('.kills');
         if (k) k.textContent = `☠ ${t.kills}`;
@@ -248,6 +264,7 @@ export class Hud {
         this.lastCtxKey = ctxKey;
         if (this.ctxMode === 'build') this.renderBuild();
         else if (this.ctxMode === 'land') this.renderLand();
+        else if (this.ctxMode === 'wall') this.renderWall();
         else this.renderTower();
       }
     }
@@ -292,6 +309,54 @@ export class Hud {
     this.renderLand();
   }
 
+  openWall(col: number, row: number): void {
+    this.ctxMode = 'wall';
+    this.ctxTile = [col, row];
+    this.ctxSpot = -1;
+    this.ctxTower = null;
+    this.lastCtxKey = '';
+    this.ctx.classList.remove('hidden');
+    this.renderWall();
+  }
+
+  get wallTile(): [number, number] {
+    return this.ctxTile;
+  }
+
+  private wallKey(): string {
+    const run = this.run!;
+    const b = run.barricadeAt(this.ctxTile[0], this.ctxTile[1]);
+    return b ? `b${Math.ceil((b.hp / b.maxHp) * 20)}|${run.gold >= run.repairCost(b)}` : `n${run.gold >= run.barricadeCost()}|${run.barricades.length}`;
+  }
+
+  private renderWall(): void {
+    const run = this.run!;
+    const [c, r] = this.ctxTile;
+    const b = run.barricadeAt(c, r);
+    if (b) {
+      const frac = Math.max(0, b.hp / b.maxHp);
+      const repair = run.repairCost(b);
+      this.ctx.innerHTML = `
+        <div class="ctx-head"><span class="name">Barricade</span><button class="x" aria-label="Close">✕</button></div>
+        <div class="wall-hp"><i style="width:${Math.round(frac * 100)}%"></i><span>${Math.ceil(b.hp)} / ${Math.round(b.maxHp)}</span></div>
+        <div class="ctx-row">
+          <button class="btn repair-btn ${repair <= 0 || run.gold < repair ? 'disabled' : ''}">${repair > 0 ? `Repair <span class="cost">${icon('coin')}${repair}</span>` : 'Full strength'}</button>
+          <button class="btn red small remove-btn">Remove</button>
+        </div>`;
+      $(this.ctx, '.repair-btn').onclick = () => this.cb.repairWall();
+      $(this.ctx, '.remove-btn').onclick = () => this.cb.removeWall();
+    } else {
+      const cost = run.barricadeCost();
+      const full = run.barricades.length >= run.barricadeLimit();
+      this.ctx.innerHTML = `
+        <div class="ctx-head"><span class="name">Barricade</span><button class="x" aria-label="Close">✕</button></div>
+        <div class="ctx-info" style="margin:0 0 8px">Blocks the road. Enemies stop to smash through it while your towers pound them. Flyers go over; burrowers go under. ${run.barricades.length}/${run.barricadeLimit()} built (one more per Age).</div>
+        <div class="ctx-row"><button class="btn wall-btn ${full || run.gold < cost ? 'disabled' : ''}">${full ? 'Limit reached' : `Build barricade <span class="cost">${icon('coin')}${cost}</span>`}</button></div>`;
+      $(this.ctx, '.wall-btn').onclick = () => this.cb.buildWall();
+    }
+    $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
+  }
+
   private renderLand(): void {
     const run = this.run!;
     const cost = run.clearLandCost();
@@ -326,7 +391,7 @@ export class Hud {
     return this.ctxSpot;
   }
 
-  get mode(): 'none' | 'build' | 'tower' | 'land' {
+  get mode(): 'none' | 'build' | 'tower' | 'land' | 'wall' {
     return this.ctxMode;
   }
 
@@ -391,6 +456,19 @@ export class Hud {
     </div>`;
   }
 
+  /** Active synergies, and hints for the ones this tower could form. */
+  private synergyBlock(t: Tower): string {
+    const active = t.synergies.map((id) => SYNERGY_BY_ID[id]);
+    const possible = SYNERGIES.filter((s) => s.towers.includes(t.def.id) && !t.synergies.includes(s.id));
+    if (!active.length && !possible.length) return '';
+    const chips = active.map((s) => `<span class="syn on" style="--sc:${s.color}" title="${s.description}">⚡ ${s.name}</span>`).join('');
+    const hints = possible.map((s) => {
+      const other = s.towers[0] === t.def.id ? s.towers[1] : s.towers[0];
+      return `<span class="syn" style="--sc:${s.color}" title="${s.description}">+ ${TOWERS[other].name} → ${s.name}</span>`;
+    }).join('');
+    return `<div class="syns">${chips}${hints}</div>`;
+  }
+
   private renderTower(): void {
     const run = this.run!;
     const t = this.ctxTower!;
@@ -418,6 +496,7 @@ export class Hud {
         <span class="name">${title}<div class="tier-pips small">${pips}</div></span>
         <span class="muted kills">☠ ${t.kills}</span><button class="x" aria-label="Close">✕</button></div>
       ${this.statsBlock(t.stats, next, def.id)}
+      ${this.synergyBlock(t)}
       ${showTargets ? `<div class="seg targets">${modes.map((m) => `<button data-mode="${m}" class="${t.targetMode === m ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>` : ''}
       <div class="ctx-row">${upgrade}</div>
       <div class="ctx-row" style="margin-top:6px"><button class="btn red small sell-btn">Sell <span class="cost">${icon('coin')}${run.sellValue(t)}</span></button></div>`;

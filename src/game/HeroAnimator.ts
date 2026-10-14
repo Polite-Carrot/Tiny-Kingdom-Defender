@@ -53,10 +53,10 @@ export class HeroAnimator {
   private stepTimer = 0;
   private readonly flying: boolean;
 
-  constructor(private id: HeroId, material: THREE.Material, private onStep: (x: number, z: number) => void = () => {}) {
+  constructor(private id: HeroId, material: THREE.Material, private onStep: (x: number, z: number) => void = () => {}, gear = 0) {
     this.flying = id === 'valkyrie';
     this.root.add(this.pose);
-    for (const p of heroRig(id).parts) {
+    for (const p of heroRig(id, gear).parts) {
       const mesh = new THREE.Mesh(p.geo, material);
       mesh.castShadow = true;
       mesh.position.copy(p.pivot);

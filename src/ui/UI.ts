@@ -119,6 +119,28 @@ export class UI {
     this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('on'), ms);
   }
 
+  private achQueue: (() => void)[] = [];
+  private achBusy = false;
+
+  /** Achievement card that slides in at the top; queued so several never overlap. */
+  achievement(name: string, desc: string, coins: number, gems: number): void {
+    this.achQueue.push(() => {
+      const card = el('div', 'ach-card', `<div class="ach-ico">🏆</div><div class="ach-body"><small>Achievement unlocked</small><b>${name}</b><span>${desc}</span></div><div class="ach-reward">+${coins} 🪙${gems ? `<br/>+${gems} 💎` : ''}</div>`);
+      this.fxLayer.append(card);
+      requestAnimationFrame(() => card.classList.add('on'));
+      setTimeout(() => card.classList.remove('on'), 3000);
+      setTimeout(() => {
+        card.remove();
+        this.achBusy = false;
+        this.achQueue.shift()?.();
+      }, 3400);
+    });
+    if (!this.achBusy) {
+      this.achBusy = true;
+      this.achQueue.shift()?.();
+    }
+  }
+
   banner(text: string, sub = '', cls = ''): void {
     const b = el('div', `banner ${cls}`, `${text}${sub ? `<small>${sub}</small>` : ''}`);
     this.fxLayer.append(b);

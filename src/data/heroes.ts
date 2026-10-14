@@ -85,3 +85,55 @@ export const REINFORCEMENT = {
   splash: 0.8,
   hitsAir: true,
 };
+
+/** Hero experience: heroes level up from kills and waves cleared, and their gear upgrades with level. */
+export const HERO_LEVELS = {
+  max: 30,
+  /** Total XP to reach level L (L ≥ 2): base × (L − 1)^exp. */
+  xpBase: 60,
+  xpExp: 1.55,
+  hpPerLevel: 0.06,
+  damagePerLevel: 0.05,
+  abilityPerLevel: 0.04,
+  cooldownPerLevel: 0.01,
+  cooldownMin: 0.72,
+  /** XP for a kill: perCost × enemy cost (bosses and elites give more). */
+  xpPerCost: 2,
+  bossXp: 60,
+  eliteXp: 12,
+  /** XP for each wave cleared with the hero on the field: base + perWave × wave. */
+  waveXpBase: 4,
+  waveXpPerWave: 0.25,
+};
+
+export interface GearTier {
+  level: number;
+  name: string;
+  color: string;
+}
+
+/** Gear unlocked at these levels; each adds a visible piece (pauldrons, cape, glowing weapon gem, crown). */
+export const HERO_GEAR: GearTier[] = [
+  { level: 1, name: 'Recruit', color: '#8a7a6a' },
+  { level: 5, name: 'Veteran', color: '#c58a4e' },
+  { level: 10, name: 'Elite', color: '#dfe5ec' },
+  { level: 20, name: 'Champion', color: '#f2c94c' },
+  { level: 30, name: 'Legend', color: '#ff9bf0' },
+];
+
+export function xpForLevel(level: number): number {
+  return level <= 1 ? 0 : Math.round(HERO_LEVELS.xpBase * Math.pow(level - 1, HERO_LEVELS.xpExp));
+}
+
+export function heroLevelFor(xp: number): number {
+  let l = 1;
+  while (l < HERO_LEVELS.max && xp >= xpForLevel(l + 1)) l++;
+  return l;
+}
+
+/** Index into HERO_GEAR for a level. */
+export function gearTierFor(level: number): number {
+  let t = 0;
+  for (let i = 0; i < HERO_GEAR.length; i++) if (level >= HERO_GEAR[i].level) t = i;
+  return t;
+}

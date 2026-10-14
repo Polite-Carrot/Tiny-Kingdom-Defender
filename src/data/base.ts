@@ -128,6 +128,13 @@ export const ENEMY_FIRST_WAVE: Partial<Record<EnemyId, number>> = {
   knight: 8,
   shaman: 13,
   shield: 17,
+  // Each Age brings its own creatures (they only appear in that Age's waves).
+  scarab: 20,
+  wraith: 22,
+  wolf: 40,
+  golem: 43,
+  fireimp: 60,
+  magmaslug: 62,
 };
 
 export const WAVE_COMPOSER = {
@@ -141,4 +148,24 @@ export const WAVE_COMPOSER = {
   mixFromWave: 3,
   /** Performance cap: above this many enemies, counts shrink and each enemy gets tougher (and richer) instead. */
   maxEnemiesPerWave: 70,
+};
+
+/** Barricades: walls placed on open road tiles that enemies must smash through. */
+export const BARRICADE = {
+  /** Best wave needed before barricades can be built. */
+  unlockWave: 6,
+  /** How many can stand at once: base + one more per Age reached, up to max. */
+  baseCount: 2,
+  maxCount: 6,
+  /** Gold: base + perWave × wave (rounded to 5). */
+  baseCost: 45,
+  costPerWave: 2.5,
+  /** HP: base × (wave HP multiplier)^hpExponent. */
+  baseHp: 160,
+  hpExponent: 0.7,
+  /** Damage per second a blocked enemy deals: dps × leakDamage × (its HP scale)^hpExponent; bosses hit far harder. */
+  attackDps: 7,
+  bossMult: 5,
+  /** Fraction of the build cost refunded on removal (scaled by remaining HP). */
+  refund: 0.5,
 };

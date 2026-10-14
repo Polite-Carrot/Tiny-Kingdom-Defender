@@ -23,8 +23,9 @@ export const TOWER_META = {
   rangePerLevel: 0.015,
 } as const;
 
-export const META_UPGRADES: Record<'castleHp' | 'warChest' | 'heroPower', MetaUpgradeDef & { perLevel: number }> = {
+export const META_UPGRADES: Record<'castleHp' | 'battlements' | 'warChest' | 'heroPower', MetaUpgradeDef & { perLevel: number }> = {
   castleHp: { id: 'castleHp', name: 'Castle Walls', description: '+2 castle HP per level', baseCost: 80, maxLevel: 15, perLevel: 2 },
+  battlements: { id: 'battlements', name: 'Battlements', description: 'Archers on the castle walls shoot nearby enemies. More damage each level; a second archer at Lv 8', baseCost: 110, maxLevel: 15, perLevel: 1 },
   warChest: { id: 'warChest', name: 'War Chest', description: '+5% gold from defeated enemies per level', baseCost: 90, maxLevel: 15, perLevel: 0.05 },
   heroPower: { id: 'heroPower', name: 'Hero Training', description: '+8% hero damage & HP per level', baseCost: 90, maxLevel: 15, perLevel: 0.08 },
 };
@@ -92,3 +93,16 @@ export const COSMETICS: { id: string; kind: 'castle' | 'trail'; name: string; co
 ];
 
 export const TOWER_IDS_FOR_META: TowerId[] = ['archer', 'cannon', 'frost', 'lightning'];
+
+/** Castle battlements: archers on the walls (damage scales with the wave so they stay useful). */
+export const BATTLEMENTS = {
+  range: 2.9,
+  cooldown: 1.0,
+  /** Damage = perLevel × level × (wave HP multiplier)^waveExp. */
+  damagePerLevel: 5,
+  waveExp: 0.6,
+  secondArcherLevel: 8,
+};
+
+/** The castle grows as you upgrade it: tier = (walls + battlements levels) / levelsPerTier, up to 3. */
+export const CASTLE_GROWTH = { levelsPerTier: 5, maxTier: 3 };

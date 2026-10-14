@@ -75,6 +75,9 @@ export class Game {
       targetMode: (m) => this.battle?.setTargetMode(m),
       closeCtx: () => this.battle?.deselect(),
       clearLand: () => this.battle?.clearLand(),
+      buildWall: () => this.battle?.buildWall(),
+      repairWall: () => this.battle?.repairWall(),
+      removeWall: () => this.battle?.removeWall(),
       shop: () => this.openShopInSiege(),
     });
     ui.addScreen('battle', this.hud.el);

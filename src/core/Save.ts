@@ -2,6 +2,7 @@
 
 import type { TowerId } from '../data/towers';
 import type { HeroId } from '../data/heroes';
+import type { EnemyId } from '../data/enemies';
 import type { BaseSnapshot } from '../game/Run';
 
 export const SAVE_VERSION = 4;
@@ -34,6 +35,21 @@ export interface Settings {
   debugAdsUnavailable: boolean;
 }
 
+export interface LifeStats {
+  bossKills: number;
+  eliteKills: number;
+  flyingKills: number;
+  towersBuilt: number;
+  celestialTowers: number;
+  barricades: number;
+  synergies: number;
+  synergyTypes: string[];
+  abilityUses: number;
+  /** Checkpoints reached with the castle at full health. */
+  perfectCheckpoints: number;
+  heroKills: number;
+}
+
 export interface SaveData {
   version: number;
   coins: number;
@@ -42,9 +58,11 @@ export interface SaveData {
   base: BaseSnapshot | null;
   progress: { bestWave: number; bestCheckpoint: number; retreats: number; checkpointsPaid: number; /** Highest wave whose new-Age/road announcement was shown. */ frontierSeen: number };
   towerLevels: Record<TowerId, number>;
-  meta: { castleHp: number; warChest: number; heroPower: number };
+  meta: { castleHp: number; battlements: number; warChest: number; heroPower: number };
   unlocks: { lightning: boolean; heroes: HeroId[] };
   selectedHero: HeroId;
+  /** Experience earned by each hero. */
+  heroXp: Partial<Record<HeroId, number>>;
   cosmetics: { owned: string[]; castle: string; trail: string };
   settings: Settings;
   treasury: { lastCollect: number };
@@ -53,6 +71,12 @@ export interface SaveData {
   missions: { day: string; list: MissionState[] };
   ads: { removeAds: boolean; shopBundleDay: string; shopBundleCount: number; winsSinceInterstitial: number };
   stats: { kills: number; wavesCleared: number; coinsEarned: number; playTime: number };
+  /** Lifetime counters for achievements. */
+  life: LifeStats;
+  /** Achievement ids already unlocked (and paid). */
+  achievements: string[];
+  /** Enemies met and defeated, by enemy id. */
+  bestiary: Partial<Record<EnemyId, { seen: number; killed: number }>>;
   tutorial: { done: boolean; hintsSeen: string[] };
   firstLaunch: number;
 }
@@ -65,9 +89,10 @@ export function defaultSave(now = Date.now()): SaveData {
     base: null,
     progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0, frontierSeen: 0 },
     towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 },
-    meta: { castleHp: 0, warChest: 0, heroPower: 0 },
+    meta: { castleHp: 0, battlements: 0, warChest: 0, heroPower: 0 },
     unlocks: { lightning: false, heroes: ['ranger'] },
     selectedHero: 'ranger',
+    heroXp: {},
     cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none' },
     settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false },
     treasury: { lastCollect: now },
@@ -76,6 +101,9 @@ export function defaultSave(now = Date.now()): SaveData {
     missions: { day: '', list: [] },
     ads: { removeAds: false, shopBundleDay: '', shopBundleCount: 0, winsSinceInterstitial: 0 },
     stats: { kills: 0, wavesCleared: 0, coinsEarned: 0, playTime: 0 },
+    life: { bossKills: 0, eliteKills: 0, flyingKills: 0, towersBuilt: 0, celestialTowers: 0, barricades: 0, synergies: 0, synergyTypes: [], abilityUses: 0, perfectCheckpoints: 0, heroKills: 0 },
+    achievements: [],
+    bestiary: {},
     tutorial: { done: false, hintsSeen: [] },
     firstLaunch: now,
   };

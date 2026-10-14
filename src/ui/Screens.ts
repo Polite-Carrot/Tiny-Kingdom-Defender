@@ -31,6 +31,8 @@ export class TitleScreen {
           <button class="side-btn daily">${icon('calendar')}Daily<i class="dot"></i></button>
           <button class="side-btn chest">${icon('chest')}Chest<i class="dot"></i><span class="timer"></span></button>
           <button class="side-btn treasury">${icon('castle')}Treasury<i class="dot"></i><span class="timer"></span></button>
+          <button class="side-btn trophy-btn">${icon('trophy')}Trophies</button>
+          <button class="side-btn bestiary-btn">${icon('skull')}Bestiary</button>
         </div>
         <div class="stack" style="display:flex;flex-direction:column;gap:10px;align-items:center">
           <div class="kingdom-card"></div>
@@ -47,6 +49,8 @@ export class TitleScreen {
     q('.daily').onclick = () => this.gate('dailyLogin', () => Modals.daily(game));
     q('.chest').onclick = () => this.gate('chests', () => Modals.chest(game));
     q('.treasury').onclick = () => this.gate('treasury', () => Modals.treasury(game));
+    q('.trophy-btn').onclick = () => Modals.trophies(game);
+    q('.bestiary-btn').onclick = () => Modals.bestiary(game);
     q('.version').onclick = () => {
       if (++this.versionTaps >= 5) {
         this.versionTaps = 0;
@@ -66,6 +70,7 @@ export class TitleScreen {
 
   onEnter(): void {
     const meta = this.game.s.meta;
+    for (const a of meta.checkAchievements()) this.game.s.ui.achievement(a.name, a.description, a.reward.coins, a.reward.gems ?? 0);
     meta.refreshMissions();
     const st = meta.dailyStatus();
     const today = new Date().toDateString();

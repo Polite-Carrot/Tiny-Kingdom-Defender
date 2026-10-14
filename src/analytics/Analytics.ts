@@ -3,6 +3,7 @@
 export type AnalyticsEventName =
   | 'session_start'
   | 'level_start'
+  | 'achievement_unlocked'
   | 'level_end'
   | 'wave_complete'
   | 'tower_built'

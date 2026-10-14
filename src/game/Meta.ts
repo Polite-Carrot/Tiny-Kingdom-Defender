@@ -4,11 +4,13 @@
 import type { SaveSystem, SaveData } from '../core/Save';
 import type { Analytics } from '../analytics/Analytics';
 import {
-  metaCost, TOWER_META, META_UPGRADES, UNLOCKS, TREASURY, CHESTS, DAILY_LOGIN, AD_REWARDS, HERO_UNLOCK_COST, COSMETICS,
+  metaCost, TOWER_META, META_UPGRADES, CASTLE_GROWTH, UNLOCKS, TREASURY, CHESTS, DAILY_LOGIN, AD_REWARDS, HERO_UNLOCK_COST, COSMETICS,
 } from '../data/economy';
 import { MISSION_POOL, MISSIONS_PER_DAY, type MissionDef, type MissionStat } from '../data/missions';
 import { TOWER_UNLOCK_WAVE, UNLOCK_WAVE } from '../data/base';
-import { HEROES, type HeroId } from '../data/heroes';
+import { HEROES, heroLevelFor, gearTierFor, type HeroId } from '../data/heroes';
+import { ACHIEVEMENTS, type AchievementDef } from '../data/achievements';
+import type { EnemyId } from '../data/enemies';
 import { TOWER_ORDER, type TowerId } from '../data/towers';
 import { Random, hashString } from '../core/Random';
 import { checkpointCoins, waveCoins } from './Siege';
@@ -85,8 +87,56 @@ export class Meta {
       castleHpBonus: this.d.meta.castleHp * META_UPGRADES.castleHp.perLevel,
       goldBonus: this.d.meta.warChest * META_UPGRADES.warChest.perLevel,
       heroPower: this.d.meta.heroPower * META_UPGRADES.heroPower.perLevel,
+      battlements: this.d.meta.battlements ?? 0,
       heroId: this.d.selectedHero,
+      heroLevel: this.heroLevel(this.d.selectedHero),
     };
+  }
+
+  /** Unlocks and pays every achievement whose target is now met. Returns the new ones. */
+  checkAchievements(): AchievementDef[] {
+    const fresh = ACHIEVEMENTS.filter((a) => !this.d.achievements.includes(a.id) && a.progress(this.d) >= a.target);
+    for (const a of fresh) {
+      this.d.achievements.push(a.id);
+      this.earn(a.reward.coins, `achievement_${a.id}`);
+      if (a.reward.gems) this.d.shards += a.reward.gems;
+      this.analytics.track('achievement_unlocked', { id: a.id });
+    }
+    if (fresh.length) this.commit();
+    return fresh;
+  }
+
+  /** Bestiary bookkeeping; returns true the first time an enemy is seen. */
+  sawEnemy(id: EnemyId): boolean {
+    const e = (this.d.bestiary[id] ??= { seen: 0, killed: 0 });
+    e.seen++;
+    return e.seen === 1;
+  }
+
+  killedEnemy(id: EnemyId): void {
+    (this.d.bestiary[id] ??= { seen: 1, killed: 0 }).killed++;
+  }
+
+  /** How grand the castle looks (from castle wall and battlement upgrades). */
+  castleTier(): number {
+    const total = (this.d.meta.castleHp ?? 0) + (this.d.meta.battlements ?? 0);
+    return Math.min(CASTLE_GROWTH.maxTier, Math.floor(total / CASTLE_GROWTH.levelsPerTier));
+  }
+
+  heroXp(id: HeroId): number {
+    return this.d.heroXp[id] ?? 0;
+  }
+
+  heroLevel(id: HeroId): number {
+    return heroLevelFor(this.heroXp(id));
+  }
+
+  /** Adds XP to a hero; reports a level-up and whether new gear arrived. */
+  addHeroXp(id: HeroId, xp: number): { level: number; levelUp: boolean; newGear: boolean } {
+    const before = this.heroLevel(id);
+    this.d.heroXp[id] = this.heroXp(id) + Math.max(0, Math.round(xp));
+    const level = this.heroLevel(id);
+    return { level, levelUp: level > before, newGear: gearTierFor(level) > gearTierFor(before) };
   }
 
   /** A wave was cleared: pays coins, tracks the best wave. Returns coins paid. */

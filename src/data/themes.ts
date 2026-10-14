@@ -43,7 +43,7 @@ export const THEMES: Theme[] = [
     pad: '#e8dcc2', sky: '#ffe2b0', fog: '#ffe8c4', sun: '#fff0cc', ambient: '#e8c9a0', ground: '#4fb3c2', groundGlow: false,
     props: ['cactus', 'cactus', 'dune', 'rock', 'deadtree'],
     music: { root: 62, scale: [0, 1, 4, 5, 7, 8, 10], bpm: 104, wave: 'sawtooth' },
-    enemyWeights: { grunt: 3, runner: 5, knight: 2, bat: 2.5, shaman: 2, shield: 1.5 },
+    enemyWeights: { grunt: 2, runner: 4, knight: 2, bat: 2, shaman: 2, shield: 1.5, scarab: 3.5, wraith: 2.5 },
   },
   {
     id: 'snow', name: 'Age of Frost',
@@ -51,7 +51,7 @@ export const THEMES: Theme[] = [
     pad: '#c4ccd6', sky: '#cfe3f5', fog: '#e4eef8', sun: '#f4f8ff', ambient: '#a9c0dd', ground: '#7fb3d6', groundGlow: false,
     props: ['pine', 'pine', 'rock', 'snowman', 'crystal'],
     music: { root: 57, scale: [0, 2, 3, 5, 7, 8, 10], bpm: 96, wave: 'sine' },
-    enemyWeights: { grunt: 3, runner: 2, knight: 4, bat: 2, shaman: 2, shield: 3 },
+    enemyWeights: { grunt: 2, runner: 1.5, knight: 3, bat: 2, shaman: 2, shield: 2.5, wolf: 3.5, golem: 1.5 },
   },
   {
     id: 'volcano', name: 'Age of Fire',
@@ -59,7 +59,7 @@ export const THEMES: Theme[] = [
     pad: '#a89590', sky: '#4a2c38', fog: '#6a3a36', sun: '#ffd0a0', ambient: '#a07080', ground: '#e8481a', groundGlow: true,
     props: ['lavarock', 'lavarock', 'deadtree', 'crystal', 'rock'],
     music: { root: 55, scale: [0, 1, 3, 5, 7, 8, 11], bpm: 120, wave: 'square' },
-    enemyWeights: { grunt: 2.5, runner: 3, knight: 3, bat: 3, shaman: 2, shield: 2 },
+    enemyWeights: { grunt: 2, runner: 2.5, knight: 2.5, bat: 2, shaman: 2, shield: 2, fireimp: 3, magmaslug: 2.5 },
   },
 ];
 

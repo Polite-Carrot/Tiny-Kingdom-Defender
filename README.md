@@ -25,10 +25,14 @@ npm run sim        # headless balance simulator (see "Balancing")
 | World | The board is a raised plateau with a moat, on an island of rolling hills and trees. Around it are sandy beaches and the sea (`systems/Water.ts`): Gerstner waves displaced on the GPU, with depth colour, sun glint, sky reflection, white caps, and surf that rolls in to shore. The Age of Frost adds drifting ice floes; the Age of Fire swaps the sea for flowing, crusting lava. Beyond the sea are distant mountains, a sky gradient, drifting clouds and floating pollen, dust, snow or embers (`systems/Scenery.ts`). The game opens on a menu where the camera slowly circles your kingdom. On High quality the scene is rendered in HDR with a soft bloom, so gems, lava, fire and magic glow, and thousands of instanced grass blades sway in the wind on the board and island (`systems/Grass.ts`). Roads are cobbled, the castle has crenellated walls, turrets, a gatehouse and banners, and enemies have faces, arms and gear. |
 | Ages | Every 20 waves the land changes: Age of Meadows → Sands → Frost → Fire, then repeats harder (II, III…). Each Age has its own palette, props, sky, music and enemy mix. Every Age starts on a checkpoint, so once you reach a new Age a fall never sends you back to the previous one. |
 | Towers | Eight towers: **Archer** (fast, hits flying), **Cannon** (splash), **Frost** (slows), **Mage** (arcane bolts that ignore armor, wave 8), **Ballista** (long range; bolts pierce a whole line, wave 12), **Lightning** (chains; Shop unlock), **Flame** (short range; sets enemies burning, unlocks with the Age of Sands at wave 20) and **Alchemist** (poison flasks that melt armor, unlocks with the Age of Frost at wave 40). Each has **10 material tiers**, and each upgrade rebuilds the tower in a new material: **Wood → Stone → Iron → Bronze → Silver → Gold → Jade → Crystal → Obsidian → Celestial**. Every tier adds ornaments: a roof, then a flag, banners, trim bands, a floating gem, spikes and finally a halo. Precious materials sparkle. Upgrading from tier 3 picks one of 2 specialisations (e.g. Longbow / Volley). After Celestial, towers keep growing with **star levels** (★1 … ★30) as an endless gold sink. You can sell towers for a 70% refund and set targeting to first / strongest / closest. |
-| Enemies | Grunt, Runner, Knight (resists physical damage), Bat (flies), Shaman (heals others), Shield-bearer (shields allies behind it), Imp (summoned). |
-| Bosses | Ogre Warchief (summons imps), Sand Colossus (becomes immune for a while, summons), Frost Yeti (charges), Magma Drake (does all three). |
-| Heroes | Six heroes, unlocked with coins from the Heroes menu: Robin the ranger (Arrow Storm), Sir Bramble the knight (Taunt, which stuns), Elowen the mage (Meteor), **Brokk** the dwarf engineer (Earthquake: damages and slows everything nearby), **Seraphine** the sky valkyrie (Holy Light: smites foes, heals herself and restores 3 castle HP) and **Kage** the shadow blade (Shadow Strike: dashes through the 6 toughest enemies nearby). Each is a detailed chibi model with a face, armour, weapons and gear. Heroes are rigged (body, two legs and two arms that hold their weapons; `game/HeroAnimator.ts`): they breathe when idle, walk with swinging arms and legs and kick up dust, and each has its own attack (sword wind-up and slash, two-handed hammer smash, bow draw and loose, staff thrust, spear throw, double katana slash). Abilities have their own poses (stomp, leap-and-slam, rise with arms spread, staff to the sky, aim skyward, spin), they topple over when they fall and pop back in on respawn, and Seraphine hovers on flapping wings. Tap a hero to select it, then tap the map to move it. |
-| Meta | Coins come from every wave cleared and every checkpoint. They buy permanent upgrades (tower damage and range, castle HP, War Chest +gold%, hero power; cost = `base × 1.35^level`), the Lightning unlock, heroes and cosmetics (castle skins and projectile trails, bought with coins or shards). You can open the Shop mid-siege from the HUD. |
+| Enemies | Everywhere: Grunt, Runner, Knight (resists physical damage), Bat (flies), Shaman (heals others), Shield-bearer (shields allies behind it), Imp (summoned). Each Age adds its own: **Sands**: Scarab Swarm (tiny, armoured, huge numbers) and Sand Wraith (burrows out of reach now and then); **Frost**: Snow Wolf (fast packs) and Ice Golem (freezes nearby towers solid); **Fire**: Fire Imp (flying, resists magic) and Lava Slug (splits into two Sluglings, immune to burning). |
+| Elites | From wave 8, a few enemies spawn as glowing elites (2.6× HP, 4× gold, +1 gem) with one trait: Regenerating, Splitting, Unstoppable (no slows or stuns), Armoured or Swift. They wear a ring in their trait colour. |
+| Barricades | Tap any open road tile to build a barricade (from wave 6). Ground enemies stop and smash at it while your towers fire; flyers go over and burrowers go under. HP and cost scale with the wave; repair or remove them from the same panel. Two can stand at once, plus one per Age reached. |
+| Synergies | Two different towers within 2.3 tiles link up (a glowing line): Shatter (Frost + Cannon), Volatile Fumes (Flame + Alchemist), Enchanted Arrows (Archer + Mage), Superconductor (Lightning + Frost), Siege Engineers (Ballista + Cannon), Arcane Storm (Mage + Lightning). The tower panel shows active synergies and the ones a tower could still form (`data/synergies.ts`). |
+| Bosses | Ogre Warchief (summons imps), Sand Colossus (becomes immune for a while, summons), Frost Yeti (charges), Magma Drake (does all three). Each boss gets an entrance: the siege pauses, the camera swoops in, and its name and tricks are shown. |
+| Heroes | Six heroes, unlocked with coins from the Heroes menu: Robin the ranger (Arrow Storm), Sir Bramble the knight (Taunt, which stuns), Elowen the mage (Meteor), **Brokk** the dwarf engineer (Earthquake: damages and slows everything nearby), **Seraphine** the sky valkyrie (Holy Light: smites foes, heals herself and restores 3 castle HP) and **Kage** the shadow blade (Shadow Strike: dashes through the 6 toughest enemies nearby). Each is a detailed chibi model with a face, armour, weapons and gear. Heroes are rigged (body, two legs and two arms that hold their weapons; `game/HeroAnimator.ts`): they breathe when idle, walk with swinging arms and legs and kick up dust, and each has its own attack (sword wind-up and slash, two-handed hammer smash, bow draw and loose, staff thrust, spear throw, double katana slash). Abilities have their own poses (stomp, leap-and-slam, rise with arms spread, staff to the sky, aim skyward, spin), they topple over when they fall and pop back in on respawn, and Seraphine hovers on flapping wings. Tap a hero to select it, then tap the map to move it. Heroes earn XP from kills (more for elites and bosses) and from waves cleared, up to level 30: every level adds HP, damage and ability power, and gear unlocks at levels 5, 10, 20 and 30 (Veteran pauldrons, Elite cape, Champion weapon gem, Legend crown), shown on the model. |
+| Meta | Coins come from every wave cleared and every checkpoint. They buy permanent upgrades (tower damage and range, castle HP, **Battlements** (archers on the castle walls that shoot nearby enemies), War Chest +gold%, hero power; cost = `base × 1.35^level`). Castle upgrades show: an outer wall, then watchtowers and banners, then gold trim, glowing windows and a royal standard, the Lightning unlock, heroes and cosmetics (castle skins and projectile trails, bought with coins or shards). You can open the Shop mid-siege from the HUD. |
+| Trophies & Bestiary | A Trophy Room with 32 achievements (kills, bosses, elites, Ages, perfect checkpoints, synergies, hero levels, collecting) that pay coins and gems, announced with a slide-in card. A Bestiary lists every enemy you've met with stats, kill counts and how to counter it; undiscovered ones are silhouettes. |
 | Retention | Treasury (idle income, capped at 8 h, grows with your best wave), a free chest every 4 h, a milestone chest at each new checkpoint, a 7-day login cycle, 3 daily missions, red-dot indicators. |
 | Ads | `AdManager` plus a mock provider, 7 rewarded placements, interstitial rules, and a "Remove ads" flag. |
 | Analytics | `Analytics` interface with a console/local implementation, plus a hidden debug screen. |
@@ -112,31 +116,32 @@ Two career profiles are compared: a typical player who spends coins, and one who
 == Typical player (spends coins on upgrades, no ads) ==
 Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
   wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
-  wave  20   13m (1)               13m (1)               9 towers, avg Bronze (3.8), best Bronze; meta Lv 1
-  wave  30   18m (1)               24m (2)               10 towers, avg Bronze (4.4), best Silver; meta Lv 1
-  wave  40   53m (6)               36m (3)               15 towers, avg Gold (5.9), best Gold; meta Lv 2
-  wave  50   1.4h (26)             1.1h (20)             17 towers, avg Jade (6.7), best Jade; meta Lv 2
-  wave  60   2.0h (32)             1.6h (26)             20 towers, avg Crystal (7.7), best Crystal; meta Lv 3
-  wave  70   2.9h (42)             1.9h (30)             22 towers, avg Obsidian (8.7), best Obsidian; meta Lv 3
-  wave  80   3.7h (51)             2.6h (37)             23 towers, avg Obsidian (9.4), best Celestial; meta Lv 4
-  wave  90   5.4h (103)            3.2h (44)             25 towers, avg Celestial (10.6), best Celestial; meta Lv 4
-  wave 100   5.9h (108)            4.3h (59)             25 towers, avg Celestial (11.0), best Celestial; meta Lv 4
-  wave 110   13.6h (218)           8.1h (126)            30 towers, avg Celestial (14.3), best Celestial; meta Lv 7
-  wave 120   17.8h (303)           13.7h (248)           31 towers, avg Celestial (15.4), best Celestial; meta Lv 7
-  best wave after 20h: 125, 127 · castle falls: 338, 342
+  wave  20   12m (1)               13m (1)               9 towers, avg Bronze (3.6), best Bronze; meta Lv 1
+  wave  30   23m (3)               17m (1)               12 towers, avg Silver (4.7), best Silver; meta Lv 1
+  wave  40   34m (4)               29m (2)               14 towers, avg Silver (5.4), best Gold; meta Lv 1
+  wave  50   1.2h (36)             1.2h (31)             18 towers, avg Jade (6.6), best Jade; meta Lv 2
+  wave  60   1.7h (45)             1.7h (38)             19 towers, avg Jade (7.5), best Crystal; meta Lv 2
+  wave  70   2.6h (60)             2.1h (41)             22 towers, avg Obsidian (8.5), best Obsidian; meta Lv 3
+  wave  80   3.8h (81)             2.8h (51)             24 towers, avg Celestial (9.7), best Celestial; meta Lv 4
+  wave  90   4.2h (86)             3.8h (69)             25 towers, avg Celestial (10.1), best Celestial; meta Lv 4
+  wave 100   6.2h (116)            4.7h (79)             27 towers, avg Celestial (11.9), best Celestial; meta Lv 5
+  wave 110   9.8h (158)            7.9h (118)            29 towers, avg Celestial (13.8), best Celestial; meta Lv 6
+  wave 120   14.4h (221)           10.3h (147)           31 towers, avg Celestial (15.7), best Celestial; meta Lv 7
+  wave 130   —                     19.7h (525)           
+  best wave after 20h: 125, 135 · castle falls: 428, 530
 == Never buys permanent upgrades ==
 Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
   wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
-  wave  20   13m (1)               13m (1)               9 towers, avg Bronze (3.8), best Bronze; meta Lv 0
-  wave  30   24m (2)               24m (2)               12 towers, avg Silver (4.7), best Silver; meta Lv 0
-  wave  40   52m (6)               34m (3)               15 towers, avg Gold (5.9), best Gold; meta Lv 0
-  wave  50   1.5h (31)             1.3h (39)             18 towers, avg Jade (6.7), best Jade; meta Lv 0
-  wave  60   2.4h (42)             1.8h (46)             21 towers, avg Crystal (8.0), best Crystal; meta Lv 0
-  wave  70   3.6h (55)             2.3h (53)             23 towers, avg Obsidian (9.0), best Obsidian; meta Lv 0
-  wave  80   5.6h (84)             4.0h (77)             25 towers, avg Celestial (10.3), best Celestial; meta Lv 0
-  wave  90   8.9h (150)            6.2h (130)            27 towers, avg Celestial (11.7), best Celestial; meta Lv 0
-  wave 100   10.2h (170)           9.3h (170)            27 towers, avg Celestial (12.5), best Celestial; meta Lv 0
-  best wave after 20h: 106, 107 · castle falls: 393, 391
+  wave  20   12m (1)               13m (1)               9 towers, avg Bronze (3.7), best Bronze; meta Lv 0
+  wave  30   23m (3)               23m (2)               12 towers, avg Silver (4.7), best Silver; meta Lv 0
+  wave  40   34m (4)               29m (2)               14 towers, avg Silver (5.4), best Gold; meta Lv 0
+  wave  50   1.4h (46)             1.2h (34)             18 towers, avg Jade (6.8), best Jade; meta Lv 0
+  wave  60   2.0h (54)             1.7h (41)             20 towers, avg Crystal (7.7), best Crystal; meta Lv 0
+  wave  70   3.7h (109)            3.2h (57)             23 towers, avg Obsidian (9.3), best Celestial; meta Lv 0
+  wave  80   5.5h (140)            4.7h (83)             25 towers, avg Celestial (10.5), best Celestial; meta Lv 0
+  wave  90   6.1h (154)            5.9h (109)            25 towers, avg Celestial (11.0), best Celestial; meta Lv 0
+  wave 100   13.2h (261)           8.6h (149)            29 towers, avg Celestial (14.2), best Celestial; meta Lv 0
+  best wave after 20h: 109, 109 · castle falls: 346, 331
 
 Single push from a fresh kingdom, no retreats (waves survived):
   all permanent upgrades at Lv  0: waves 18, 18, 17  (avg 7m)
@@ -149,7 +154,7 @@ Single push from a fresh kingdom, no retreats (waves survived):
 The numbers above are game time at 1x speed for a greedy AI. In short:
 * **The first ten minutes are smooth.** Wave 10 takes about 4 minutes, and there is about one castle fall before wave 20.
 * **Each Age is a step up.** A new road opens with each of the first two new Ages (waves 20 and 40), so waves 40–50 are a real wall: about an hour to wave 50, with towers reaching Jade.
-* **Then the siege gets serious.** Celestial towers arrive around wave 80–90, after 3–5 hours. Wave 100 takes about 4–6 hours, and wave 120 about 14–18 hours. It is still climbing after 20 hours (best wave about 125).
+* **Then the siege gets serious.** Celestial towers arrive around wave 80, after 3–4 hours. Wave 100 takes about 5–6 hours, and wave 120 about 10–14 hours. It is still climbing after 20 hours (best wave about 125–135). The AI doesn't build barricades or level heroes, so a player has extra tools on top of this.
 * **Permanent upgrades matter.** A player who never buys them is several hours behind by wave 100 and tops out around wave 106 after 20 hours. A single push from a fresh kingdom reaches wave 18 with no upgrades and about wave 75 with every upgrade at level 20.
 * **Falls are part of the loop.** Late-game progress comes from replaying the last checkpoint segment for gold and coins. The fall counts are high because the AI keeps pushing into the wall; a person would also use the hero and smarter placement.
 

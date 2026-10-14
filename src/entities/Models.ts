@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { ModelBuilder, mergeTransformed } from './ModelBuilder';
 import { MAX_TIER, BRANCH_TIER, materialFor, starsOf, type TowerId } from '../data/towers';
 import type { EnemyId } from '../data/enemies';
-import type { HeroId } from '../data/heroes';
+import { HEROES, HERO_GEAR, type HeroId } from '../data/heroes';
 import type { PropType } from '../data/themes';
 
 const cache = new Map<string, THREE.BufferGeometry>();
@@ -21,6 +21,8 @@ const WOOD = '#9a6a3f';
 const WOOD_D = '#74492a';
 const ROOF = '#d9573f';
 const GOLD = '#f2c94c';
+/** Colour boosted above 1 so it glows under the bloom. */
+const glowC = (c: string, k = 1.7) => new THREE.Color(c).multiplyScalar(k);
 
 // --- Towers -------------------------------------------------------------------
 // Every tier is a new building material (data/towers.ts TIER_MATERIALS) and adds ornaments:
@@ -525,6 +527,91 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.cone(0.03, 0.1, 4, '#cfdce8', { x: -0.08, y: 0.83, rz: 0.4 });
       b.cone(0.03, 0.1, 4, '#cfdce8', { x: 0.08, y: 0.83, rz: -0.4 });
       break;
+    case 'scarab': {
+      // Armoured beetle: split shell, little head, six legs, glinting eyes.
+      b.ball(0.15, 1, '#2f6f7a', { y: 0.12, sy: 0.6, sz: 1.2 });
+      b.box(0.012, 0.05, 0.3, '#1d4a52', { y: 0.2 });
+      b.ball(0.07, 1, '#1d3a40', { y: 0.1, z: 0.17 });
+      for (const sx of [-1, 1]) {
+        for (let k = 0; k < 3; k++) b.box(0.12, 0.015, 0.02, '#1d3a40', { x: sx * 0.15, y: 0.05, z: -0.08 + k * 0.08, rz: sx * -0.5 });
+        b.ball(0.018, 0, glowC('#9fffe0', 1.4), { x: sx * 0.035, y: 0.13, z: 0.22 });
+        b.cone(0.012, 0.08, 3, '#1d3a40', { x: sx * 0.03, y: 0.12, z: 0.27, rx: Math.PI / 2, rz: sx * 0.3 });
+      }
+      break;
+    }
+    case 'wraith': {
+      // Hooded sand spirit with a ragged hem and glowing eyes.
+      b.cone(0.2, 0.55, 9, '#d9c08a', { y: 0.3 });
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * Math.PI * 2;
+        b.cone(0.05, 0.12, 4, '#c4a870', { x: Math.cos(a) * 0.17, y: 0.04, z: Math.sin(a) * 0.17, rx: Math.PI });
+      }
+      b.ball(0.14, 1, '#c4a870', { y: 0.6 });
+      b.ball(0.1, 1, '#2a2018', { y: 0.58, z: 0.06 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.022, 0, glowC('#ffd36a', 1.8), { x: sx * 0.04, y: 0.6, z: 0.14 });
+        b.cone(0.04, 0.2, 5, '#d9c08a', { x: sx * 0.17, y: 0.38, z: 0.05, rz: sx * 1.0 });
+        for (let k = 0; k < 3; k++) b.cone(0.01, 0.06, 3, '#3a2a1a', { x: sx * (0.26 + k * 0.01), y: 0.3 - k * 0.015, z: 0.05 + (k - 1) * 0.025, rz: sx * 1.8 });
+      }
+      break;
+    }
+    case 'wolf': {
+      // Four-legged snow wolf: body, chest ruff, snout, ears, bushy tail.
+      const fur = '#dfe8f0', dark = '#9fb0c4';
+      b.capsule(0.11, 0.24, fur, { y: 0.24, rx: Math.PI / 2 });
+      b.ball(0.12, 1, '#f4f8fb', { y: 0.27, z: 0.13 });
+      b.ball(0.1, 1, fur, { y: 0.36, z: 0.24 });
+      b.box(0.08, 0.07, 0.12, fur, { y: 0.33, z: 0.34 });
+      b.ball(0.022, 0, '#2a2a33', { y: 0.35, z: 0.4 });
+      for (const sx of [-1, 1]) {
+        b.cone(0.035, 0.09, 4, dark, { x: sx * 0.055, y: 0.46, z: 0.21 });
+        b.ball(0.018, 0, glowC('#8fd8ff', 1.4), { x: sx * 0.045, y: 0.39, z: 0.31 });
+        for (const z of [-0.14, 0.14]) b.capsule(0.03, 0.12, dark, { x: sx * 0.07, y: 0.1, z });
+      }
+      b.cone(0.06, 0.24, 6, fur, { y: 0.3, z: -0.27, rx: -1.9 });
+      break;
+    }
+    case 'golem': {
+      // Hulking ice golem: crystal torso, block fists, glowing core and icicles.
+      const ice = '#9fd6f0', deep = '#6fb4d8';
+      for (const sx of [-1, 1]) b.box(0.12, 0.2, 0.14, deep, { x: sx * 0.1, y: 0.1 });
+      b.dodec(0.24, ice, { y: 0.38, sy: 1.1 });
+      b.octa(0.07, glowC('#e0faff', 1.7), { y: 0.42, z: 0.19 });
+      b.dodec(0.11, deep, { y: 0.68, z: 0.04 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.022, 0, glowC('#c8f4ff', 2), { x: sx * 0.04, y: 0.7, z: 0.13 });
+        b.box(0.1, 0.26, 0.1, ice, { x: sx * 0.3, y: 0.34, rz: sx * 0.15 });
+        b.dodec(0.09, deep, { x: sx * 0.33, y: 0.18 });
+      }
+      for (let k = 0; k < 5; k++) b.cone(0.04, 0.2, 4, '#e6f6ff', { x: (k - 2) * 0.08, y: 0.6, z: -0.15, rx: -0.6 });
+      break;
+    }
+    case 'fireimp': {
+      // Little flying fire devil: horns, bat wings, flaming tail.
+      b.ball(0.11, 1, '#e0482a', { y: 0.05 });
+      b.ball(0.08, 1, '#f06a3a', { y: 0.17, z: 0.04 });
+      for (const sx of [-1, 1]) {
+        b.cone(0.02, 0.08, 4, '#3a1a14', { x: sx * 0.05, y: 0.26, z: 0.03, rz: sx * -0.4 });
+        b.ball(0.016, 0, glowC('#ffe066', 2), { x: sx * 0.03, y: 0.18, z: 0.11 });
+        b.box(0.22, 0.012, 0.14, '#8a2418', { x: sx * 0.18, y: 0.1, z: -0.03, rz: sx * 0.35 });
+      }
+      b.cone(0.05, 0.18, 6, glowC('#ffb347', 1.8), { y: -0.04, z: -0.14, rx: -2.2 });
+      b.cone(0.03, 0.12, 5, glowC('#ffe066', 2), { y: -0.07, z: -0.2, rx: -2.2 });
+      break;
+    }
+    case 'magmaslug':
+    case 'slugling': {
+      // Molten slug: crusted plates over glowing magma, eye stalks.
+      b.capsule(0.12, 0.26, glowC('#ff6a1a', 1.5), { y: 0.11, rx: Math.PI / 2, sx: 1.1 });
+      b.capsule(0.08, 0.2, glowC('#ffd36a', 1.8), { y: 0.06, rx: Math.PI / 2, sx: 1.3 });
+      // Cooled crust plates with glowing gaps between them.
+      for (let k = 0; k < 4; k++) b.dodec(0.075, '#3a2420', { x: (k % 2 ? 0.03 : -0.03), y: 0.2, z: -0.16 + k * 0.105, sy: 0.45, sx: 1.4 });
+      for (const sx of [-1, 1]) {
+        b.cyl(0.012, 0.012, 0.12, 4, '#3a2420', { x: sx * 0.05, y: 0.25, z: 0.2, rz: sx * -0.3 });
+        b.ball(0.028, 0, glowC('#ffe066', 1.8), { x: sx * 0.07, y: 0.31, z: 0.2 });
+      }
+      break;
+    }
     case 'boss_dragon':
       b.ball(0.26, 0, '#b8322a', { y: 0.32, sz: 1.3 });
       b.ball(0.14, 0, '#c8443a', { y: 0.5, z: 0.32 });
@@ -547,7 +634,6 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
 // Chibi proportions (big expressive heads) so heroes read clearly at phone size. Forward is +Z.
 
 const SKIN = '#f1c9a0';
-const glowC = (c: string, k = 1.7) => new THREE.Color(c).multiplyScalar(k);
 
 /** Face: eyes with irises and highlights, brows, cheeks, mouth, ears. */
 function heroFace(b: ModelBuilder, y: number, o: { skin?: string; iris?: string; brow?: string; mask?: boolean; r?: number } = {}) {
@@ -807,12 +893,53 @@ function buildHeroRig(id: HeroId, R: HeroRigBuilder): void {
 
 const rigCache = new Map<string, { parts: HeroRigPart[]; rest: THREE.BufferGeometry[] }>();
 
+/** Where a Legend crown sits on each hero's head (height and radius). */
+const CROWN_AT: Record<HeroId, [number, number]> = {
+  ranger: [0.69, 0.16], knight: [0.72, 0.165], mage: [0.76, 0.13], dwarf: [0.68, 0.16], valkyrie: [0.7, 0.16], ninja: [0.68, 0.162],
+};
+
+/** Gear earned by levelling: pauldron rims, a cape, a glowing weapon gem, a crown. */
+function addHeroGear(id: HeroId, R: HeroRigBuilder, tier: number): void {
+  if (tier <= 0) return;
+  const g = HERO_GEAR[tier];
+  // Legend's prismatic colour is for glows; its metalwork is gold.
+  const metal = tier >= 4 ? GOLD : g.color;
+  const w = R.w;
+  const hero = HEROES[id];
+  for (const sx of [-1, 1]) {
+    R.arm(sx).torus(0.062 * w, 0.016, 4, 12, metal, { x: sx * 0.15 * w, y: 0.375, rx: Math.PI / 2, sz: 0.8 });
+    R.arm(sx).ball(0.03, 0, metal, { x: sx * 0.2 * w, y: 0.36 });
+  }
+  if (tier >= 2) {
+    // Cape in the hero's colour, trimmed in the gear colour.
+    R.body.box(0.3 * w, 0.32, 0.018, hero.color, { y: 0.25, z: -0.155, rx: 0.16 });
+    R.body.box(0.3 * w, 0.03, 0.02, metal, { y: 0.1, z: -0.18, rx: 0.16 });
+    for (const sx of [-1, 1]) R.body.ball(0.025, 0, GOLD, { x: sx * 0.12 * w, y: 0.41, z: -0.1 });
+  }
+  if (tier >= 3) {
+    R.armR.octa(0.035, glowC(g.color, 1.9), { x: 0.17 * w, y: 0.15, z: 0.08, sy: 1.4 });
+    R.body.torus(0.135 * w, 0.014, 4, 14, metal, { y: 0.205, rx: Math.PI / 2, sy: 0.82 });
+  }
+  if (tier >= 4) {
+    // A crown seated on the head.
+    const [y, r] = CROWN_AT[id];
+    R.body.cyl(r, r, 0.05, 14, GOLD, { y });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      R.body.cone(0.026, 0.07, 4, GOLD, { x: Math.cos(a) * r, y: y + 0.055, z: Math.sin(a) * r });
+      R.body.ball(0.016, 0, glowC(k % 2 ? '#ff6a9a' : '#8fd8ff', 1.8), { x: Math.cos(a) * (r + 0.004), y, z: Math.sin(a) * (r + 0.004) });
+    }
+  }
+}
+
 /** The rigged hero: pivot-centred parts for animation plus the rest-pose pieces. */
-export function heroRig(id: HeroId): { parts: HeroRigPart[]; rest: THREE.BufferGeometry[] } {
-  let r = rigCache.get(id);
+export function heroRig(id: HeroId, gear = 0): { parts: HeroRigPart[]; rest: THREE.BufferGeometry[] } {
+  const key = `${id}-${gear}`;
+  let r = rigCache.get(key);
   if (r) return r;
   const R = new HeroRigBuilder();
   buildHeroRig(id, R);
+  addHeroGear(id, R, gear);
   const w = R.w;
   const pivots: Record<HeroPart, THREE.Vector3> = {
     body: new THREE.Vector3(0, 0, 0),
@@ -833,7 +960,7 @@ export function heroRig(id: HeroId): { parts: HeroRigPart[]; rest: THREE.BufferG
     parts.push({ name, geo: g, pivot: pivots[name] });
   }
   r = { parts, rest };
-  rigCache.set(id, r);
+  rigCache.set(key, r);
   return r;
 }
 
@@ -862,9 +989,10 @@ export function heroModel(id: HeroId | 'champion', withWings = true): THREE.Buff
 
 // --- Map pieces ---------------------------------------------------------------
 
-export function castleModel(wall: string): THREE.BufferGeometry {
-  return cached(`castle-${wall}`, () => {
+export function castleModel(wall: string, tier = 0, archers = false): THREE.BufferGeometry {
+  return cached(`castle-${wall}-${tier}-${archers}`, () => {
     const b = new ModelBuilder();
+    castleGrowth(b, wall, tier, archers);
     const c = new THREE.Color(wall);
     const dark = '#' + c.clone().multiplyScalar(0.78).getHexString();
     const light = '#' + c.clone().lerp(new THREE.Color('#ffffff'), 0.18).getHexString();
@@ -933,6 +1061,84 @@ export function castleModel(wall: string): THREE.BufferGeometry {
     // Steps up to the gate.
     b.box(0.34, 0.04, 0.14, '#8f8576', { y: 0.16, z: 0.66 });
     b.box(0.3, 0.04, 0.1, '#9a9184', { y: 0.2, z: 0.6 });
+    return b.build();
+  });
+}
+
+/** Castle upgrades show on the model: an outer wall, extra turrets and banners, gold and glowing windows, archers. */
+function castleGrowth(b: ModelBuilder, wall: string, tier: number, archers: boolean): void {
+  const c = new THREE.Color(wall);
+  const dark = '#' + c.clone().multiplyScalar(0.78).getHexString();
+  const trim = tier >= 3 ? GOLD : dark;
+  if (tier >= 1) {
+    // Low outer curtain wall with merlons and corner posts (leaves the front open for the gate).
+    for (const [x, z, w, d] of [[0, -0.78, 1.5, 0.1], [-0.78, 0, 0.1, 1.5], [0.78, 0, 0.1, 1.5]] as const) {
+      b.box(w, 0.22, d, wall, { x, y: 0.11, z });
+      b.box(w + 0.02, 0.03, d + 0.02, trim, { x, y: 0.235, z });
+      const n = 6;
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n - 0.5;
+        b.box(w > d ? 0.1 : 0.12, 0.07, w > d ? 0.12 : 0.1, wall, { x: x + (w > d ? t * w : 0), y: 0.28, z: z + (w > d ? 0 : t * d) });
+      }
+    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      b.cyl(0.1, 0.11, 0.36, 8, wall, { x: sx * 0.78, y: 0.18, z: sz * 0.78 });
+      b.cone(0.13, 0.18, 8, tier >= 3 ? GOLD : ROOF, { x: sx * 0.78, y: 0.45, z: sz * 0.78 });
+    }
+    for (const sx of [-1, 1]) b.box(0.4, 0.2, 0.1, wall, { x: sx * 0.58, y: 0.1, z: 0.78 });
+  }
+  if (tier >= 2) {
+    // Banners on the outer wall and two watchtowers at the back.
+    for (const sx of [-1, 1]) {
+      b.box(0.1, 0.24, 0.012, '#3f6fd1', { x: sx * 0.84, y: 0.2, z: 0.3 });
+      b.box(0.1, 0.24, 0.012, '#3f6fd1', { x: sx * 0.84, y: 0.2, z: -0.3 });
+      b.cyl(0.13, 0.15, 0.9, 10, wall, { x: sx * 0.42, y: 0.45, z: -0.86 });
+      b.cyl(0.155, 0.155, 0.04, 10, trim, { x: sx * 0.42, y: 0.92, z: -0.86 });
+      b.cone(0.18, 0.32, 10, ROOF, { x: sx * 0.42, y: 1.1, z: -0.86 });
+      b.cyl(0.008, 0.008, 0.2, 3, WOOD_D, { x: sx * 0.42, y: 1.34, z: -0.86 });
+      b.box(0.12, 0.07, 0.01, '#f2c94c', { x: sx * 0.42 + 0.06, y: 1.4, z: -0.86 });
+    }
+  }
+  if (tier >= 3) {
+    // Gilded: glowing windows and a huge royal standard.
+    for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) b.box(0.05, 0.09, 0.02, glowC('#ffd36a', 1.6), { x: x + (x > 0 ? -0.0 : 0), y: 0.95, z: z + (z > 0 ? 0.215 : -0.215) });
+    b.cyl(0.015, 0.015, 0.9, 5, GOLD, { x: -0.62, y: 1.2, z: -0.62 });
+    b.box(0.42, 0.26, 0.015, '#c0392b', { x: -0.4, y: 1.5, z: -0.62 });
+    b.box(0.12, 0.12, 0.02, GOLD, { x: -0.4, y: 1.5, z: -0.612 });
+  }
+  if (archers) {
+    // Little archers peeking over the front wall.
+    for (const sx of [-1, 1]) {
+      b.box(0.08, 0.1, 0.06, '#3f7d3a', { x: sx * 0.24, y: 0.87, z: 0.42 });
+      b.ball(0.045, 0, '#f1c9a0', { x: sx * 0.24, y: 0.95, z: 0.42 });
+      b.cone(0.05, 0.06, 6, '#2f6a2c', { x: sx * 0.24, y: 1.0, z: 0.42 });
+      b.arc(0.07, 0.008, Math.PI * 0.85, WOOD, { x: sx * 0.24 + 0.05, y: 0.9, z: 0.46, ry: Math.PI / 2, rz: -Math.PI / 2 + Math.PI * 0.425 });
+    }
+  }
+}
+
+/** Road barricade, long axis on X (placed across the road). Tier 1 wood, 2 iron-bound, 3 stone and steel. */
+export function barricadeModel(tier: number): THREE.BufferGeometry {
+  return cached(`barricade-${tier}`, () => {
+    const b = new ModelBuilder();
+    const wood = tier >= 3 ? '#7a5636' : WOOD;
+    if (tier >= 3) {
+      for (let i = 0; i < 4; i++) b.dodec(0.14, i % 2 ? '#9b958c' : '#8a847a', { x: -0.36 + i * 0.24, y: 0.08, sy: 0.6 });
+    }
+    // Stacked logs with sharpened ends.
+    for (let k = 0; k < 3; k++) {
+      const y = 0.1 + k * 0.13 + (tier >= 3 ? 0.06 : 0);
+      b.cyl(0.06, 0.06, 0.9, 7, k % 2 ? wood : WOOD_D, { y, z: (k - 1) * 0.02, rz: Math.PI / 2 });
+      for (const sx of [-1, 1]) b.cone(0.06, 0.1, 7, k % 2 ? wood : WOOD_D, { x: sx * 0.5, y, z: (k - 1) * 0.02, rz: sx * -Math.PI / 2 });
+    }
+    // Cross braces.
+    for (const sx of [-1, 1]) b.box(0.05, 0.5, 0.05, WOOD_D, { x: sx * 0.22, y: 0.24, z: -0.08, rz: sx * 0.5 });
+    // Spikes facing the enemy (both ways: roads can approach from either side).
+    for (let i = 0; i < 4; i++) {
+      for (const sz of [-1, 1]) b.cone(0.025, 0.24, 5, tier >= 2 ? '#c9d2df' : '#d9c8a0', { x: -0.3 + i * 0.2, y: 0.24, z: sz * 0.12, rx: sz * (Math.PI / 2 - 0.35) });
+    }
+    if (tier >= 2) for (const x of [-0.3, 0.3]) b.torus(0.075, 0.015, 4, 10, '#5d6470', { x, y: 0.23, rz: Math.PI / 2, ry: Math.PI / 2 });
+    if (tier >= 3) b.box(0.12, 0.16, 0.02, '#c0392b', { y: 0.5, z: 0.04 });
     return b.build();
   });
 }

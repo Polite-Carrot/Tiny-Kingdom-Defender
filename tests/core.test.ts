@@ -8,6 +8,7 @@ import { siegeWave, openRoads, ageOf, checkpointOf, kingdomMap, clearLandCost, i
 import { ROADS, LAND, WAVE_COMPOSER, SIEGE } from '../src/data/base';
 import { TOWERS, towerStats, upgradeCost, levelName, MAX_TIER, MAX_LEVEL } from '../src/data/towers';
 import type { Analytics } from '../src/analytics/Analytics';
+import { heroLevelFor, xpForLevel, gearTierFor, HERO_LEVELS } from '../src/data/heroes';
 
 function mem(init: Record<string, string> = {}): StorageLike & { m: Map<string, string> } {
   const m = new Map(Object.entries(init));
@@ -292,6 +293,88 @@ describe('kingdom siege', () => {
     expect(n.run.useHeroAbility()).toBe(true);
     expect(n.foes.every((e) => e.hp < e.maxHp)).toBe(true);
     expect(Math.hypot(n.h.x - n.foes[0].x, n.h.z - n.foes[0].z)).toBeLessThan(3.5);
+  });
+
+  it('barricades stop ground enemies until smashed, flyers pass over', () => {
+    const snap = newKingdom();
+    snap.gold = 5000;
+    const run = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['archer'] });
+    run.state = 'playing';
+    // First open road tile a few steps from the tunnel.
+    const p = run.map.paths[0];
+    const pt = run.map.pointAt(0, 3, { x: 0, z: 0, dx: 0, dz: 0 });
+    const col = Math.round(pt.x + (run.map.size - 1) / 2), row = Math.round(pt.z + (run.map.size - 1) / 2);
+    expect(run.isOpenRoadTile(col, row)).toBe(true);
+    const wall = run.placeBarricade(col, row)!;
+    expect(wall).not.toBeNull();
+    const grunt = run.spawnEnemy('grunt', 0, 1.5, 0, 1);
+    const bat = run.spawnEnemy('bat', 0, 1.5, 0, 1);
+    for (let i = 0; i < 90; i++) run.update(1 / 30);
+    expect(grunt.dist).toBeLessThan(3);
+    expect(bat.dist).toBeGreaterThan(3);
+    expect(wall.hp).toBeLessThan(wall.maxHp);
+    for (let i = 0; i < 30 * 60 && run.barricades.length; i++) run.update(1 / 30);
+    expect(run.barricades).toHaveLength(0);
+    for (let i = 0; i < 30; i++) run.update(1 / 30);
+    expect(grunt.dist).toBeGreaterThan(3);
+    void p;
+  });
+
+  it('elites are tougher and split / regenerate', () => {
+    const run = new Run({ snapshot: newKingdom(), meta: noMeta, availableTowers: ['archer'] });
+    run.state = 'playing';
+    const e = run.spawnEnemy('grunt', 0, 1, 0, 1);
+    const hp = e.maxHp;
+    run.makeElite(e, 'splitter');
+    expect(e.maxHp).toBeGreaterThan(hp * 2);
+    const before = run.aliveCount();
+    run.damage(e, 1e6, 'magic');
+    expect(run.aliveCount()).toBe(before - 1 + 2);
+  });
+
+  it('towers close together form synergies that boost their stats', () => {
+    const snap = newKingdom();
+    snap.gold = 10000;
+    const run = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['frost', 'cannon', 'archer', 'mage'] });
+    const pads = run.map.buildSpots;
+    // Find two pads within synergy range.
+    let pair: [number, number] | null = null;
+    for (const a of pads) for (const b of pads) if (!pair && a !== b && Math.hypot(a.x - b.x, a.z - b.z) <= 2.3) pair = [a.index, b.index];
+    expect(pair).not.toBeNull();
+    for (const i of pair!) run.unlockedSpots.add(i);
+    const archer = run.build(pair![0], 'archer')!;
+    const base = archer.stats.damage;
+    const seen: string[] = [];
+    run.events.on('synergy', (e) => seen.push(e.synergy));
+    run.build(pair![1], 'mage');
+    expect(seen).toEqual(['enchanted']);
+    expect(archer.synergies).toContain('enchanted');
+    expect(archer.stats.damage).toBeCloseTo(base * 1.3);
+    run.sell(run.towers[1]);
+    expect(archer.synergies).toHaveLength(0);
+    expect(archer.stats.damage).toBeCloseTo(base);
+  });
+
+  it('heroes level up with XP and get stronger', () => {
+    expect(heroLevelFor(0)).toBe(1);
+    expect(heroLevelFor(xpForLevel(5))).toBe(5);
+    expect(heroLevelFor(1e9)).toBe(HERO_LEVELS.max);
+    expect(gearTierFor(10)).toBe(2);
+    const lo = new Run({ snapshot: newKingdom(), meta: { ...noMeta, heroId: 'ranger', heroLevel: 1 }, availableTowers: ['archer'] });
+    const hi = new Run({ snapshot: newKingdom(), meta: { ...noMeta, heroId: 'ranger', heroLevel: 20 }, availableTowers: ['archer'] });
+    expect(hi.hero!.maxHp).toBeGreaterThan(lo.hero!.maxHp * 2);
+    expect(hi.hero!.damage).toBeGreaterThan(lo.hero!.damage * 1.9);
+  });
+
+  it('achievements unlock once and pay out', () => {
+    const save = new SaveSystem(mem());
+    const meta = new Meta(save, nullAnalytics);
+    const coins = meta.d.coins;
+    meta.d.stats.kills = 600;
+    const got = meta.checkAchievements().map((a) => a.id);
+    expect(got).toEqual(expect.arrayContaining(['kills1', 'kills500']));
+    expect(meta.d.coins).toBeGreaterThan(coins);
+    expect(meta.checkAchievements()).toHaveLength(0);
   });
 
   it('sell refunds 70% of the investment', () => {

@@ -2,6 +2,7 @@
 
 export type EnemyId =
   | 'grunt' | 'runner' | 'knight' | 'bat' | 'shaman' | 'shield'
+  | 'scarab' | 'wraith' | 'wolf' | 'golem' | 'fireimp' | 'magmaslug' | 'slugling'
   | 'boss_ogre' | 'boss_scorpion' | 'boss_yeti' | 'boss_dragon'
   | 'minion';
 
@@ -30,6 +31,16 @@ export interface EnemyDef {
   heal?: { amount: number; radius: number; interval: number };
   /** Protects allies behind it on the path. */
   shield?: { reduction: number; range: number };
+  /** Burrows underground now and then: untargetable while hidden. */
+  burrow?: { interval: number; duration: number };
+  /** Freezes the nearest tower in range for a while. */
+  freezeTowers?: { interval: number; radius: number; duration: number };
+  /** Splits into smaller enemies when killed. */
+  split?: { id: EnemyId; count: number };
+  /** Immune to burning and poison. */
+  dotImmune?: boolean;
+  /** Which Age it belongs to (for the bestiary); undefined = everywhere. */
+  age?: number;
   /** Boss mechanics. */
   boss?: {
     mechanics: BossMechanic[];
@@ -54,7 +65,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     hp: 110, speed: 0.75, armor: 0.5, magicResist: 0, flying: false, bounty: 9, leakDamage: 2, cost: 3.2, scale: 1.15,
   },
   bat: {
-    id: 'bat', name: 'Bat', description: 'Flying. Only Archer, Frost and Lightning can hit it.',
+    id: 'bat', name: 'Bat', description: 'Flying. Only towers that hit flyers can reach it.',
     hp: 30, speed: 1.45, armor: 0, magicResist: 0, flying: true, bounty: 5, leakDamage: 1, cost: 1.6, scale: 0.9,
   },
   shaman: {
@@ -66,6 +77,40 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     id: 'shield', name: 'Shield-bearer', description: 'Shields allies right behind it.',
     hp: 140, speed: 0.75, armor: 0.3, magicResist: 0, flying: false, bounty: 10, leakDamage: 2, cost: 4, scale: 1.2,
     shield: { reduction: 0.45, range: 1.6 },
+  },
+  // Age of Sands.
+  scarab: {
+    id: 'scarab', name: 'Scarab Swarm', description: 'Tiny armoured beetles that come in huge numbers.', age: 1,
+    hp: 14, speed: 1.55, armor: 0.35, magicResist: 0, flying: false, bounty: 2, leakDamage: 1, cost: 0.55, scale: 0.6,
+  },
+  wraith: {
+    id: 'wraith', name: 'Sand Wraith', description: 'Burrows under the sand where towers cannot hit it.', age: 1,
+    hp: 70, speed: 1.1, armor: 0.1, magicResist: 0.2, flying: false, bounty: 8, leakDamage: 1, cost: 2.6, scale: 1,
+    burrow: { interval: 4, duration: 1.6 },
+  },
+  // Age of Frost.
+  wolf: {
+    id: 'wolf', name: 'Snow Wolf', description: 'Hunts in fast packs.', age: 2,
+    hp: 40, speed: 2.0, armor: 0, magicResist: 0.1, flying: false, bounty: 4, leakDamage: 1, cost: 1.4, scale: 0.95,
+  },
+  golem: {
+    id: 'golem', name: 'Ice Golem', description: 'Huge and slow. Freezes nearby towers solid.', age: 2,
+    hp: 300, speed: 0.6, armor: 0.4, magicResist: 0.2, flying: false, bounty: 18, leakDamage: 3, cost: 7, scale: 1.45,
+    freezeTowers: { interval: 6, radius: 2.4, duration: 2.5 },
+  },
+  // Age of Fire.
+  fireimp: {
+    id: 'fireimp', name: 'Fire Imp', description: 'Flying fire spirit. Shrugs off magic.', age: 3,
+    hp: 46, speed: 1.6, armor: 0, magicResist: 0.5, flying: true, bounty: 6, leakDamage: 1, cost: 2, scale: 0.85, dotImmune: true,
+  },
+  magmaslug: {
+    id: 'magmaslug', name: 'Lava Slug', description: 'Splits into two sluglings when killed. Immune to burning.', age: 3,
+    hp: 150, speed: 0.7, armor: 0.25, magicResist: 0.1, flying: false, bounty: 10, leakDamage: 2, cost: 4.5, scale: 1.2, dotImmune: true,
+    split: { id: 'slugling', count: 2 },
+  },
+  slugling: {
+    id: 'slugling', name: 'Slugling', description: 'What is left of a Lava Slug.', age: 3,
+    hp: 45, speed: 1.0, armor: 0.1, magicResist: 0, flying: false, bounty: 2, leakDamage: 1, cost: 1, scale: 0.7, dotImmune: true,
   },
   minion: {
     id: 'minion', name: 'Imp', description: 'Summoned by bosses.',
@@ -93,7 +138,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   },
 };
 
-export const REGULAR_ENEMIES: EnemyId[] = ['grunt', 'runner', 'knight', 'bat', 'shaman', 'shield'];
+export const REGULAR_ENEMIES: EnemyId[] = ['grunt', 'runner', 'knight', 'bat', 'shaman', 'shield', 'scarab', 'wraith', 'wolf', 'golem', 'fireimp', 'magmaslug'];
 export const BOSS_BY_CHAPTER: EnemyId[] = ['boss_ogre', 'boss_scorpion', 'boss_yeti', 'boss_dragon'];
 
 export const ENEMY_RULES = {
@@ -104,4 +149,32 @@ export const ENEMY_RULES = {
   bossContactDps: 30,
   /** Flying enemies hover at this height. */
   flyHeight: 0.9,
+};
+
+/** Elite enemies: rare, glowing, tougher variants with one trait. */
+export type EliteTrait = 'regen' | 'splitter' | 'unstoppable' | 'armored' | 'swift';
+
+export const ELITES: Record<EliteTrait, { name: string; description: string; color: string }> = {
+  regen: { name: 'Regenerating', description: 'Heals quickly over time.', color: '#5aff8a' },
+  splitter: { name: 'Splitting', description: 'Splits into two when killed.', color: '#c86af0' },
+  unstoppable: { name: 'Unstoppable', description: 'Cannot be slowed, stunned or frozen.', color: '#ff5a4a' },
+  armored: { name: 'Armoured', description: 'Shrugs off much more damage of both kinds.', color: '#c9d2df' },
+  swift: { name: 'Swift', description: 'Moves half again as fast.', color: '#ffd84a' },
+};
+
+export const ELITE_RULES = {
+  /** No elites before this wave. */
+  firstWave: 8,
+  /** Chance per regular spawn: base + perWave × wave, capped. */
+  chanceBase: 0.025,
+  chancePerWave: 0.0006,
+  chanceMax: 0.09,
+  hpMult: 2.6,
+  bountyMult: 4,
+  scale: 1.25,
+  regenPerSecond: 0.035,
+  armorBonus: 0.3,
+  swiftMult: 1.5,
+  /** Gems awarded for killing an elite. */
+  gems: 1,
 };

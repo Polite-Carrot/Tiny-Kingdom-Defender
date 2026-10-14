@@ -4,19 +4,21 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel, barricadeModel } from '../entities/Models';
 import { HeroAnimator } from './HeroAnimator';
+import { HERO_GEAR } from '../data/heroes';
 import { Particles, Rings, Bolts } from '../systems/Effects';
 import { Scenery } from '../systems/Scenery';
 import { Grass, type BladeSpot } from '../systems/Grass';
 import type { AudioSystem } from '../systems/Audio';
-import { ENEMIES, type EnemyId } from '../data/enemies';
+import { ENEMIES, ELITES, ELITE_RULES, type EnemyId } from '../data/enemies';
 import { GRID_SIZE, ROADS } from '../data/base';
 import type { Theme } from '../data/themes';
 import { materialFor } from '../data/towers';
 import { tileToWorld } from './LevelMap';
+import { SYNERGY_BY_ID } from '../data/synergies';
 import { themeOf } from './Siege';
-import type { Run, Tower, ProjectileKind } from './Run';
+import type { Run, Tower, Enemy, ProjectileKind } from './Run';
 
 export interface ViewHooks {
   floatText(sx: number, sy: number, text: string, cls: string): void;
@@ -26,6 +28,7 @@ export interface ViewHooks {
 
 const ENEMY_COLORS: Record<EnemyId, string> = {
   grunt: '#7fb24f', runner: '#e0913a', knight: '#b9c2cf', bat: '#5b3f73', shaman: '#6a4aa0', shield: '#b0884f', minion: '#c0392b',
+  scarab: '#2f6f7a', wraith: '#d9c08a', wolf: '#dfe8f0', golem: '#9fd6f0', fireimp: '#ff7a2a', magmaslug: '#e0582b', slugling: '#ff8a4a',
   boss_ogre: '#8aa05a', boss_scorpion: '#c9a063', boss_yeti: '#eef3f7', boss_dragon: '#b8322a',
 };
 
@@ -40,9 +43,12 @@ interface TowerView {
   branch: number;
   aim: number;
   headY: number;
+  /** Ice block shown while an Ice Golem has the tower frozen. */
+  ice?: THREE.Mesh;
 }
 
 const _m = new THREE.Matrix4();
+const _up = new THREE.Vector3(0, 1, 0);
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
@@ -63,11 +69,22 @@ export class BattleView {
   private barFill!: THREE.InstancedMesh;
   private shadows!: THREE.InstancedMesh;
   private bubbles!: THREE.InstancedMesh;
+  /** Glowing rings under elite enemies. */
+  private eliteRings!: THREE.InstancedMesh;
   private projArrow!: THREE.InstancedMesh;
   private projBall!: THREE.InstancedMesh;
   private projGlow!: THREE.InstancedMesh;
   private towerViews = new Map<number, TowerView>();
   private pads!: THREE.InstancedMesh;
+  /** Barricade meshes by id, plus their HP bars. */
+  private walls = new Map<number, { group: THREE.Group; mesh: THREE.Mesh; bar: THREE.Mesh; barBg: THREE.Mesh; tier: number }>();
+  private tileMarker: THREE.Mesh | null = null;
+  /** Glowing links between towers in a synergy. */
+  private synergyLines: THREE.LineSegments | null = null;
+  private synergyKey = '';
+  private heroGear = 0;
+  private castleTier = 0;
+  private castleArchers = false;
   /** Rigged, animated hero. */
   private heroAnim: HeroAnimator | null = null;
   /** Soft coloured glow under the hero. */
@@ -109,11 +126,14 @@ export class BattleView {
     readonly run: Run,
     private audio: AudioSystem,
     private hooks: ViewHooks,
-    cosmetics: { castleColor: string; trailColor: string | null },
+    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; castleTier?: number; archers?: boolean },
   ) {
     this.theme = themeOf(run.waveIndex);
     this.trailColor = cosmetics.trailColor ? new THREE.Color(cosmetics.trailColor) : null;
     this.castleColor = cosmetics.castleColor;
+    this.heroGear = cosmetics.heroGear ?? 0;
+    this.castleTier = cosmetics.castleTier ?? 0;
+    this.castleArchers = cosmetics.archers ?? false;
     this.roadCells = BattleView.rasterizeRoads();
     this.particles = new Particles(renderer.quality === 'high' ? 900 : 400);
     this.root.add(this.particles.mesh, this.rings.group, this.bolts.group, this.board);
@@ -323,7 +343,7 @@ export class BattleView {
     // Castle, facing its first road.
     const cp = map.paths[0];
     const n = cp.xs.length;
-    this.castle = new THREE.Mesh(castleModel(this.castleColor), this.material);
+    this.castle = new THREE.Mesh(castleModel(this.castleColor, this.castleTier, this.castleArchers), this.material);
     this.castle.position.set(map.castle.x, 0, map.castle.z);
     this.castle.rotation.y = Math.atan2(cp.xs[n - 2] - cp.xs[n - 1], cp.zs[n - 2] - cp.zs[n - 1]);
     this.castle.castShadow = true;
@@ -379,7 +399,7 @@ export class BattleView {
       return m;
     };
     for (const id of Object.keys(ENEMIES) as EnemyId[]) {
-      const cap = ENEMIES[id].boss ? 4 : id === 'minion' ? 64 : 160;
+      const cap = ENEMIES[id].boss ? 4 : id === 'minion' || id === 'slugling' ? 64 : 160;
       const m = mk(enemyModel(id), this.material, cap);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
       m.castShadow = false;
@@ -395,6 +415,10 @@ export class BattleView {
     circle.rotateX(-Math.PI / 2);
     this.shadows = mk(circle, this.track(new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false })), 300);
     this.bubbles = mk(this.track(new THREE.IcosahedronGeometry(0.5, 1)), this.track(new THREE.MeshBasicMaterial({ color: '#7fc8ff', transparent: true, opacity: 0.28, depthWrite: false })), 160);
+    const eliteRing = this.track(new THREE.RingGeometry(0.36, 0.5, 24));
+    eliteRing.rotateX(-Math.PI / 2);
+    this.eliteRings = mk(eliteRing, this.track(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })), 64);
+    this.eliteRings.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(64 * 3).fill(1), 3);
 
     const arrowGeo = this.track(new THREE.BoxGeometry(0.035, 0.035, 0.34));
     this.projArrow = mk(arrowGeo, this.track(new THREE.MeshBasicMaterial({ color: '#ffffff' })), 128);
@@ -428,9 +452,7 @@ export class BattleView {
     this.moveMarker.visible = false;
     this.root.add(this.heroRing, this.moveMarker);
     if (hero) {
-      this.heroAnim = new HeroAnimator(hero.def.id, this.material, (x, z) =>
-        this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }));
-      this.root.add(this.heroAnim.root);
+      this.makeHeroAnimator();
       const auraGeo = this.track(new THREE.CircleGeometry(0.5, 32));
       auraGeo.rotateX(-Math.PI / 2);
       this.heroAura = new THREE.Mesh(auraGeo, this.track(new THREE.MeshBasicMaterial({
@@ -651,6 +673,54 @@ export class BattleView {
         this.audio.play('meteor');
       }
     });
+    on('eliteSpawn', (e) => {
+      const s = this.project(e.x, 1.2, e.z);
+      this.hooks.floatText(s.x, s.y, `${ELITES[e.elite!].name} elite!`, 'elite');
+      this.rings.spawn(e.x, e.z, 0.9, ELITES[e.elite!].color, 0.5);
+    });
+    on('eliteKill', (e) => {
+      const s = this.project(e.x, 1.0, e.z);
+      this.hooks.floatText(s.x, s.y - 20, `+${ELITE_RULES.gems} 💎`, 'gem big');
+      this.particles.burst(e.x, 0.5, e.z, ELITES[e.elite!].color, 18, { speed: 2.2, up: 2.5, size: 0.09, life: 0.7 });
+    });
+    on('castleFire', () => this.audio.play('arrow', 0.5));
+    on('synergy', ({ synergy, a, b }) => {
+      const def = SYNERGY_BY_ID[synergy];
+      for (const t of [a, b]) {
+        this.rings.spawn(t.x, t.z, 0.8, def.color, 0.6);
+        this.particles.burst(t.x, 1.0, t.z, def.color, 12, { speed: 1.5, up: 2, size: 0.08, life: 0.7 });
+      }
+      this.audio.play('upgrade');
+    });
+    on('barricadeRepaired', (b) => {
+      this.particles.burst(b.x, 0.3, b.z, '#ffe680', 10, { speed: 1.2, up: 2, size: 0.07, life: 0.5 });
+    });
+    on('barricadeBuilt', (b) => {
+      this.particles.burst(b.x, 0.2, b.z, '#c9a06a', 14, { speed: 1.8, up: 2, size: 0.09, life: 0.5 });
+      this.rings.spawn(b.x, b.z, 0.7, '#ffd84a', 0.4);
+    });
+    on('barricadeBroken', (b) => {
+      this.particles.burst(b.x, 0.3, b.z, '#9a6a3f', 26, { speed: 3, up: 3, size: 0.12, gravity: 1.2, life: 0.9 });
+      this.particles.burst(b.x, 0.2, b.z, '#8a8076', 10, { speed: 1.5, up: 1.2, size: 0.18, gravity: -0.4, life: 0.8 });
+      this.rig.shake(0.2);
+      this.audio.play('cannon', 0.8);
+      const s = this.project(b.x, 0.9, b.z);
+      this.hooks.floatText(s.x, s.y, 'Barricade broken!', 'boss');
+    });
+    on('barricadeRemoved', ({ barricade, refund }) => {
+      this.particles.burst(barricade.x, 0.3, barricade.z, '#bfb29a', 12, { speed: 2, up: 2, size: 0.1 });
+      const s = this.project(barricade.x, 0.8, barricade.z);
+      if (refund > 0) this.hooks.floatText(s.x, s.y, `+${refund}`, 'gold');
+      this.audio.play('sell');
+    });
+    on('burrow', ({ enemy, hidden }) => {
+      this.particles.burst(enemy.x, 0.05, enemy.z, '#d9c08a', hidden ? 10 : 8, { speed: 1.4, up: 1.6, size: 0.1, gravity: 2, life: 0.5 });
+    });
+    on('towerFrozen', ({ tower, enemy }) => {
+      this.bolts.spawn([enemy.x, 0.6, enemy.z, tower.x, 1.0, tower.z], '#bfeaff');
+      this.particles.burst(tower.x, 0.8, tower.z, '#e0faff', 14, { speed: 1.4, up: 1.5, size: 0.08, life: 0.6 });
+      this.audio.play('frost', 1);
+    });
     on('heroRespawn', (h) => {
       this.heroAnim?.respawn();
       this.rings.spawn(h.x, h.z, 0.9, h.def.color, 0.5);
@@ -794,6 +864,184 @@ export class BattleView {
 
   // --- Per-frame sync --------------------------------------------------------------
 
+  private _iceGeo: THREE.BufferGeometry | null = null;
+  private _iceMat: THREE.Material | null = null;
+  private iceGeo(): THREE.BufferGeometry {
+    return (this._iceGeo ??= this.track(new THREE.DodecahedronGeometry(0.62, 0)).scale(0.9, 1.25, 0.9));
+  }
+  private iceMat(): THREE.Material {
+    return (this._iceMat ??= this.track(new THREE.MeshLambertMaterial({ color: '#bfeaff', transparent: true, opacity: 0.55, flatShading: true, emissive: new THREE.Color('#2a6a8a') })));
+  }
+
+  /** Square outline over a road tile (barricade placement). col < 0 hides it. */
+  highlightTile(col: number, row: number): void {
+    if (!this.tileMarker) {
+      const g = this.track(new THREE.RingGeometry(0.62, 0.7, 4, 1));
+      g.rotateZ(Math.PI / 4);
+      g.rotateX(-Math.PI / 2);
+      this.tileMarker = new THREE.Mesh(g, this.track(new THREE.MeshBasicMaterial({ color: '#ffd84a', transparent: true, opacity: 0.9, depthWrite: false })));
+      this.root.add(this.tileMarker);
+    }
+    this.tileMarker.visible = col >= 0;
+    if (col >= 0) this.tileMarker.position.set(tileToWorld(col), 0.06, tileToWorld(row));
+  }
+
+  /** Rebuilds the synergy links when the set of pairs changes; sparks travel along them. */
+  private updateSynergyLinks(dt: number): void {
+    const pairs: { a: Tower; b: Tower; color: string }[] = [];
+    for (const t of this.run.towers) {
+      t.synergies.forEach((id, i) => {
+        const b = this.run.towers.find((o) => o.id === t.partners[i]);
+        if (b && t.id < b.id) pairs.push({ a: t, b, color: SYNERGY_BY_ID[id].color });
+      });
+    }
+    const key = pairs.map((p) => `${p.a.id}-${p.b.id}`).join();
+    if (key !== this.synergyKey) {
+      this.synergyKey = key;
+      if (this.synergyLines) {
+        this.root.remove(this.synergyLines);
+        this.synergyLines.geometry.dispose();
+        this.synergyLines = null;
+      }
+      if (pairs.length) {
+        const pos: number[] = [];
+        const col: number[] = [];
+        const c = new THREE.Color();
+        for (const p of pairs) {
+          pos.push(p.a.x, 0.16, p.a.z, p.b.x, 0.16, p.b.z);
+          c.set(p.color).multiplyScalar(1.6);
+          col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        this.synergyLines = new THREE.LineSegments(g, this.synergyMat());
+        this.root.add(this.synergyLines);
+      }
+    }
+    if (this.synergyLines) (this.synergyLines.material as THREE.LineBasicMaterial).opacity = 0.55 + Math.sin(this.time * 3) * 0.25;
+    for (const p of pairs) {
+      if (Math.random() > dt * 2.5) continue;
+      const k = Math.random();
+      this.particles.burst(p.a.x + (p.b.x - p.a.x) * k, 0.2, p.a.z + (p.b.z - p.a.z) * k, p.color, 1, { speed: 0.1, up: 0.6, size: 0.06, gravity: -0.2, life: 0.6, spread: 0 });
+    }
+  }
+
+  private _synMat: THREE.LineBasicMaterial | null = null;
+  private synergyMat(): THREE.LineBasicMaterial {
+    return (this._synMat ??= this.track(new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.7, depthWrite: false })));
+  }
+
+  private updateWalls(dt: number): void {
+    const run = this.run;
+    const live = new Set<number>();
+    const tier = 1 + Math.min(2, Math.floor(run.waveIndex / 20));
+    for (const b of run.barricades) {
+      live.add(b.id);
+      let w = this.walls.get(b.id);
+      if (!w || w.tier !== tier) {
+        if (w) this.root.remove(w.group);
+        const group = new THREE.Group();
+        const mesh = new THREE.Mesh(barricadeModel(tier), this.material);
+        mesh.castShadow = true;
+        const quad = this.track(new THREE.PlaneGeometry(1, 1));
+        const barBg = new THREE.Mesh(quad, this.wallBarMat('#2a1f1f'));
+        const bar = new THREE.Mesh(quad, this.wallBarMat('#d9a85a'));
+        barBg.renderOrder = bar.renderOrder = 11;
+        group.add(mesh);
+        this.root.add(group, barBg, bar);
+        group.position.set(b.x, 0, b.z);
+        // Lie across the road.
+        const c = run.map.closestOnPaths(b.x, b.z);
+        const pt = run.map.pointAt(c.path, c.dist, { x: 0, z: 0, dx: 0, dz: 0 });
+        group.rotation.y = Math.atan2(pt.dx, pt.dz);
+        w = { group, mesh, bar, barBg, tier };
+        this.walls.set(b.id, w);
+      }
+      // Shudder while being battered.
+      const hit = b.hitT < 0.2 ? (0.2 - b.hitT) / 0.2 : 0;
+      w.mesh.position.x = Math.sin(this.time * 70) * 0.03 * hit;
+      w.mesh.rotation.z = Math.sin(this.time * 55) * 0.04 * hit;
+      if (hit > 0 && Math.random() < dt * 10) this.particles.burst(b.x, 0.3, b.z, '#c9a06a', 1, { speed: 1.2, up: 1.4, size: 0.05, life: 0.4 });
+      const frac = Math.max(0, b.hp / b.maxHp);
+      const show = frac < 0.999;
+      w.bar.visible = w.barBg.visible = show;
+      if (show) {
+        const cam = this.renderer.camera;
+        w.barBg.position.set(b.x, 0.85, b.z);
+        w.barBg.quaternion.copy(cam.quaternion);
+        w.barBg.scale.set(0.66, 0.09, 1);
+        w.bar.position.copy(w.barBg.position).addScaledVector(_right, -(0.6 * (1 - frac)) / 2);
+        w.bar.quaternion.copy(cam.quaternion);
+        w.bar.scale.set(Math.max(0.001, 0.6 * frac), 0.06, 1);
+      }
+    }
+    for (const [id, w] of this.walls) {
+      if (live.has(id)) continue;
+      this.root.remove(w.group, w.bar, w.barBg);
+      this.walls.delete(id);
+    }
+  }
+
+  private _wallBarMats = new Map<string, THREE.Material>();
+  private wallBarMat(color: string): THREE.Material {
+    let m = this._wallBarMats.get(color);
+    if (!m) {
+      m = this.track(new THREE.MeshBasicMaterial({ color, depthTest: false, toneMapped: false }));
+      this._wallBarMats.set(color, m);
+    }
+    return m;
+  }
+
+  private makeHeroAnimator(): void {
+    const hero = this.run.hero;
+    if (!hero) return;
+    if (this.heroAnim) this.root.remove(this.heroAnim.root);
+    this.heroAnim = new HeroAnimator(hero.def.id, this.material, (x, z) =>
+      this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }), this.heroGear);
+    this.root.add(this.heroAnim.root);
+  }
+
+  /** Castle upgrades bought mid-siege: swap in the bigger castle. */
+  setCastleLook(tier: number, archers: boolean): void {
+    if (tier === this.castleTier && archers === this.castleArchers) return;
+    this.castleTier = tier;
+    this.castleArchers = archers;
+    this.castle.geometry = castleModel(this.castleColor, tier, archers);
+    const c = this.run.map.castle;
+    this.rings.spawn(c.x, c.z, 1.6, '#ffd84a', 0.8);
+    this.particles.burst(c.x, 0.6, c.z, '#ffe680', 24, { speed: 2, up: 3, size: 0.09, life: 0.8 });
+  }
+
+  /** Level-up burst; `newGear` ≥ 0 re-dresses the hero in that gear tier. */
+  heroLevelUp(newGear: number): void {
+    const h = this.run.hero;
+    if (!h) return;
+    if (newGear >= 0) {
+      this.heroGear = newGear;
+      this.makeHeroAnimator();
+      this.heroAnim?.respawn();
+    }
+    const col = newGear >= 0 ? HERO_GEAR[newGear].color : '#ffe680';
+    this.rings.spawn(h.x, h.z, 0.9, col, 0.6);
+    this.rings.spawn(h.x, h.z, 1.4, '#ffffff', 0.8);
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      this.particles.burst(h.x + Math.cos(a) * 0.35, 0.1, h.z + Math.sin(a) * 0.35, i % 2 ? col : '#ffe680', 1, { speed: 0.2, up: 3.5, size: 0.08, gravity: -0.5, life: 0.9, spread: 0 });
+    }
+    const s = this.project(h.x, 1.4, h.z);
+    this.hooks.floatText(s.x, s.y, 'LEVEL UP!', 'heal big');
+  }
+
+  /** Boss entrance: shockwave rings, dust and a heavy shake at the tunnel. */
+  bossIntro(e: Enemy): void {
+    const col = ENEMY_COLORS[e.def.id];
+    for (let i = 0; i < 3; i++) this.rings.spawn(e.x, e.z, 1 + i * 0.8, i === 1 ? '#ffffff' : col, 0.7 + i * 0.25);
+    this.particles.burst(e.x, 0.1, e.z, '#8a7a6a', 26, { speed: 2.5, up: 2, size: 0.16, gravity: 1, life: 0.9 });
+    this.particles.burst(e.x, 0.6, e.z, col, 16, { speed: 2, up: 3, size: 0.1, life: 0.8 });
+    this.rig.shake(0.35);
+  }
+
   /** Radial gradient for the hero's aura. */
   private auraTexture(): THREE.Texture {
     const c = document.createElement('canvas');
@@ -866,6 +1114,8 @@ export class BattleView {
 
   update(dt: number, simSpeed: number): void {
     this.updateFrontier(dt);
+    this.updateWalls(dt);
+    this.updateSynergyLinks(dt);
     this.time += dt;
     const run = this.run;
     const cam = this.renderer.camera;
@@ -876,6 +1126,7 @@ export class BattleView {
     let bars = 0;
     let shadows = 0;
     let bubbles = 0;
+    let eliteRings = 0;
     const bgColor = this.barFill.instanceColor!.array as Float32Array;
     for (const e of run.enemies) {
       const dying = !e.alive && e.flash > 0;
@@ -884,7 +1135,7 @@ export class BattleView {
       const idx = counts.get(e.def.id) ?? 0;
       if (idx >= mesh.instanceMatrix.count) continue;
       counts.set(e.def.id, idx + 1);
-      const sc = e.def.scale * ENEMY_VISUAL_SCALE;
+      const sc = e.def.scale * ENEMY_VISUAL_SCALE * (e.elite ? ELITE_RULES.scale : 1);
       const yaw = Math.atan2(e.dirX, e.dirZ);
       let y = e.y;
       let rx = 0;
@@ -907,6 +1158,12 @@ export class BattleView {
         y += bob * 0.05 * sc;
         rz = Math.sin(this.time * 9 * Math.max(0.6, speed) + e.phase) * 0.08;
       }
+      if (e.hidden) {
+        // Burrowed: only a ripple of sand shows where it travels.
+        y -= 0.42 * sc;
+        sy *= 0.6;
+        if (Math.random() < dt * 12) this.particles.burst(e.x, 0.03, e.z, '#d9c08a', 1, { speed: 0.5, up: 0.7, size: 0.07, gravity: 1.5, life: 0.4 });
+      }
       if (e.alive && e.dotTimer > 0 && Math.random() < dt * 9) {
         const burn = e.dotKind === 'burn';
         this.particles.burst(e.x + (Math.random() - 0.5) * 0.2 * sc, y + 0.3 * sc, e.z + (Math.random() - 0.5) * 0.2 * sc, burn ? (Math.random() < 0.5 ? '#ff7a1a' : '#ffd36a') : '#8be05a', 1,
@@ -925,6 +1182,14 @@ export class BattleView {
       else if (e.frozen && e.stunTimer > 0 && e.slowFactor < 1) { r = 0.6; g = 0.9; b = 1.8; }
       else if (e.slowFactor < 1) { r = 0.75; g = 0.92; b = 1.35; }
       if (e.def.boss && e.chargeTimer <= 0 && e.alive) { r *= 1.6; g *= 0.7; b *= 0.7; }
+      if (e.elite && !dying) {
+        // Elites glow in their trait colour, pulsing.
+        _cTmp.set(ELITES[e.elite].color);
+        const k = 0.35 + Math.sin(this.time * 5 + e.phase) * 0.12;
+        r = r * (1 - k) + _cTmp.r * 1.8 * k;
+        g = g * (1 - k) + _cTmp.g * 1.8 * k;
+        b = b * (1 - k) + _cTmp.b * 1.8 * k;
+      }
       if (dying) { r = g = b = 0.8; }
       mesh.setColorAt(idx, _cTmp.setRGB(r, g, b));
 
@@ -935,6 +1200,16 @@ export class BattleView {
         _m.compose(_p.set(e.x, 0.015, e.z), _q.identity(), _s.set(ss, 1, ss));
         this.shadows.setMatrixAt(shadows++, _m);
       }
+      // Elite ring and sparkles.
+      if (e.elite && eliteRings < 64 && !e.hidden) {
+        const rs = sc * (1.05 + Math.sin(this.time * 4 + e.phase) * 0.08);
+        _q.setFromAxisAngle(_up, this.time * 1.5);
+        _m.compose(_p.set(e.x, (e.def.flying ? e.y - 0.3 : 0) + 0.03, e.z), _q, _s.set(rs, 1, rs));
+        this.eliteRings.setMatrixAt(eliteRings, _m);
+        this.eliteRings.setColorAt(eliteRings, _cTmp.set(ELITES[e.elite].color).multiplyScalar(1.6));
+        eliteRings++;
+        if (Math.random() < dt * 6) this.particles.burst(e.x, e.y + 0.4 * sc, e.z, ELITES[e.elite].color, 1, { speed: 0.4, up: 1, size: 0.06, gravity: -0.5, life: 0.5 });
+      }
       // Shield bubble.
       if (e.shielded > 0 && bubbles < this.bubbles.instanceMatrix.count) {
         const bs = sc * 0.95;
@@ -943,7 +1218,7 @@ export class BattleView {
       }
       // Health bar.
       const frac = Math.max(0, e.hp / e.maxHp);
-      if ((frac < 0.999 || e.def.boss) && bars < 255) {
+      if ((frac < 0.999 || e.def.boss) && bars < 255 && !e.hidden) {
         const w = e.def.boss ? 1.1 : 0.48;
         const h = e.def.boss ? 0.09 : 0.06;
         const by = e.y + (e.def.flying ? 0.45 : 0.78) * sc + 0.1;
@@ -954,7 +1229,7 @@ export class BattleView {
         _p.addScaledVector(_right, -off);
         _m.compose(_p, cam.quaternion, _s.set(Math.max(0.001, w * frac), h, 1));
         this.barFill.setMatrixAt(bars, _m);
-        const col = e.immuneTimer > 0 ? [1, 0.85, 0.2] : frac > 0.5 ? [0.35 + (1 - frac) * 1.2, 0.88, 0.32] : [0.95, 0.3 + frac * 1.0, 0.25];
+        const col = e.elite ? [1.2, 0.85, 0.15] : e.immuneTimer > 0 ? [1, 0.85, 0.2] : frac > 0.5 ? [0.35 + (1 - frac) * 1.2, 0.88, 0.32] : [0.95, 0.3 + frac * 1.0, 0.25];
         bgColor[bars * 3] = col[0];
         bgColor[bars * 3 + 1] = col[1];
         bgColor[bars * 3 + 2] = col[2];
@@ -1017,6 +1292,10 @@ export class BattleView {
     this.barBg.visible = this.barFill.visible = bars > 0;
     this.shadows.instanceMatrix.needsUpdate = true;
     this.bubbles.count = bubbles;
+    this.eliteRings.count = eliteRings;
+    this.eliteRings.visible = eliteRings > 0;
+    this.eliteRings.instanceMatrix.needsUpdate = true;
+    if (this.eliteRings.instanceColor) this.eliteRings.instanceColor.needsUpdate = true;
     this.bubbles.instanceMatrix.needsUpdate = true;
     this.barBg.count = this.barFill.count = bars;
     this.barBg.instanceMatrix.needsUpdate = true;
@@ -1130,6 +1409,15 @@ export class BattleView {
         v.head.scale.set(1, 1 - v.recoil * 0.08, 1);
       }
       v.recoil = Math.max(0, v.recoil - dt * 6);
+      if (t.frozen > 0 && !v.ice) {
+        v.ice = new THREE.Mesh(this.iceGeo(), this.iceMat());
+        v.ice.position.y = 0.55;
+        v.group.add(v.ice);
+      }
+      if (v.ice) {
+        v.ice.visible = t.frozen > 0;
+        if (v.ice.visible) v.ice.scale.set(1, 0.9 + Math.min(1, t.frozen) * 0.15, 1);
+      }
       // Precious materials sparkle.
       if (t.tier >= 6 && Math.random() < dt * (t.tier - 4) * 0.6) {
         this.particles.burst(t.x + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 1.2, t.z + (Math.random() - 0.5) * 0.6, materialFor(t.tier).accent, 1, { speed: 0.2, up: 0.8, size: 0.05, gravity: -0.5, life: 0.8 });

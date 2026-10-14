@@ -2,11 +2,11 @@
 
 import { el, $, fmt, fmtTime } from './dom';
 import { icon, ICONS } from './icons';
-import { towerThumb, heroThumb, thumb } from './Thumbnails';
+import { towerThumb, heroThumb, thumb, enemyThumb } from './Thumbnails';
 import type { Game } from '../game/Game';
 import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, type TowerId } from '../data/towers';
-import { HEROES, HERO_ORDER, type AbilityKind } from '../data/heroes';
+import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, xpForLevel, gearTierFor, type AbilityKind } from '../data/heroes';
 
 const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
 import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
@@ -14,6 +14,8 @@ import { summarise } from '../analytics/Analytics';
 import type { RewardedPlacement } from '../data/ads';
 import type { ChestReward, MetaUpgradeKey } from '../game/Meta';
 import type { ModalHandle } from './UI';
+import { ACHIEVEMENTS } from '../data/achievements';
+import { ENEMIES, BOSS_BY_CHAPTER, type EnemyDef, type EnemyId } from '../data/enemies';
 import { newKingdom } from '../game/Run';
 
 // --- Helpers --------------------------------------------------------------------------
@@ -229,7 +231,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
           const def = META_UPGRADES[k];
           const lvl = d.meta[k];
           const cost = meta.metaUpgradeCost(k);
-          const ic = k === 'castleHp' ? 'heart' : k === 'warChest' ? 'coin' : 'sword';
+          const ic = k === 'castleHp' ? 'heart' : k === 'battlements' ? 'castle' : k === 'warChest' ? 'coin' : 'sword';
           const btn = cost === null ? `<button class="btn small gold disabled" disabled>MAX</button>` : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-meta="${k}">${costHtml(cost)}</button>`;
           return `<div class="list-item"><div class="thumb">${icon(ic as 'heart').replace('class="ico ', 'class="ico " style="width:36px;height:36px"')}</div>
             <div class="body"><div class="name">${def.name} <span class="muted">Lv ${lvl}</span></div><div class="desc">${def.description}</div>
@@ -332,6 +334,14 @@ export function heroes(game: Game): void {
           <div class="portrait"><img src="${heroThumb(id)}" alt=""/>${owned ? '' : `<span class="lock">${ICONS.lock}</span>`}</div>
           <div class="body">
             <div class="name">${h.name} <span class="muted">${h.title}</span></div>
+            ${owned ? (() => {
+              const lvl = meta.heroLevel(id), xp = meta.heroXp(id);
+              const lo = xpForLevel(lvl), hi = xpForLevel(lvl + 1);
+              const frac = lvl >= HERO_LEVELS.max ? 1 : (xp - lo) / Math.max(1, hi - lo);
+              const gear = HERO_GEAR[gearTierFor(lvl)];
+              const nextGear = HERO_GEAR.find((g) => g.level > lvl);
+              return `<div class="hlevel"><span class="lv">Lv ${lvl}</span><span class="gear" style="--gc:${gear.color}">${gear.name}</span><i><b style="width:${Math.round(frac * 100)}%"></b></i><span class="muted">${nextGear ? `${nextGear.name} gear at Lv ${nextGear.level}` : 'Max gear'}</span></div>`;
+            })() : ''}
             <div class="desc">${h.description}</div>
             <div class="hstats">${bar('HP', h.hp / 560)}${bar('DPS', dps / 60)}${bar('Range', h.range / 3)}${bar('Speed', h.speed / 3.6)}</div>
             <div class="ability"><span class="aico">${ICONS[ABILITY_ICONS[h.ability.kind]]}</span><span><b>${h.ability.name}</b> ${h.ability.description}</span></div>
@@ -657,3 +667,84 @@ export function debug(game: Game): void {
   }, { wide: true, onClose: () => game.s.ui.currentScreen === 'title' && game.title.render() });
 }
 
+
+// --- Trophy room ----------------------------------------------------------------------
+
+export function trophies(game: Game): void {
+  const { meta } = game.s;
+  for (const a of meta.checkAchievements()) game.s.ui.achievement(a.name, a.description, a.reward.coins, a.reward.gems ?? 0);
+  game.s.ui.modal((m) => {
+    const d = meta.d;
+    const done = ACHIEVEMENTS.filter((a) => d.achievements.includes(a.id)).length;
+    const rows = ACHIEVEMENTS.map((a) => {
+      const got = d.achievements.includes(a.id);
+      const p = Math.min(a.target, a.progress(d));
+      const frac = got ? 1 : p / a.target;
+      return `<div class="trophy ${got ? 'got' : ''}">
+        <div class="tico">${icon(a.icon as 'trophy')}</div>
+        <div class="tbody"><b>${a.name}</b><span>${a.description}</span>
+          <i class="tbar"><b style="width:${Math.round(frac * 100)}%"></b></i>
+          <small>${got ? 'Unlocked' : `${fmt(Math.floor(p))} / ${fmt(a.target)}`}</small></div>
+        <div class="treward">${got ? '✓' : `+${a.reward.coins} 🪙${a.reward.gems ? `<br/>+${a.reward.gems} 💎` : ''}`}</div>
+      </div>`;
+    }).join('');
+    m.innerHTML = `<div class="ribbon purple">Trophy Room</div>
+      <div class="trophy-summary"><b>${done}</b> of ${ACHIEVEMENTS.length} trophies<i class="tbar"><b style="width:${Math.round((done / ACHIEVEMENTS.length) * 100)}%"></b></i></div>
+      <div class="trophies">${rows}</div>`;
+  }, { wide: true });
+}
+
+// --- Bestiary -------------------------------------------------------------------------
+
+const AGE_NAMES = ['Age of Meadows', 'Age of Sands', 'Age of Frost', 'Age of Fire'];
+
+/** Plain-language counters for an enemy, from its stats. */
+function enemyTips(e: EnemyDef): string[] {
+  const t: string[] = [];
+  if (e.flying) t.push('Flies: only Archer, Frost, Mage, Ballista and Lightning can hit it.');
+  if (e.armor >= 0.3) t.push('Heavy armour: magic (Mage, Lightning, Frost, Flame) cuts through it; Alchemist melts the armour.');
+  if (e.magicResist >= 0.3) t.push('Resists magic: use Archer, Cannon or Ballista.');
+  if (e.speed >= 1.5) t.push('Fast: slow it with Frost, or hold it with a barricade.');
+  if (e.burrow) t.push('Burrows under the sand: towers can only hit it when it surfaces, but burning and poison keep working.');
+  if (e.freezeTowers) t.push('Freezes nearby towers: kill it fast with a Ballista or your hero, or keep towers spread out.');
+  if (e.split) t.push('Splits when killed: splash damage (Cannon, Alchemist, Flame) mops up the pieces.');
+  if (e.dotImmune) t.push('Immune to burning and poison.');
+  if (e.heal) t.push('Heals nearby allies: target it first with "Strongest" targeting or your hero.');
+  if (e.shield) t.push('Shields the enemies right behind it: kill it first.');
+  if (e.boss?.mechanics.includes('summon')) t.push('Summons minions as it marches: splash towers help.');
+  if (e.boss?.mechanics.includes('charge')) t.push('Charges forward at speed: barricades and stuns blunt it.');
+  if (e.boss?.mechanics.includes('immune')) t.push('Becomes briefly immune at low health: save your hero ability.');
+  if (!t.length) t.push('No special tricks: any tower will do.');
+  return t;
+}
+
+export function bestiary(game: Game): void {
+  const { meta } = game.s;
+  game.s.ui.modal((m) => {
+    const d = meta.d;
+    const ids = (Object.keys(ENEMIES) as EnemyId[]).sort((a, b) => (ENEMIES[a].age ?? 0) - (ENEMIES[b].age ?? 0) || (ENEMIES[a].boss ? 1 : 0) - (ENEMIES[b].boss ? 1 : 0));
+    const found = ids.filter((id) => (d.bestiary[id]?.seen ?? 0) > 0).length;
+    const cards = ids.map((id) => {
+      const e = ENEMIES[id];
+      const rec = d.bestiary[id];
+      const seen = (rec?.seen ?? 0) > 0;
+      const bossAge = BOSS_BY_CHAPTER.indexOf(id);
+      const where = bossAge >= 0 ? `Boss of the ${AGE_NAMES[bossAge]}` : e.age !== undefined ? AGE_NAMES[e.age] : id === 'minion' ? 'Summoned by bosses' : 'Every Age';
+      if (!seen) {
+        return `<div class="beast unknown"><div class="bimg"><img src="${enemyThumb(id)}" alt=""/></div><div class="bbody"><b>???</b><span class="where">${where}</span><span class="muted">Not yet encountered.</span></div></div>`;
+      }
+      const pct = (v: number) => `${Math.round(v * 100)}%`;
+      return `<div class="beast ${e.boss ? 'boss' : ''}">
+        <div class="bimg"><img src="${enemyThumb(id)}" alt=""/></div>
+        <div class="bbody"><b>${e.name}${e.boss ? ' <span class="btag">BOSS</span>' : ''}</b><span class="where">${where}</span>
+          <span class="bdesc">${e.description}</span>
+          <div class="bstats"><span>❤ ${e.hp}</span><span>👟 ${e.speed}</span><span>🛡 ${pct(e.armor)}</span><span>✨ ${pct(e.magicResist)}</span>${e.flying ? '<span>🪽 Flies</span>' : ''}</div>
+          <ul class="btips">${enemyTips(e).map((t) => `<li>${t}</li>`).join('')}</ul>
+          <small class="muted">Seen ${fmt(rec!.seen)} · Defeated ${fmt(rec!.killed)}</small></div>
+      </div>`;
+    }).join('');
+    m.innerHTML = `<div class="ribbon">Bestiary</div>
+      <div class="trophy-summary"><b>${found}</b> of ${ids.length} discovered<i class="tbar"><b style="width:${Math.round((found / ids.length) * 100)}%"></b></i></div>
+      <div class="beasts">${cards}</div>`;
+  }, { wide: true });
+}

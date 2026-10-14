@@ -1,13 +1,17 @@
 // The siege session on your persistent kingdom: owns the Run (simulation), BattleView (3D),
 // drives the HUD, and saves the kingdom at safe moments.
 
-import { Run, newKingdom, type BaseSnapshot } from './Run';
+import { Run, newKingdom, type BaseSnapshot, type Enemy } from './Run';
 import { BattleView } from './BattleView';
 import { Tutorial } from './Tutorial';
 import type { Services } from './Services';
 import type { Hud } from '../ui/Hud';
-import { TOWERS, TOWER_ORDER, type TowerId, type TargetMode } from '../data/towers';
-import { ROADS, SIEGE, TOWER_UNLOCK_WAVE } from '../data/base';
+import { TOWERS, TOWER_ORDER, MAX_TIER, type TowerId, type TargetMode } from '../data/towers';
+import { ROADS, SIEGE, TOWER_UNLOCK_WAVE, BARRICADE } from '../data/base';
+import { worldToTile } from './LevelMap';
+import { ELITE_RULES } from '../data/enemies';
+import { SYNERGY_BY_ID } from '../data/synergies';
+import { HERO_LEVELS, HERO_GEAR, gearTierFor } from '../data/heroes';
 import { ageTitle, themeOf } from './Siege';
 import { towerThumb } from '../ui/Thumbnails';
 import { el } from '../ui/dom';
@@ -23,6 +27,9 @@ export class Battle {
   paused = false;
   /** The siege is frozen for a cinematic (the view keeps animating). */
   private holdSim = false;
+  private achT = 1;
+  /** Seconds left of a timed cinematic (boss entrance); 0 = none. */
+  private cinematicT = 0;
   private acc = 0;
   private heroSelected = false;
   private startTime = performance.now();
@@ -53,11 +60,12 @@ export class Battle {
         s.audio.play('coin');
       }),
       castleHit: () => !opts.demo && this.hud.castleHit(),
-    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor() });
+    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0 });
     if (opts.demo) return;
 
     if (!s.save.data.base) this.persist(true);
     this.hud.bind(this.run);
+    if (this.run.hero) this.hud.setHeroLevel(meta.heroLevel(this.run.hero.def.id), meta.heroXp(this.run.hero.def.id));
     this.bindRunEvents();
     this.tutorial = new Tutorial(s, this, hud);
     s.analytics.track('level_start', { level: 'siege', wave: this.run.waveIndex + 1, towers: this.run.towers.length, gold: this.run.gold, hero: this.run.hero?.def.id ?? 'none' });
@@ -119,6 +127,35 @@ export class Battle {
     }, { closable: false, cls: 'frontier' });
   }
 
+  /** Hero XP; on a level-up the hero gets stronger at once (and new gear shows if it unlocked). */
+  private giveHeroXp(xp: number): void {
+    const hero = this.run.hero;
+    if (!hero) return;
+    const { meta, ui, audio } = this.s;
+    const r = meta.addHeroXp(hero.def.id, xp);
+    this.hud.setHeroLevel(r.level, meta.heroXp(hero.def.id));
+    if (!r.levelUp) return;
+    this.run.applyMeta(meta.metaBonuses());
+    const gear = HERO_GEAR[gearTierFor(r.level)];
+    ui.banner(`${hero.def.name} reached level ${r.level}!`, r.newGear ? `New gear: ${gear.name}` : 'Stronger attacks and abilities');
+    audio.play('upgrade');
+    this.view.heroLevelUp(r.newGear ? gearTierFor(r.level) : -1);
+    meta.commit();
+  }
+
+  /** A boss steps out of its tunnel: freeze for a moment, swoop the camera in and show its name. */
+  private bossEntrance(e: Enemy): void {
+    const { ui, audio, rig } = this.s;
+    ui.banner(e.def.name, e.def.description, 'boss');
+    audio.play('bossRoar');
+    this.view.bossIntro(e);
+    if (this.holdSim) return;
+    this.holdSim = true;
+    this.cinematicT = 2.2;
+    this.deselect();
+    rig.focusOn(e.x, e.z, 1.9);
+  }
+
   /** Saves the kingdom. Only saves mid-wave when given the wave to resume from. */
   persist(force = false, wave?: number): void {
     if (!force && !this.run.isQuiet()) return;
@@ -137,6 +174,7 @@ export class Battle {
       else if (index % SIEGE.ageEvery !== 0 || index === 0) ui.banner(`Wave ${index + 1}`, ageTitle(index));
     });
     ev.on('waveCleared', ({ index, gold }) => {
+      if (this.run.hero && !this.run.hero.dead) this.giveHeroXp(HERO_LEVELS.waveXpBase + HERO_LEVELS.waveXpPerWave * index);
       const before = meta.towersAvailable();
       meta.recordWaveCleared(index);
       const done = meta.addMissionProgress('wavesCleared', 1);
@@ -156,6 +194,44 @@ export class Battle {
     });
     ev.on('ageChange', () => this.onAgeChange());
     ev.on('frontier', (f) => this.announceFrontier(f.wave, f.newAge, f.roads));
+    ev.on('heroKill', (e) => {
+      const xp = e.def.boss ? HERO_LEVELS.bossXp : e.elite ? HERO_LEVELS.eliteXp : Math.max(1, e.def.cost * HERO_LEVELS.xpPerCost);
+      this.giveHeroXp(xp);
+    });
+    ev.on('synergy', ({ synergy }) => {
+      const def = SYNERGY_BY_ID[synergy];
+      ui.banner(`Synergy: ${def.name}`, def.description);
+    });
+    ev.on('eliteKill', () => {
+      meta.d.shards += ELITE_RULES.gems;
+      meta.d.life.eliteKills++;
+      meta.commit();
+    });
+    ev.on('enemyDeath', ({ enemy, bounty }) => {
+      if (bounty <= 0 && !enemy.def.boss) return;
+      meta.killedEnemy(enemy.def.id);
+      if (enemy.def.boss) meta.d.life.bossKills++;
+      if (enemy.def.flying) meta.d.life.flyingKills++;
+    });
+    ev.on('towerBuilt', () => meta.d.life.towersBuilt++);
+    ev.on('towerUpgraded', (t) => {
+      if (t.tier === MAX_TIER) meta.d.life.celestialTowers++;
+    });
+    ev.on('barricadeBuilt', () => meta.d.life.barricades++);
+    ev.on('synergy', ({ synergy }) => {
+      meta.d.life.synergies++;
+      if (!meta.d.life.synergyTypes.includes(synergy)) meta.d.life.synergyTypes.push(synergy);
+    });
+    ev.on('heroAbility', () => meta.d.life.abilityUses++);
+    ev.on('checkpoint', () => {
+      if (this.run.castleHp >= this.run.castleMaxHp) meta.d.life.perfectCheckpoints++;
+    });
+    ev.on('enemySpawn', (e) => {
+      if (meta.sawEnemy(e.def.id) && this.run.waveIndex > 1) {
+        setTimeout(() => ui.toast(`New enemy discovered: ${e.def.name}! Check the Bestiary.`, 2800), 400);
+      }
+      if (e.def.boss) this.bossEntrance(e);
+    });
     ev.on('towerBuilt', (t) => analytics.track('tower_built', { level: 'siege', tower: t.def.id, spot: t.spot, wave: this.run.waveIndex }));
     ev.on('towerUpgraded', (t) => analytics.track('tower_upgraded', { level: 'siege', tower: t.def.id, tier: t.tier, branch: t.branch >= 0 ? t.def.branches[t.branch].id : null }));
     ev.on('heroAbility', ({ hero }) => analytics.track('hero_ability_used', { level: 'siege', hero: hero.def.id, ability: hero.def.ability.kind }));
@@ -194,6 +270,10 @@ export class Battle {
   update(dt: number): void {
     if (this.holdSim) {
       this.view.update(dt, 1);
+      if (this.cinematicT > 0 && (this.cinematicT -= dt) <= 0) {
+        this.holdSim = false;
+        this.s.rig.clearFocus();
+      }
       return;
     }
     if (!this.paused) {
@@ -210,6 +290,11 @@ export class Battle {
     this.view.update(this.paused ? 0 : dt * this.speed, this.speed);
     this.hud.update();
     this.tutorial?.update();
+    // Achievements are cheap to check; do it a couple of times a second.
+    if ((this.achT -= dt) <= 0) {
+      this.achT = 0.5;
+      for (const a of this.s.meta.checkAchievements()) this.s.ui.achievement(a.name, a.description, a.reward.coins, a.reward.gems ?? 0);
+    }
   }
 
   /** Menu backdrop: your kingdom, idle. */
@@ -252,7 +337,53 @@ export class Battle {
       this.selectSpot(best);
       return;
     }
+    // Tapping an open road tile offers a barricade there.
+    const col = worldToTile(x), row = worldToTile(z);
+    if (run.isOpenRoadTile(col, row) || run.barricadeAt(col, row)) {
+      if (this.s.meta.bestWave() < BARRICADE.unlockWave && !run.barricadeAt(col, row)) {
+        this.s.ui.toast(`Barricades unlock at wave ${BARRICADE.unlockWave}`);
+        this.deselect();
+        return;
+      }
+      this.setHeroSelected(false);
+      this.view.highlightSpot(-1);
+      this.view.hideRange();
+      this.view.highlightTile(col, row);
+      this.hud.openWall(col, row);
+      this.s.audio.play('select');
+      return;
+    }
     this.deselect();
+  }
+
+  buildWall(): void {
+    const [c, r] = this.hud.wallTile;
+    const run = this.run;
+    if (run.barricades.length >= run.barricadeLimit()) return this.s.ui.toast(`You can have ${run.barricadeLimit()} barricades (one more per Age)`);
+    if (run.gold < run.barricadeCost()) {
+      this.s.audio.play('error');
+      return this.s.ui.toast('Not enough gold');
+    }
+    if (run.placeBarricade(c, r)) {
+      this.s.audio.play('build');
+      this.persist();
+    }
+  }
+
+  repairWall(): void {
+    const b = this.run.barricadeAt(...this.hud.wallTile);
+    if (b && this.run.repairBarricade(b)) {
+      this.s.audio.play('upgrade');
+      this.persist();
+    } else this.s.audio.play('error');
+  }
+
+  removeWall(): void {
+    const b = this.run.barricadeAt(...this.hud.wallTile);
+    if (!b) return;
+    this.run.removeBarricade(b);
+    this.deselect();
+    this.persist();
   }
 
   private selectSpot(spot: number): void {
@@ -276,6 +407,7 @@ export class Battle {
 
   deselect(): void {
     this.hud.closeCtx();
+    this.view.highlightTile(-1, -1);
     this.view.highlightSpot(-1);
     this.view.hideRange();
     this.setHeroSelected(false);
@@ -398,6 +530,7 @@ export class Battle {
   /** Re-applies permanent upgrades bought in the shop mid-siege. */
   applyMeta(): void {
     this.run.applyMeta(this.s.meta.metaBonuses());
+    this.view.setCastleLook(this.s.meta.castleTier(), (this.s.meta.d.meta.battlements ?? 0) > 0);
     this.run.config.availableTowers.splice(0, this.run.config.availableTowers.length, ...this.s.meta.towersAvailable());
     this.persist();
   }

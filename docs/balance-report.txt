@@ -3,37 +3,32 @@ Tiny Kingdom Defender — career simulation (20h of play at 1x per kingdom, 2 se
 == Typical player (spends coins on upgrades, no ads) ==
 Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
   wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
-  wave  20   13m (1)               13m (1)               9 towers, avg Bronze (3.8), best Bronze; meta Lv 1
-  wave  30   18m (1)               24m (2)               10 towers, avg Bronze (4.4), best Silver; meta Lv 1
-  wave  40   53m (6)               36m (3)               15 towers, avg Gold (5.9), best Gold; meta Lv 2
-  wave  50   1.4h (26)             1.1h (20)             17 towers, avg Jade (6.7), best Jade; meta Lv 2
-  wave  60   2.0h (32)             1.6h (26)             20 towers, avg Crystal (7.7), best Crystal; meta Lv 3
-  wave  70   2.9h (42)             1.9h (30)             22 towers, avg Obsidian (8.7), best Obsidian; meta Lv 3
-  wave  80   3.7h (51)             2.6h (37)             23 towers, avg Obsidian (9.4), best Celestial; meta Lv 4
-  wave  90   5.4h (103)            3.2h (44)             25 towers, avg Celestial (10.6), best Celestial; meta Lv 4
-  wave 100   5.9h (108)            4.3h (59)             25 towers, avg Celestial (11.0), best Celestial; meta Lv 4
-  wave 110   13.6h (218)           8.1h (126)            30 towers, avg Celestial (14.3), best Celestial; meta Lv 7
-  wave 120   17.8h (303)           13.7h (248)           31 towers, avg Celestial (15.4), best Celestial; meta Lv 7
-  best wave after 20h: 125, 127 · castle falls: 338, 342
+  wave  20   12m (1)               13m (1)               9 towers, avg Bronze (3.6), best Bronze; meta Lv 1
+  wave  30   23m (3)               17m (1)               12 towers, avg Silver (4.7), best Silver; meta Lv 1
+  wave  40   34m (4)               29m (2)               14 towers, avg Silver (5.4), best Gold; meta Lv 1
+  wave  50   1.2h (36)             1.2h (31)             18 towers, avg Jade (6.6), best Jade; meta Lv 2
+  wave  60   1.7h (45)             1.7h (38)             19 towers, avg Jade (7.5), best Crystal; meta Lv 2
+  wave  70   2.6h (60)             2.1h (41)             22 towers, avg Obsidian (8.5), best Obsidian; meta Lv 3
+  wave  80   3.8h (81)             2.8h (51)             24 towers, avg Celestial (9.7), best Celestial; meta Lv 4
+  wave  90   4.2h (86)             3.8h (69)             25 towers, avg Celestial (10.1), best Celestial; meta Lv 4
+  wave 100   6.2h (116)            4.7h (79)             27 towers, avg Celestial (11.9), best Celestial; meta Lv 5
+  wave 110   9.8h (158)            7.9h (118)            29 towers, avg Celestial (13.8), best Celestial; meta Lv 6
+  wave 120   14.4h (221)           10.3h (147)           31 towers, avg Celestial (15.7), best Celestial; meta Lv 7
+  wave 130   —                     19.7h (525)           
+  best wave after 20h: 125, 135 · castle falls: 428, 530
 
 == Never buys permanent upgrades ==
 Checkpoint   seed 1 time (falls)   seed 2 time (falls)   kingdom at checkpoint (seed 1)
   wave  10   4m (0)                4m (0)                6 towers, avg Stone (2.3), best Iron; meta Lv 0
-  wave  20   13m (1)               13m (1)               9 towers, avg Bronze (3.8), best Bronze; meta Lv 0
-  wave  30   24m (2)               24m (2)               12 towers, avg Silver (4.7), best Silver; meta Lv 0
-  wave  40   52m (6)               34m (3)               15 towers, avg Gold (5.9), best Gold; meta Lv 0
-  wave  50   1.5h (31)             1.3h (39)             18 towers, avg Jade (6.7), best Jade; meta Lv 0
-  wave  60   2.4h (42)             1.8h (46)             21 towers, avg Crystal (8.0), best Crystal; meta Lv 0
-  wave  70   3.6h (55)             2.3h (53)             23 towers, avg Obsidian (9.0), best Obsidian; meta Lv 0
-  wave  80   5.6h (84)             4.0h (77)             25 towers, avg Celestial (10.3), best Celestial; meta Lv 0
-  wave  90   8.9h (150)            6.2h (130)            27 towers, avg Celestial (11.7), best Celestial; meta Lv 0
-  wave 100   10.2h (170)           9.3h (170)            27 towers, avg Celestial (12.5), best Celestial; meta Lv 0
-  best wave after 20h: 106, 107 · castle falls: 393, 391
+  wave  20   12m (1)               13m (1)               9 towers, avg Bronze (3.7), best Bronze; meta Lv 0
+  wave  30   23m (3)               23m (2)               12 towers, avg Silver (4.7), best Silver; meta Lv 0
+  wave  40   34m (4)               29m (2)               14 towers, avg Silver (5.4), best Gold; meta Lv 0
+  wave  50   1.4h (46)             1.2h (34)             18 towers, avg Jade (6.8), best Jade; meta Lv 0
+  wave  60   2.0h (54)             1.7h (41)             20 towers, avg Crystal (7.7), best Crystal; meta Lv 0
+  wave  70   3.7h (109)            3.2h (57)             23 towers, avg Obsidian (9.3), best Celestial; meta Lv 0
+  wave  80   5.5h (140)            4.7h (83)             25 towers, avg Celestial (10.5), best Celestial; meta Lv 0
+  wave  90   6.1h (154)            5.9h (109)            25 towers, avg Celestial (11.0), best Celestial; meta Lv 0
+  wave 100   13.2h (261)           8.6h (149)            29 towers, avg Celestial (14.2), best Celestial; meta Lv 0
+  best wave after 20h: 109, 109 · castle falls: 346, 331
 
 Times are game time at 1x speed (2x halves them). Wave gap 12s.
-Single push from a fresh kingdom, no retreats (waves survived):
-  all permanent upgrades at Lv  0: waves 18, 18, 17  (avg 7m)
-  all permanent upgrades at Lv  5: waves 23, 31, 40  (avg 14m)
-  all permanent upgrades at Lv 10: waves 51, 42, 54  (avg 24m)
-  all permanent upgrades at Lv 15: waves 72, 68, 78  (avg 37m)
-  all permanent upgrades at Lv 20: waves 79, 72, 78  (avg 39m)
