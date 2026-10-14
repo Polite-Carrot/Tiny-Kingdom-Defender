@@ -14,6 +14,7 @@ import { summarise } from '../analytics/Analytics';
 import type { RewardedPlacement } from '../data/ads';
 import type { ChestReward, MetaUpgradeKey } from '../game/Meta';
 import type { ModalHandle } from './UI';
+import { newKingdom } from '../game/Run';
 
 // --- Helpers --------------------------------------------------------------------------
 
@@ -593,12 +594,13 @@ export function debug(game: Game): void {
           <h3>Checkpoint rate by segment</h3><table><tr><th>Waves</th><th>Pushes</th><th>Reached ⚑</th><th>Rate</th></tr>${lv}</table>
           <h3>Recent events</h3><pre>${events.slice(-30).reverse().map((e) => `${(e.t / 1000).toFixed(1)}s ${e.name} ${JSON.stringify(e.params)}`).join('\n')}</pre>
           <h3>Cheats (testing)</h3>
-          <div class="actions"><button class="btn small gold coins">+1000 coins</button><button class="btn small blue unlock">+10 waves</button><button class="btn small gold gold5k">+5000 gold</button><button class="btn small treasury">Treasury +8h</button><button class="btn small chest">Chest ready</button><button class="btn small daily">Next day</button><button class="btn small blue auto">Autoplay battle</button></div>
+          <div class="actions"><button class="btn small gold coins">+1000 coins <small>(shop)</small></button><button class="btn small blue unlock">+10 waves</button><button class="btn small gold gold5k">+5000 gold <small>(in-game)</small></button><button class="btn small treasury">Treasury +8h</button><button class="btn small chest">Chest ready</button><button class="btn small daily">Next day</button><button class="btn small blue auto">Autoplay battle</button></div>
         </div>`;
       $(m, '.coins').onclick = () => {
         meta.earn(1000, 'debug');
         refreshCoins(game);
         render();
+        game.s.ui.toast('+1000 coins: spend them in the Shop and on heroes');
       };
       $(m, '.unlock').onclick = () => {
         const d = meta.d;
@@ -614,9 +616,17 @@ export function debug(game: Game): void {
         game.s.ui.toast(`Jumped to wave ${base.wave + 1}`);
       };
       $(m, '.gold5k').onclick = () => {
-        if (!game.battle) return game.s.ui.toast('Open your kingdom first');
-        game.battle.run.addGold(5000, false);
-        game.battle.persist(true, game.battle.run.isQuiet() ? undefined : game.battle.run.currentWave);
+        // Gold belongs to the kingdom: add it to the live battle, or to the saved kingdom from the menus.
+        if (game.battle) {
+          game.battle.run.addGold(5000, false);
+          game.battle.persist(true, game.battle.run.isQuiet() ? undefined : game.battle.run.currentWave);
+        } else {
+          const d = meta.d;
+          d.base = d.base ?? newKingdom();
+          d.base.gold += 5000;
+          meta.commit();
+        }
+        game.s.ui.toast(`+5000 gold for building towers (kingdom now has ${fmt(game.battle ? game.battle.run.gold : meta.d.base!.gold)})`);
       };
       $(m, '.treasury').onclick = () => {
         meta.d.treasury.lastCollect -= 8 * 3600000;
