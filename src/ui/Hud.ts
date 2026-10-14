@@ -8,7 +8,6 @@ import { TOWER_UNLOCK_WAVE } from '../data/base';
 import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf } from '../data/towers';
 import { ageTitle } from '../game/Siege';
 import { waveSummary } from '../game/WaveComposer';
-import { xpForLevel, HERO_LEVELS } from '../data/heroes';
 import { SYNERGIES, SYNERGY_BY_ID } from '../data/synergies';
 import type { Run, Tower } from '../game/Run';
 
@@ -77,7 +76,7 @@ export class Hud {
         <button class="btn icon blue pause-btn" aria-label="Pause">${icon('pause')}</button>
       </div>
       <div class="hud-hero">
-        <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div><span class="hlvl">1</span><i class="hxp"><b></b></i></button>
+        <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
         <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
       </div>
       <div class="rush-pill" style="display:none"></div>
@@ -136,14 +135,6 @@ export class Hud {
   setSpeed(s: number): void {
     this.speedBtn.textContent = `${s}x`;
     this.speedBtn.classList.toggle('fast', s > 1);
-  }
-
-  /** Level badge and XP bar on the hero button. */
-  setHeroLevel(level: number, xp: number): void {
-    $(this.heroBtn, '.hlvl').textContent = String(level);
-    const lo = xpForLevel(level), hi = xpForLevel(level + 1);
-    const frac = level >= HERO_LEVELS.max ? 1 : Math.max(0, Math.min(1, (xp - lo) / Math.max(1, hi - lo)));
-    ($(this.heroBtn, '.hxp b') as HTMLElement).style.width = `${Math.round(frac * 100)}%`;
   }
 
   setHeroSelected(on: boolean): void {

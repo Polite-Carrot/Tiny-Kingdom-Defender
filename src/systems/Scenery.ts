@@ -8,6 +8,8 @@ import { propModel } from '../entities/Models';
 import type { Theme } from '../data/themes';
 import { Water } from './Water';
 import { Grass, type BladeSpot } from './Grass';
+import { Moat } from './Moat';
+import { ModelBuilder as MB } from '../entities/ModelBuilder';
 
 /** Smooth 2D value noise in [0, 1]. */
 function hash(x: number, y: number): number {
@@ -51,6 +53,14 @@ const LOOKS: Record<Theme['id'], Look> = {
 /** Half-size of the board's square footprint (the plateau). */
 const BOARD_HALF = 8.6;
 const WATER_Y = -1.18;
+/** The moat: from the plateau out to a stone retaining wall this far away. */
+const MOAT_W = 1.5;
+// The moat water is opaque, so its floor sits just under the surface: that keeps the step
+// up to the bank short enough to hide behind the wall stones.
+const MOAT_FLOOR = -1.42;
+const WALL_TOP = -0.84;
+/** The plateau itself (the board) is a little inside BOARD_HALF. */
+const PLATEAU_HALF = 8.5;
 const TERRAIN_SIZE = 84;
 
 export class Scenery {
@@ -58,6 +68,7 @@ export class Scenery {
   private disposables: { dispose(): void }[] = [];
   private water: Water;
   private grass: Grass | null = null;
+  private moat: Moat | null = null;
   private clouds = new THREE.Group();
   private particles: THREE.Points;
   private pVel: Float32Array;
@@ -79,8 +90,18 @@ export class Scenery {
     if (animated) this.buildGrass();
     this.group.add(this.buildSunGlow());
 
+    // The moat: stone walls, reflective still water, lily pads and reeds (lava stays lava).
+    this.group.add(new THREE.Mesh(this.track(this.buildMoatWalls()), lambert));
+    const hasMoat = Moat.supports(theme);
+    if (hasMoat) {
+      this.moat = this.track(new Moat(theme, WATER_Y, PLATEAU_HALF, BOARD_HALF, MOAT_W, animated));
+      this.group.add(this.moat.mesh);
+      const life = this.buildMoatLife();
+      if (life) this.group.add(new THREE.Mesh(this.track(life), lambert));
+    }
+
     // Sea (or lava), with waves; a lighter grid on low quality.
-    this.water = this.track(new Water(theme, WATER_Y, BOARD_HALF, (x, z) => this.groundHeight(x, z), TERRAIN_SIZE, animated ? 200 : 110));
+    this.water = this.track(new Water(theme, WATER_Y, BOARD_HALF, (x, z) => this.groundHeight(x, z), TERRAIN_SIZE, animated ? 200 : 110, hasMoat ? MOAT_W : 0));
     this.group.add(this.water.mesh);
 
     // Ambient particles: pollen, dust, snow or embers.
@@ -179,6 +200,134 @@ export class Scenery {
     this.group.add(this.grass.mesh);
   }
 
+  // --- Moat -------------------------------------------------------------------------
+
+  /** Walks a rounded square `dist` out from the board, calling fn(x, z, angleOfTangent) every `step`. */
+  private aroundBoard(dist: number, step: number, fn: (x: number, z: number, ry: number, i: number) => void): void {
+    const b = BOARD_HALF;
+    let i = 0;
+    for (let side = 0; side < 4; side++) {
+      const a = (side * Math.PI) / 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      // Straight run along this side.
+      const n = Math.ceil((2 * b) / step);
+      for (let k = 0; k < n; k++) {
+        const u = -b + ((k + 0.5) / n) * 2 * b;
+        // Side 0 is +X; rotate (b + dist, u) by a.
+        const lx = b + dist, lz = u;
+        fn(lx * ca - lz * sa, lx * sa + lz * ca, -a, i++);
+      }
+      // Rounded corner to the next side.
+      const arc = (Math.PI / 2) * dist;
+      const m = Math.max(1, Math.ceil(arc / step));
+      for (let k = 0; k < m; k++) {
+        const t = a + ((k + 0.5) / m) * (Math.PI / 2);
+        // Corner centre between this side and the next.
+        const ccx = (ca - sa) * b, ccz = (sa + ca) * b;
+        fn(ccx + Math.cos(t) * dist, ccz + Math.sin(t) * dist, -t, i++);
+      }
+    }
+  }
+
+  /** Masonry retaining wall round the moat, and stone footings on the castle island side. */
+  private buildMoatWalls(): THREE.BufferGeometry {
+    const b = new MB();
+    const id = this.theme.id;
+    const stone = id === 'desert' ? '#c9a26a' : id === 'snow' ? '#8a9ab0' : id === 'volcano' ? '#3a3034' : '#9b958c';
+    const coping = id === 'desert' ? '#d8b47a' : id === 'snow' ? '#a8b6c8' : id === 'volcano' ? '#4a3e42' : '#b0a99c';
+    const moss = id === 'meadow' ? '#5f7d3a' : id === 'desert' ? '#8a7a4a' : null;
+    const base = new THREE.Color(stone);
+    const c = new THREE.Color();
+    const rows = [-1.36, -1.18, -1.0];
+    const rowH = 0.18;
+    const thick = 0.3;
+    // Outer wall: three courses of staggered blocks, then overhanging coping slabs.
+    rows.forEach((y, r) => {
+      this.aroundBoard(MOAT_W + thick / 2, 0.42, (x, z, ry, i) => {
+        const j = hash(i * 1.7 + r * 13.1, r * 3.3);
+        c.copy(base).multiplyScalar(0.82 + j * 0.3);
+        // Wet and darker at the waterline; moss creeping on the lowest courses.
+        if (y < WATER_Y + 0.12) c.multiplyScalar(0.62);
+        if (moss && y < WATER_Y + 0.2 && hash(i, r + 7.7) > 0.55) c.lerp(new THREE.Color(moss), 0.55);
+        b.box(0.4, rowH * 0.94, thick, c, { x, y, z, ry: ry + Math.PI / 2 });
+      });
+    });
+    this.aroundBoard(MOAT_W + thick / 2 - 0.03, 0.55, (x, z, ry, i) => {
+      c.set(coping).multiplyScalar(0.9 + hash(i, 4.4) * 0.18);
+      b.box(0.54, 0.08, thick + 0.1, c, { x, y: WALL_TOP, z, ry: ry + Math.PI / 2 });
+      if (id === 'snow') b.box(0.5, 0.04, thick + 0.06, '#f4f8fb', { x, y: WALL_TOP + 0.06, z, ry: ry + Math.PI / 2 });
+      // Grass tufts or snow lumps along the top edge now and then.
+      if (id === 'meadow' && hash(i, 9.1) > 0.7) b.cone(0.05, 0.1, 3, '#5fa44a', { x, y: WALL_TOP + 0.08, z });
+    });
+    // Footings: dressed stone round the castle island where it meets the water.
+    for (let side = 0; side < 4; side++) {
+      const a = (side * Math.PI) / 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const n = 40;
+      for (let r = 0; r < 4; r++) {
+        for (let k = 0; k < n; k++) {
+          const u = -PLATEAU_HALF + ((k + 0.5 + (r % 2) * 0.5) / n) * 2 * PLATEAU_HALF;
+          // Stop short of the corner so the four sides meet without stones jutting out.
+          if (Math.abs(u) > PLATEAU_HALF - 0.08) continue;
+          const lx = PLATEAU_HALF + 0.06, lz = u;
+          const j = hash(k * 2.3 + side * 17, r);
+          c.copy(base).multiplyScalar((0.75 + j * 0.25) * (r === 0 ? 0.62 : r === 3 ? 0.92 : 1));
+          if (moss && r === 0 && hash(k, side + 3.1) > 0.5) c.lerp(new THREE.Color(moss), 0.5);
+          b.box(0.42, 0.19, 0.14, c, { x: lx * ca - lz * sa, y: -1.3 + r * 0.19, z: lx * sa + lz * ca, ry: -a + Math.PI / 2 });
+        }
+      }
+    }
+    return b.build();
+  }
+
+  /** Lily pads and flowers on the water, reeds and cattails at the foot of the wall. */
+  private buildMoatLife(): THREE.BufferGeometry | null {
+    const id = this.theme.id;
+    if (id !== 'meadow' && id !== 'desert') return null;
+    const b = new MB();
+    const y = WATER_Y + 0.012;
+    let placed = 0;
+    for (let i = 0; i < 400 && placed < 26; i++) {
+      // A random point in the moat ring.
+      const dist = 0.35 + hash(i, 0.77) * (MOAT_W - 0.7);
+      const side = Math.floor(hash(i, 2.2) * 4);
+      const u = (hash(i, 5.5) - 0.5) * 2 * BOARD_HALF;
+      const ang = (side * Math.PI) / 2;
+      const lx = BOARD_HALF + dist, lz = u;
+      const x = lx * Math.cos(ang) - lz * Math.sin(ang), z = lx * Math.sin(ang) + lz * Math.cos(ang);
+      if (id === 'meadow') {
+        // A little raft of pads, sometimes with a water lily.
+        const n = 2 + Math.floor(hash(i, 8.8) * 3);
+        for (let k = 0; k < n; k++) {
+          const px = x + (hash(i, k + 10) - 0.5) * 0.35, pz = z + (hash(i, k + 20) - 0.5) * 0.35;
+          const r = 0.07 + hash(i, k + 30) * 0.06;
+          const g = new THREE.Color('#4f8f3a').multiplyScalar(0.85 + hash(i, k + 40) * 0.3);
+          b.cyl(r, r, 0.012, 12, g, { x: px, y, z: pz });
+          b.box(r, 0.014, 0.012, '#2f5f2a', { x: px + r / 2, y: y + 0.001, z: pz, ry: hash(i, k + 50) * 6 });
+          if (k === 0 && hash(i, 60) > 0.5) {
+            const petal = hash(i, 61) > 0.5 ? '#ffd0e0' : '#ffffff';
+            for (let p = 0; p < 6; p++) b.cone(0.022, 0.05, 3, petal, { x: px + Math.cos(p) * 0.025, y: y + 0.025, z: pz + Math.sin(p) * 0.025, rz: Math.cos(p) * 0.6, rx: -Math.sin(p) * 0.6 });
+            b.ball(0.014, 0, '#ffd84a', { x: px, y: y + 0.04, z: pz });
+          }
+        }
+      }
+      placed++;
+    }
+    // Reeds and cattails hugging the outer wall.
+    this.aroundBoard(MOAT_W - 0.08, 0.5, (x, z, _ry, i) => {
+      if (hash(i, 77.7) < 0.55) return;
+      const n = 3 + Math.floor(hash(i, 78) * 4);
+      for (let k = 0; k < n; k++) {
+        const px = x + (hash(i, k + 80) - 0.5) * 0.18, pz = z + (hash(i, k + 90) - 0.5) * 0.18;
+        const h = 0.28 + hash(i, k + 100) * 0.25;
+        const lean = (hash(i, k + 110) - 0.5) * 0.3;
+        b.cyl(0.008, 0.014, h, 4, id === 'desert' ? '#8a9a4a' : '#5f8a3a', { x: px, y: WATER_Y + h / 2, z: pz, rz: lean });
+        if (hash(i, k + 120) > 0.5) b.capsule(0.022, 0.07, '#6a4428', { x: px + Math.sin(-lean) * h * 0.85, y: WATER_Y + h * 0.88, z: pz });
+      }
+    });
+    return b.build();
+  }
+
   // --- Island terrain ---------------------------------------------------------------
 
   /** Terrain height around the board: low next to the plateau, hills further out, sinking into the sea. */
@@ -186,13 +335,13 @@ export class Scenery {
     const dx = Math.max(0, Math.abs(x) - BOARD_HALF);
     const dz = Math.max(0, Math.abs(z) - BOARD_HALF);
     const d = Math.hypot(dx, dz);
-    if (d <= 0) return -1.6;
+    if (d < MOAT_W) return MOAT_FLOOR;
+    // Behind the retaining wall the bank sits level with its coping, then rises into hills.
     const r = Math.hypot(x, z);
     const coast = 25 + fbm(Math.atan2(z, x) * 1.6 + 3, 1.7) * 10;
     const hills = fbm(x * 0.09 + 11, z * 0.09 + 7);
-    // A moat right around the plateau, then a bank rising into hills.
-    if (d < 1.7) return -1.6 + smooth(1.1, 1.7, d) * 0.62;
-    let h = -0.98 + smooth(1.7, 8, d) * (hills * 3.6 - 0.4);
+    if (d < MOAT_W + 0.45) return WALL_TOP - 0.06;
+    let h = -0.92 + smooth(MOAT_W + 0.45, 8, d) * (hills * 3.6 - 0.4);
     // Beaches: the hills settle onto a gentle sandy shelf that runs out under the sea,
     // then the floor drops away into deep water.
     const shelf = smooth(coast - 8, coast - 2, r);
@@ -340,6 +489,7 @@ export class Scenery {
     this.time += dt;
     this.clouds.rotation.y += dt * 0.006;
     this.water.update(this.time);
+    this.moat?.update(this.time);
     this.grass?.update(this.time);
     if (!this.animated) return;
     const attr = this.particles.geometry.attributes.position as THREE.BufferAttribute;

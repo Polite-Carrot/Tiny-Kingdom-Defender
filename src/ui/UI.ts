@@ -141,11 +141,47 @@ export class UI {
     }
   }
 
+  private bannerQueue: { text: string; sub: string; cls: string }[] = [];
+  private bannerBusy = false;
+
+  /** Big centre banner. One at a time: later ones wait their turn (at most 2 waiting). */
   banner(text: string, sub = '', cls = ''): void {
-    const b = el('div', `banner ${cls}`, `${text}${sub ? `<small>${sub}</small>` : ''}`);
-    this.fxLayer.append(b);
-    setTimeout(() => b.remove(), 1900);
+    this.bannerQueue.push({ text, sub, cls });
+    if (this.bannerQueue.length > 2) this.bannerQueue.shift();
+    if (!this.bannerBusy) this.nextBanner();
   }
+
+  private nextBanner(): void {
+    const b = this.bannerQueue.shift();
+    if (!b) {
+      this.bannerBusy = false;
+      return;
+    }
+    this.bannerBusy = true;
+    const node = el('div', `banner ${b.cls}`);
+    node.append(document.createTextNode(b.text));
+    if (b.sub) {
+      const small = el('small');
+      small.textContent = b.sub;
+      node.append(small);
+    }
+    this.fxLayer.append(node);
+    setTimeout(() => {
+      node.remove();
+      this.nextBanner();
+    }, 1900);
+  }
+
+  /** A boss steps out: a readable card with its name and what it does. */
+  bossCard(name: string, desc: string): void {
+    const card = el('div', 'boss-card');
+    card.innerHTML = `<small>⚠ Boss</small><b></b><span></span>`;
+    card.querySelector('b')!.textContent = name;
+    card.querySelector('span')!.textContent = desc;
+    this.fxLayer.append(card);
+    setTimeout(() => card.remove(), 2600);
+  }
+
 
   floatText(x: number, y: number, text: string, cls: string): void {
     if (this.activeFtexts > 40) return;

@@ -65,7 +65,6 @@ export class Battle {
 
     if (!s.save.data.base) this.persist(true);
     this.hud.bind(this.run);
-    if (this.run.hero) this.hud.setHeroLevel(meta.heroLevel(this.run.hero.def.id), meta.heroXp(this.run.hero.def.id));
     this.bindRunEvents();
     this.tutorial = new Tutorial(s, this, hud);
     s.analytics.track('level_start', { level: 'siege', wave: this.run.waveIndex + 1, towers: this.run.towers.length, gold: this.run.gold, hero: this.run.hero?.def.id ?? 'none' });
@@ -133,7 +132,6 @@ export class Battle {
     if (!hero) return;
     const { meta, ui, audio } = this.s;
     const r = meta.addHeroXp(hero.def.id, xp);
-    this.hud.setHeroLevel(r.level, meta.heroXp(hero.def.id));
     if (!r.levelUp) return;
     this.run.applyMeta(meta.metaBonuses());
     const gear = HERO_GEAR[gearTierFor(r.level)];
@@ -146,7 +144,7 @@ export class Battle {
   /** A boss steps out of its tunnel: freeze for a moment, swoop the camera in and show its name. */
   private bossEntrance(e: Enemy): void {
     const { ui, audio, rig } = this.s;
-    ui.banner(e.def.name, e.def.description, 'boss');
+    ui.bossCard(e.def.name, e.def.description);
     audio.play('bossRoar');
     this.view.bossIntro(e);
     if (this.holdSim) return;
@@ -170,7 +168,8 @@ export class Battle {
       // Resuming always restarts the wave that was in progress.
       this.persist(true, index);
       const w = this.run.waveDef(index);
-      if (w?.boss) ui.banner('BOSS WAVE', `Wave ${index + 1}`, 'boss');
+      // Boss waves are announced by the boss's own entrance card.
+      if (w?.boss) { /* bossEntrance() */ }
       else if (index % SIEGE.ageEvery !== 0 || index === 0) ui.banner(`Wave ${index + 1}`, ageTitle(index));
     });
     ev.on('waveCleared', ({ index, gold }) => {
@@ -227,7 +226,7 @@ export class Battle {
       if (this.run.castleHp >= this.run.castleMaxHp) meta.d.life.perfectCheckpoints++;
     });
     ev.on('enemySpawn', (e) => {
-      if (meta.sawEnemy(e.def.id) && this.run.waveIndex > 1) {
+      if (meta.sawEnemy(e.def.id) && this.run.waveIndex > 1 && !e.def.boss) {
         setTimeout(() => ui.toast(`New enemy discovered: ${e.def.name}! Check the Bestiary.`, 2800), 400);
       }
       if (e.def.boss) this.bossEntrance(e);

@@ -92,6 +92,8 @@ uniform float uWaterY;
 uniform float uIce;
 uniform float uLava;
 uniform float uBoardHalf;
+/** Width of the walled moat drawn by Moat.ts (0 = none): the sea doesn't draw there. */
+uniform float uMoatW;
 uniform sampler2D uGround;
 uniform float uGroundSize;
 varying vec3 vWorld;
@@ -123,7 +125,9 @@ void main() {
   if (depth < -0.05) discard;
   vec3 V = normalize(cameraPosition - vWorld);
   // 0 in the moat right around the board, 1 out at the coast.
-  float coastal = smoothstep(2.5, 6.0, length(max(abs(p) - uBoardHalf, 0.0)));
+  float boardDist = length(max(abs(p) - uBoardHalf, 0.0));
+  if (uMoatW > 0.0 && boardDist < uMoatW + 0.05) discard;
+  float coastal = smoothstep(2.5, 6.0, boardDist);
 
   if (uLava > 0.5) {
     // Lava: slow flowing noise with a dark crust that cracks open, brightest at the shore.
@@ -200,7 +204,7 @@ export class Water {
    * @param groundSize side of the square the depth map covers
    * @param segments grid resolution; vertices are packed densest around the board
    */
-  constructor(theme: Theme, waterY: number, boardHalf: number, heightAt: (x: number, z: number) => number, groundSize: number, segments: number) {
+  constructor(theme: Theme, waterY: number, boardHalf: number, heightAt: (x: number, z: number) => number, groundSize: number, segments: number, moatWidth = 0) {
     const look = SEA[theme.id];
 
     // Bake terrain height into a small texture.
@@ -249,6 +253,7 @@ export class Water {
         uIce: { value: look.ice ? 1 : 0 },
         uLava: { value: look.lava ? 1 : 0 },
         uBoardHalf: { value: boardHalf },
+        uMoatW: { value: moatWidth },
       }]),
       vertexShader: VERT,
       fragmentShader: FRAG,
