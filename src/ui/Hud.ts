@@ -26,7 +26,7 @@ export interface HudCallbacks {
   shop(): void;
 }
 
-const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor' } as const;
+const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' } as const;
 
 export class Hud {
   readonly el: HTMLElement;

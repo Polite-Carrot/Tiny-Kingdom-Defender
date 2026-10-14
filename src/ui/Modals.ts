@@ -6,7 +6,9 @@ import { towerThumb, heroThumb, thumb } from './Thumbnails';
 import type { Game } from '../game/Game';
 import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, type TowerId } from '../data/towers';
-import { HEROES, HERO_ORDER } from '../data/heroes';
+import { HEROES, HERO_ORDER, type AbilityKind } from '../data/heroes';
+
+const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
 import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
 import { summarise } from '../analytics/Analytics';
 import type { RewardedPlacement } from '../data/ads';
@@ -323,8 +325,17 @@ export function heroes(game: Game): void {
         const sel = d.selectedHero === id;
         const cost = HERO_UNLOCK_COST[id];
         const btn = sel ? `<button class="btn small gold disabled" disabled>Selected</button>` : owned ? `<button class="btn small blue" data-sel="${id}">Select</button>` : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-buy="${id}">${costHtml(cost)}</button>`;
-        return `<div class="list-item"><div class="thumb"><img src="${heroThumb(id)}" alt=""/></div><div class="body">
-          <div class="name">${h.name} <span class="muted">${h.title}</span></div><div class="desc">${h.description}<br/><b>${h.ability.name}:</b> ${h.ability.description}</div></div>${btn}</div>`;
+        const bar = (label: string, v: number) => `<div class="hstat"><span>${label}</span><i><b style="width:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></b></i></div>`;
+        const dps = h.damage / h.cooldown;
+        return `<div class="hero-card ${sel ? 'sel' : ''} ${owned ? '' : 'locked'}" style="--hc:${h.color}">
+          <div class="portrait"><img src="${heroThumb(id)}" alt=""/>${owned ? '' : `<span class="lock">${ICONS.lock}</span>`}</div>
+          <div class="body">
+            <div class="name">${h.name} <span class="muted">${h.title}</span></div>
+            <div class="desc">${h.description}</div>
+            <div class="hstats">${bar('HP', h.hp / 560)}${bar('DPS', dps / 60)}${bar('Range', h.range / 3)}${bar('Speed', h.speed / 3.6)}</div>
+            <div class="ability"><span class="aico">${ICONS[ABILITY_ICONS[h.ability.kind]]}</span><span><b>${h.ability.name}</b> ${h.ability.description}</span></div>
+          </div>
+          <div class="act">${btn}</div></div>`;
       }).join('')}</div><div class="muted" style="text-align:center;margin-top:8px">Hero Training in the Shop boosts every hero.</div>`;
       m.querySelectorAll<HTMLButtonElement>('[data-sel]').forEach((b) => (b.onclick = () => {
         meta.selectHero(b.dataset.sel as typeof d.selectedHero);

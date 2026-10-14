@@ -311,6 +311,7 @@ body.landscape .seg.targets button { font-size: 12px; padding: 0 4px; }
 .ftext.gold { color: #ffd84a; }
 .ftext.gold.big { font-size: 20px; }
 .ftext.immune { color: #ffe680; font-size: 15px; }
+.ftext.heal { color: #7dff9a; font-size: 22px; }
 .ftext.boss { color: #ff7a6a; font-size: 22px; }
 .coinfly { position: absolute; left: 0; top: 0; width: 22px; height: 22px; pointer-events: none; z-index: 6; will-change: transform; }
 
@@ -377,3 +378,37 @@ body.landscape .seg.targets button { font-size: 12px; padding: 0 4px; }
 .hud .wave-pill .age { overflow: hidden; text-overflow: ellipsis; max-width: 112px; }
 .hud-top .btn.icon { width: 44px; min-width: 44px; min-height: 44px; flex: none; }
 @media (max-width: 360px) { .hud .wave-pill .age { display: none; } }
+
+/* New Age / new road announcement: a card at the edge so the tunnel stays visible. */
+.modal-layer.frontier-layer { background: linear-gradient(to top, rgba(20,10,40,.55), rgba(20,10,40,0) 55%); align-items: flex-end; }
+body.landscape .modal-layer.frontier-layer { justify-content: flex-start; align-items: center; background: linear-gradient(to right, rgba(20,10,40,.55), rgba(20,10,40,0) 55%); }
+.modal.frontier { width: min(400px, 100%); text-align: center; }
+body.landscape .modal.frontier { width: 330px; }
+.modal.frontier p { margin: 6px 4px; font-weight: 700; line-height: 1.3; }
+.modal.frontier p.warn { color: var(--red-d); }
+.modal.frontier .ribbon { animation: frontier-pulse 1.2s ease-in-out infinite alternate; }
+@keyframes frontier-pulse { from { filter: brightness(1); } to { filter: brightness(1.18); } }
+.frontier-towers { display: flex; justify-content: center; gap: 10px; margin: 8px 0 4px; }
+.frontier-towers div { display: flex; align-items: center; gap: 6px; background: #fff; border-radius: 14px; padding: 4px 10px 4px 4px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.08); font-size: 13px; text-align: left; }
+.frontier-towers img { width: 46px; height: 46px; }
+.modal.frontier .ready-btn { margin-top: 10px; width: 100%; }
+.modal.frontier .ready-btn small { display: block; font-size: 12px; opacity: .85; }
+
+/* Hero roster cards. */
+.hero-card { display: grid; grid-template-columns: 84px 1fr auto; gap: 10px; align-items: center; background: #fff; border-radius: 18px; padding: 8px; margin-bottom: 8px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.08); border: 3px solid transparent; }
+.hero-card.sel { border-color: var(--hc); background: color-mix(in srgb, var(--hc) 10%, #fff); }
+.hero-card .portrait { position: relative; width: 84px; height: 84px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--hc) 45%, #fff), color-mix(in srgb, var(--hc) 85%, #000) 100%); box-shadow: inset 0 -4px 0 rgba(0,0,0,.2), 0 0 0 3px #fff, 0 0 0 5px var(--hc); overflow: hidden; }
+.hero-card .portrait img { width: 100%; height: 100%; transform: scale(1.18) translateY(4%); }
+.hero-card.locked .portrait img { filter: brightness(.55) saturate(.6); }
+.hero-card .portrait .lock { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; }
+.hero-card .name { font-weight: 900; font-size: 17px; }
+.hero-card .desc { font-size: 12px; font-weight: 700; color: #6a5a7a; margin: 2px 0 4px; }
+.hstats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+.hstat { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 900; color: #8a7a9a; }
+.hstat span { width: 34px; }
+.hstat i { flex: 1; height: 6px; border-radius: 3px; background: #ece4f4; overflow: hidden; }
+.hstat i b { display: block; height: 100%; border-radius: 3px; background: var(--hc); }
+.hero-card .ability { display: flex; gap: 6px; align-items: flex-start; margin-top: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.25; color: #4a3a5a; }
+.hero-card .ability .aico { flex: none; width: 26px; height: 26px; border-radius: 8px; background: var(--hc); padding: 3px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.2); }
+.hero-card .ability .aico svg { width: 100%; height: 100%; }
+@media (max-width: 420px) { .hero-card { grid-template-columns: 64px 1fr; } .hero-card .portrait { width: 64px; height: 64px; } .hero-card .act { grid-column: 1 / -1; } .hero-card .act .btn { width: 100%; } }

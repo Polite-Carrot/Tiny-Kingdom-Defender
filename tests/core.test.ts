@@ -250,6 +250,50 @@ describe('kingdom siege', () => {
     expect(e.hp).toBe(after);
   });
 
+  it('holds before a new Age / new road until the player is ready', () => {
+    const snap = newKingdom();
+    snap.wave = SIEGE.ageEvery;
+    snap.checkpoint = SIEGE.ageEvery;
+    const run = new Run({ snapshot: snap, meta: noMeta, availableTowers: ['archer'], announceFrontiers: true });
+    const seen: number[][] = [];
+    run.events.on('frontier', (f) => seen.push(f.roads));
+    run.callNextWave();
+    expect(run.holdingFor).toBe(SIEGE.ageEvery);
+    expect(seen).toEqual([[1]]);
+    for (let i = 0; i < 300; i++) run.update(1 / 30);
+    expect(run.waveIndex).toBe(SIEGE.ageEvery);
+    expect(run.aliveCount()).toBe(0);
+    run.continueFrontier();
+    expect(run.waveIndex).toBe(SIEGE.ageEvery + 1);
+    expect(run.holdingFor).toBe(-1);
+  });
+
+  it('new hero abilities: quake slows, holy light heals the castle, shadow strike hits several', () => {
+    const mk = (heroId: 'dwarf' | 'valkyrie' | 'ninja') => {
+      const run = new Run({ snapshot: newKingdom(), meta: { ...noMeta, heroId }, availableTowers: ['archer'] });
+      run.state = 'playing';
+      const h = run.hero!;
+      h.abilityCd = 0;
+      const foes = [0, 1, 2].map(() => run.spawnEnemy('knight', 0, 3, 0, 20));
+      for (const e of foes) { e.x = h.x + 0.3; e.z = h.z; }
+      return { run, h, foes };
+    };
+    const q = mk('dwarf');
+    expect(q.run.useHeroAbility()).toBe(true);
+    expect(q.foes.every((e) => e.slowFactor < 1 && e.hp < e.maxHp)).toBe(true);
+
+    const v = mk('valkyrie');
+    v.run.castleHp = 10;
+    expect(v.run.useHeroAbility()).toBe(true);
+    expect(v.run.castleHp).toBe(13);
+
+    const n = mk('ninja');
+    n.foes.forEach((e, i) => { e.x = n.h.x + 1 + i; });
+    expect(n.run.useHeroAbility()).toBe(true);
+    expect(n.foes.every((e) => e.hp < e.maxHp)).toBe(true);
+    expect(Math.hypot(n.h.x - n.foes[0].x, n.h.z - n.foes[0].z)).toBeLessThan(3.5);
+  });
+
   it('sell refunds 70% of the investment', () => {
     const run = new Run({ snapshot: newKingdom(), meta: noMeta, availableTowers: ['archer'] });
     const t = run.build([...run.unlockedSpots][0], 'archer')!;

@@ -6,9 +6,11 @@ import { BattleView } from './BattleView';
 import { Tutorial } from './Tutorial';
 import type { Services } from './Services';
 import type { Hud } from '../ui/Hud';
-import { TOWERS, type TowerId, type TargetMode } from '../data/towers';
-import { ROADS, SIEGE } from '../data/base';
+import { TOWERS, TOWER_ORDER, type TowerId, type TargetMode } from '../data/towers';
+import { ROADS, SIEGE, TOWER_UNLOCK_WAVE } from '../data/base';
 import { ageTitle, themeOf } from './Siege';
+import { towerThumb } from '../ui/Thumbnails';
+import { el } from '../ui/dom';
 
 const STEP = 1 / 60;
 const MAX_STEPS = 8;
@@ -19,6 +21,8 @@ export class Battle {
   private tutorial: Tutorial | null = null;
   speed = 1;
   paused = false;
+  /** The siege is frozen for a cinematic (the view keeps animating). */
+  private holdSim = false;
   private acc = 0;
   private heroSelected = false;
   private startTime = performance.now();
@@ -39,6 +43,7 @@ export class Battle {
       meta: meta.metaBonuses(),
       availableTowers: meta.towersAvailable(),
       reviveAvailable: !opts.demo,
+      announceFrontiers: !opts.demo,
     });
     const silent = { play() {} } as unknown as typeof s.audio;
     this.view = new BattleView(s.renderer, s.rig, this.run, opts.demo ? silent : s.audio, {
@@ -60,6 +65,58 @@ export class Battle {
 
   get theme() {
     return themeOf(this.run.waveIndex);
+  }
+
+  /**
+   * A new Age begins and/or a new road opens with the next wave: freeze the siege, fly the camera
+   * to the new tunnel, show what's changing, and start the wave when the player is ready.
+   */
+  private announceFrontier(wave: number, newAge: boolean, roads: number[]): void {
+    const { ui, meta, audio, rig } = this.s;
+    if (meta.d.progress.frontierSeen >= wave) {
+      // Seen before (e.g. replaying after a fall): just a quick reminder.
+      if (newAge) ui.banner(ageTitle(wave), roads.length ? `Enemies also march from the ${ROADS[roads[0]].name}` : 'A new Age begins');
+      this.run.continueFrontier();
+      return;
+    }
+    this.holdSim = true;
+    this.deselect();
+    this.hud.closeCtx();
+    this.view.showFrontier(roads);
+    const map = this.run.map;
+    if (roads.length) {
+      const p = map.paths[roads[0]];
+      // Frame the tunnel and the first stretch of its road.
+      rig.focusOn(p.xs[0] * 0.7 + p.xs[2] * 0.3, p.zs[0] * 0.7 + p.zs[2] * 0.3, 1.75);
+    } else {
+      rig.focusOn(map.castle.x, map.castle.z, 1.25);
+    }
+    audio.play(roads.length ? 'bossRoar' : 'victory');
+    const towers = TOWER_ORDER.filter((t) => TOWER_UNLOCK_WAVE[t] === wave && this.run.isTowerAvailable(t));
+    const title = newAge ? ageTitle(wave) : 'New road!';
+    ui.modal((m, h) => {
+      h.layer.classList.add('frontier-layer');
+      const lines: string[] = [];
+      if (newAge) lines.push(`<p><b>${title}</b> begins. The land changes and new foes join the siege.</p>`);
+      for (const r of roads) lines.push(`<p class="warn">⚠ Enemies will now also march out of the <b>${ROADS[r].name.replace(' Road', '')} tunnel</b>. Guard the new road!</p>`);
+      if (newAge) lines.push(`<p class="muted">Checkpoint: if the castle falls, you regroup at the start of this Age.</p>`);
+      m.innerHTML = `
+        <div class="ribbon ${roads.length ? 'lose' : 'purple'}">${roads.length && newAge ? `${title}` : title}</div>
+        ${lines.join('')}
+        ${towers.length ? `<div class="frontier-towers">${towers.map((t) => `<div><img src="${towerThumb(t)}" alt=""/><span>New tower<br/><b>${TOWERS[t].name}</b></span></div>`).join('')}</div>` : ''}`;
+      const go = el('button', 'btn big ready-btn', `Ready! <small>Wave ${wave + 1}</small>`);
+      go.onclick = () => {
+        h.close();
+        audio.play('waveStart');
+        this.view.hideFrontier();
+        rig.clearFocus();
+        this.holdSim = false;
+        meta.d.progress.frontierSeen = wave;
+        meta.commit();
+        this.run.continueFrontier();
+      };
+      m.append(go);
+    }, { closable: false, cls: 'frontier' });
   }
 
   /** Saves the kingdom. Only saves mid-wave when given the wave to resume from. */
@@ -97,11 +154,8 @@ export class Battle {
       this.persist();
       setTimeout(() => this.onCheckpoint(wave, r.coins, r.firstTime), 700);
     });
-    ev.on('ageChange', ({ wave }) => {
-      ui.banner(ageTitle(wave), 'A new Age begins');
-      this.onAgeChange();
-    });
-    ev.on('roadOpened', ({ road }) => setTimeout(() => ui.banner('A new road opens!', `Enemies now march down the ${ROADS[road].name}`, 'boss'), 1900));
+    ev.on('ageChange', () => this.onAgeChange());
+    ev.on('frontier', (f) => this.announceFrontier(f.wave, f.newAge, f.roads));
     ev.on('towerBuilt', (t) => analytics.track('tower_built', { level: 'siege', tower: t.def.id, spot: t.spot, wave: this.run.waveIndex }));
     ev.on('towerUpgraded', (t) => analytics.track('tower_upgraded', { level: 'siege', tower: t.def.id, tier: t.tier, branch: t.branch >= 0 ? t.def.branches[t.branch].id : null }));
     ev.on('heroAbility', ({ hero }) => analytics.track('hero_ability_used', { level: 'siege', hero: hero.def.id, ability: hero.def.ability.kind }));
@@ -138,6 +192,10 @@ export class Battle {
   // --- Frame ------------------------------------------------------------------------
 
   update(dt: number): void {
+    if (this.holdSim) {
+      this.view.update(dt, 1);
+      return;
+    }
     if (!this.paused) {
       this.acc += Math.min(dt, 0.1) * this.speed;
       let steps = 0;

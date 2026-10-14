@@ -66,6 +66,8 @@ export interface RunConfig {
   availableTowers: TowerId[];
   /** Whether the revive offer is possible (ads available, not headless). */
   reviveAvailable?: boolean;
+  /** Hold before a wave that starts a new Age or opens a road until `continueFrontier()` (UI only). */
+  announceFrontiers?: boolean;
   seed?: number;
 }
 
@@ -222,7 +224,7 @@ export type RunEvents = {
   gold: { amount: number; total: number };
   castleHit: { damage: number; hp: number };
   heroAttack: { hero: Hero; target: Enemy };
-  heroAbility: { hero: Hero; x: number; z: number; radius: number };
+  heroAbility: { hero: Hero; x: number; z: number; radius: number; /** Shadow Strike: x,z of each enemy struck, in order. */ points?: number[] };
   heroDeath: Hero;
   heroRespawn: Hero;
   allyAttack: { ally: Ally; target: Enemy };
@@ -239,6 +241,8 @@ export type RunEvents = {
   /** Reached a checkpoint (wave count cleared, multiple of checkpointEvery). */
   checkpoint: { wave: number };
   ageChange: { age: number; wave: number };
+  /** About to start a wave that begins a new Age and/or opens roads; the siege holds until continueFrontier(). */
+  frontier: { wave: number; age: number; newAge: boolean; roads: number[] };
   roadOpened: { road: number };
   landCleared: { spot: number; cost: number };
   goldRush: { waves: number };
@@ -274,6 +278,9 @@ export class Run {
   readonly totalWaves = Infinity;
   /** Countdown until the next wave auto-starts (-1 when not counting). */
   nextWaveTimer = -1;
+  /** Wave whose new-Age / new-road announcement is on screen (the siege holds), or -1. */
+  holdingFor = -1;
+  private announcedWave = -1;
   reviveUsed = false;
   reinforcementsUsed = false;
   goldRushUsed = false;
@@ -538,6 +545,17 @@ export class Run {
     return to;
   }
 
+  /** The player has seen the new-Age / new-road announcement: start that wave. */
+  continueFrontier(): void {
+    if (this.holdingFor < 0) return;
+    this.frontierDone.add(this.holdingFor);
+    this.holdingFor = -1;
+    if (this.state === 'prep') this.state = 'playing';
+    this.startWave();
+  }
+
+  private frontierDone = new Set<number>();
+
   /** Starts the first wave or calls the next wave early. */
   callNextWave(): boolean {
     if (this.state === 'prep') {
@@ -573,6 +591,28 @@ export class Run {
     const power = 1 + this.config.meta.heroPower;
     let cx = h.x;
     let cz = h.z;
+    if (ab.kind === 'shadowStrike') {
+      // Dash through the toughest enemies in reach, then reappear beside the last one.
+      const targets = this.enemies
+        .filter((e) => e.alive && !e.def.flying && (e.x - h.x) ** 2 + (e.z - h.z) ** 2 <= ab.castRange ** 2)
+        .sort((a, b) => b.hp - a.hp)
+        .slice(0, ab.count ?? 6);
+      if (!targets.length) return false;
+      h.abilityCd = ab.cooldown;
+      this.stats.heroAbilityUses++;
+      const points: number[] = [h.x, h.z];
+      for (const e of targets) {
+        points.push(e.x, e.z);
+        this.damage(e, ab.damage * power, h.def.damageType);
+      }
+      const last = targets[targets.length - 1];
+      h.x = h.tx = last.x + last.dirZ * 0.45;
+      h.z = h.tz = last.z - last.dirX * 0.45;
+      h.facing = Math.atan2(last.x - h.x, last.z - h.z);
+      h.attackAnim = 0.25;
+      this.events.emit('heroAbility', { hero: h, x: h.x, z: h.z, radius: ab.radius, points });
+      return true;
+    }
     if (ab.castRange > 0) {
       // Aim at the densest cluster within cast range.
       let bestN = 0;
@@ -594,8 +634,14 @@ export class Run {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       if ((e.x - cx) ** 2 + (e.z - cz) ** 2 > ab.radius ** 2) continue;
+      if (ab.kind === 'quake' && e.def.flying) continue;
       this.damage(e, ab.damage * power, h.def.damageType);
       if (ab.kind === 'taunt' && e.alive) e.stunTimer = Math.max(e.stunTimer, e.def.boss ? ab.duration * 0.4 : ab.duration);
+      if (ab.kind === 'quake' && e.alive) this.applySlow(e, 0.4, ab.duration);
+    }
+    if (ab.kind === 'holyLight') {
+      h.hp = h.maxHp;
+      this.castleHp = Math.min(this.castleMaxHp, this.castleHp + (ab.count ?? 3));
     }
     this.events.emit('heroAbility', { hero: h, x: cx, z: cz, radius: ab.radius });
     return true;
@@ -666,13 +712,24 @@ export class Run {
     const n = this.waveIndex;
     const wave = this.waveDef(n);
     if (!wave) return;
+    if (this.holdingFor >= 0) return;
+    const newAge = n > 0 && n % SIEGE.ageEvery === 0;
+    const roads = ROADS.map((r, i) => (r.openWave === n && n > 0 ? i : -1)).filter((i) => i >= 0);
+    if (newAge && this.announcedWave !== n) {
+      // The new Age arrives before its first wave, so the world changes while the player gets ready.
+      this.announcedWave = n;
+      this.events.emit('ageChange', { age: ageOf(n), wave: n });
+    }
+    if (this.config.announceFrontiers && (newAge || roads.length) && this.holdingFor !== n && !this.frontierDone.has(n)) {
+      this.holdingFor = n;
+      this.nextWaveTimer = -1;
+      this.events.emit('frontier', { wave: n, age: ageOf(n), newAge, roads });
+      return;
+    }
     this.waveIndex++;
     this.nextWaveTimer = -1;
     if (n > 0 && this.goldRushWaves > 0) this.goldRushWaves--;
-    if (n > 0 && n % SIEGE.ageEvery === 0) this.events.emit('ageChange', { age: ageOf(n), wave: n });
-    ROADS.forEach((r, i) => {
-      if (r.openWave === n && n > 0) this.events.emit('roadOpened', { road: i });
-    });
+    for (const i of roads) this.events.emit('roadOpened', { road: i });
     let total = 0;
     for (const g of wave.groups) {
       for (let i = 0; i < g.count; i++) {
@@ -703,6 +760,7 @@ export class Run {
   }
 
   private updateWaveTimer(dt: number): void {
+    if (this.holdingFor >= 0) return;
     const lastWave = this.waveIndex - 1;
     if (this.nextWaveTimer < 0) {
       if (this.waveSpawnDone.get(lastWave)) this.nextWaveTimer = SIEGE.waveGap;

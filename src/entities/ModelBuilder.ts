@@ -75,6 +75,16 @@ export class ModelBuilder {
     return this.add(new THREE.TorusGeometry(r, tube, rs, ts), color, o);
   }
 
+  /** Part of a torus (bows, horns, halos): `arc` radians. */
+  arc(r: number, tube: number, arc: number, color: THREE.ColorRepresentation, o: PartOpts = {}): this {
+    return this.add(new THREE.TorusGeometry(r, tube, 4, 12, arc), color, o);
+  }
+
+  /** Rounded limb. */
+  capsule(r: number, len: number, color: THREE.ColorRepresentation, o: PartOpts = {}): this {
+    return this.add(new THREE.CapsuleGeometry(r, len, 2, 8), color, o);
+  }
+
   /** Merges with another builder's parts. */
   merge(other: ModelBuilder): this {
     this.parts.push(...other.parts.map((p) => p.clone()));

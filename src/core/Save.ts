@@ -40,7 +40,7 @@ export interface SaveData {
   shards: number;
   /** The persistent kingdom (null until founded). */
   base: BaseSnapshot | null;
-  progress: { bestWave: number; bestCheckpoint: number; retreats: number; checkpointsPaid: number };
+  progress: { bestWave: number; bestCheckpoint: number; retreats: number; checkpointsPaid: number; /** Highest wave whose new-Age/road announcement was shown. */ frontierSeen: number };
   towerLevels: Record<TowerId, number>;
   meta: { castleHp: number; warChest: number; heroPower: number };
   unlocks: { lightning: boolean; heroes: HeroId[] };
@@ -63,7 +63,7 @@ export function defaultSave(now = Date.now()): SaveData {
     coins: 0,
     shards: 0,
     base: null,
-    progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0 },
+    progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0, frontierSeen: 0 },
     towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 },
     meta: { castleHp: 0, warChest: 0, heroPower: 0 },
     unlocks: { lightning: false, heroes: ['ranger'] },
@@ -116,7 +116,7 @@ export const MIGRATIONS: Record<number, (d: AnyObj) => AnyObj> = {
       meta,
       coins: (Number(d.coins) || 0) + won * 25,
       base: null,
-      progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0 },
+      progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0, frontierSeen: 0 },
       stats: { kills: d.stats?.kills ?? 0, wavesCleared: 0, coinsEarned: d.stats?.coinsEarned ?? 0, playTime: d.stats?.playTime ?? 0 },
       tutorial: { done: false, hintsSeen: [] },
       version: 4,

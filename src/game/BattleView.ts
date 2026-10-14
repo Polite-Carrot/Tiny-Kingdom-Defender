@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, heroWingModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
 import { Particles, Rings, Bolts } from '../systems/Effects';
 import { Scenery } from '../systems/Scenery';
 import { Grass, type BladeSpot } from '../systems/Grass';
@@ -68,6 +68,10 @@ export class BattleView {
   private towerViews = new Map<number, TowerView>();
   private pads!: THREE.InstancedMesh;
   private heroMesh: THREE.Mesh | null = null;
+  /** Valkyrie wings (flap separately from the body). */
+  private heroWings: THREE.Object3D[] = [];
+  /** Soft coloured glow under the hero. */
+  private heroAura: THREE.Mesh | null = null;
   private heroRing!: THREE.Mesh;
   private heroBar!: THREE.Mesh;
   private moveMarker!: THREE.Mesh;
@@ -82,6 +86,8 @@ export class BattleView {
   readonly rings = new Rings();
   readonly bolts = new Bolts();
   private time = 0;
+  /** New-road announcement: a warning beacon over each new tunnel and sparks marching down its road. */
+  private frontier: { roads: number[]; beacon: THREE.Group; t: number } | null = null;
   private theme: Theme;
   /** Static board (tiles, props, pads, castle): rebuilt when the Age changes or a road opens. */
   private board = new THREE.Group();
@@ -422,9 +428,29 @@ export class BattleView {
     this.moveMarker.visible = false;
     this.root.add(this.heroRing, this.moveMarker);
     if (hero) {
-      this.heroMesh = new THREE.Mesh(heroModel(hero.def.id), this.material);
+      const winged = hero.def.id === 'valkyrie';
+      this.heroMesh = new THREE.Mesh(heroModel(hero.def.id, !winged), this.material);
       this.heroMesh.castShadow = true;
       this.root.add(this.heroMesh);
+      this.heroWings = [];
+      if (winged) {
+        for (const side of [1, -1]) {
+          const pivot = new THREE.Object3D();
+          pivot.position.set(side * 0.06, 0.36, -0.12);
+          pivot.rotation.y = side > 0 ? -0.35 : Math.PI + 0.35;
+          const wing = new THREE.Mesh(heroWingModel(), this.material);
+          wing.castShadow = true;
+          pivot.add(wing);
+          this.heroMesh.add(pivot);
+          this.heroWings.push(wing);
+        }
+      }
+      const auraGeo = this.track(new THREE.CircleGeometry(0.5, 32));
+      auraGeo.rotateX(-Math.PI / 2);
+      this.heroAura = new THREE.Mesh(auraGeo, this.track(new THREE.MeshBasicMaterial({
+        color: new THREE.Color(hero.def.color).multiplyScalar(1.4), transparent: true, opacity: 0.32, depthWrite: false, map: this.auraTexture(),
+      })));
+      this.root.add(this.heroAura);
       this.heroBar = new THREE.Mesh(quad, this.track(new THREE.MeshBasicMaterial({ color: '#59e05a', depthTest: false, toneMapped: false })));
       this.heroBar.renderOrder = 11;
       this.root.add(this.heroBar);
@@ -574,7 +600,8 @@ export class BattleView {
       else if (hero.def.damageType === 'magic') this.audio.play('frost', 0.6);
       else this.audio.play('arrow', 0.8);
     });
-    on('heroAbility', ({ hero, x, z, radius }) => {
+    on('heroAbility', (ev) => {
+      const { hero, x, z, radius } = ev;
       const kind = hero.def.ability.kind;
       if (kind === 'arrowRain') {
         for (let i = 0; i < 30; i++) {
@@ -584,6 +611,44 @@ export class BattleView {
         }
         this.rings.spawn(x, z, radius, '#9dff8a', 0.6);
         this.audio.play('arrowRain');
+      } else if (kind === 'quake') {
+        this.rings.spawn(x, z, radius, '#e8b070', 0.7);
+        this.rings.spawn(x, z, radius * 0.55, '#ffffff', 0.4);
+        for (let i = 0; i < 26; i++) {
+          const a = (i / 26) * Math.PI * 2;
+          const r = radius * (0.3 + Math.random() * 0.7);
+          this.particles.burst(x + Math.cos(a) * r, 0.05, z + Math.sin(a) * r, i % 2 ? '#a07a4a' : '#d8c09a', 1, { speed: 0.5, up: 2.5, size: 0.13, gravity: 6, life: 0.6 });
+        }
+        this.rig.shake(0.32);
+        this.audio.play('cannon', 1);
+        this.audio.play('taunt', 0.6);
+      } else if (kind === 'holyLight') {
+        this.rings.spawn(x, z, radius, '#fff2a8', 0.8);
+        this.rings.spawn(x, z, radius * 0.5, '#ffffff', 0.5);
+        for (let i = 0; i < 30; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.random() * radius;
+          this.particles.burst(x + Math.cos(a) * r, 0.1, z + Math.sin(a) * r, i % 3 ? '#fff2a8' : '#ffffff', 1, { speed: 0.1, up: 3.5, size: 0.09, gravity: -1, life: 0.9 });
+        }
+        const c = this.run.map.castle;
+        this.particles.burst(c.x, 1.2, c.z, '#fff2a8', 24, { speed: 1.5, up: 2.5, size: 0.1, gravity: -0.5, life: 1 });
+        this.rings.spawn(c.x, c.z, 1.2, '#7dff9a', 0.8);
+        const sp = this.project(c.x, 1.6, c.z);
+        this.hooks.floatText(sp.x, sp.y, `+${hero.def.ability.count ?? 3} ♥`, 'heal big');
+        this.audio.play('heal');
+      } else if (kind === 'shadowStrike') {
+        const pts = ev.points ?? [];
+        for (let i = 2; i + 1 < pts.length; i += 2) {
+          const px = pts[i], pz = pts[i + 1];
+          this.particles.burst(px, 0.4, pz, '#7a4fd6', 8, { speed: 1.6, up: 1.2, size: 0.1, life: 0.45 });
+          this.particles.burst(px, 0.4, pz, '#ffffff', 3, { speed: 2.4, up: 0.6, size: 0.05, life: 0.25 });
+          // Slash trail between victims.
+          const ax = pts[i - 2], az = pts[i - 1];
+          for (let k = 1; k < 6; k++) this.particles.burst(ax + (px - ax) * (k / 6), 0.45, az + (pz - az) * (k / 6), '#2b2a4a', 1, { speed: 0.1, up: 0.2, size: 0.12, gravity: 0, life: 0.5, spread: 0 });
+        }
+        this.rig.shake(0.15);
+        this.audio.play('heroHit');
+        this.audio.play('arrowRain', 0.5);
       } else if (kind === 'taunt') {
         this.rings.spawn(x, z, radius, '#8fb4ff', 0.6);
         this.rings.spawn(x, z, radius * 0.6, '#ffffff', 0.4);
@@ -735,7 +800,78 @@ export class BattleView {
 
   // --- Per-frame sync --------------------------------------------------------------
 
+  /** Radial gradient for the hero's aura. */
+  private auraTexture(): THREE.Texture {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 4, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(0.8, 'rgba(255,255,255,0.8)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return this.track(new THREE.CanvasTexture(c));
+  }
+
+  /** Shows the warning beacon over new tunnels (or the castle for a new Age) and marching sparks along new roads. */
+  showFrontier(roads: number[]): void {
+    this.hideFrontier();
+    const beacon = new THREE.Group();
+    const red = this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff4a3a').multiplyScalar(1.6), transparent: true, opacity: 0.95 }));
+    const arrowGeo = this.track(new THREE.ConeGeometry(0.28, 0.55, 4));
+    const ringGeo = this.track(new THREE.RingGeometry(0.75, 0.95, 32));
+    ringGeo.rotateX(-Math.PI / 2);
+    const spots = roads.length ? roads.map((r) => ({ x: this.run.map.paths[r].xs[0], z: this.run.map.paths[r].zs[0] })) : [];
+    for (const sp of spots) {
+      const arrow = new THREE.Mesh(arrowGeo, red);
+      arrow.rotation.x = Math.PI;
+      arrow.position.set(sp.x, 2.2, sp.z);
+      arrow.name = 'arrow';
+      const ring = new THREE.Mesh(ringGeo, red);
+      ring.position.set(sp.x, 0.08, sp.z);
+      ring.name = 'ring';
+      beacon.add(arrow, ring);
+    }
+    this.root.add(beacon);
+    this.frontier = { roads, beacon, t: 0 };
+    if (roads.length) this.audio.play('bossRoar', 0.6);
+  }
+
+  hideFrontier(): void {
+    if (!this.frontier) return;
+    this.root.remove(this.frontier.beacon);
+    this.frontier = null;
+  }
+
+  private updateFrontier(dt: number): void {
+    const f = this.frontier;
+    if (!f) return;
+    f.t += dt;
+    for (const o of f.beacon.children) {
+      if (o.name === 'arrow') {
+        o.position.y = 2.0 + Math.abs(Math.sin(f.t * 3.2)) * 0.45;
+        o.rotation.y += dt * 2;
+      } else {
+        const k = (f.t * 0.9) % 1;
+        o.scale.setScalar(0.6 + k * 1.4);
+        ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.95;
+      }
+    }
+    // Sparks march from the tunnel to the castle so the new route is obvious.
+    for (const r of f.roads) {
+      const path = this.run.map.paths[r];
+      for (let k = 0; k < 6; k++) {
+        const d = (f.t * 3.2 + (k * path.length) / 6) % path.length;
+        const pt = this.run.map.pointAt(r, d, { x: 0, z: 0, dx: 0, dz: 0 });
+        if (Math.random() < 0.6) this.particles.burst(pt.x, 0.25, pt.z, k % 2 ? '#ff6a4a' : '#ffd36a', 1, { speed: 0.15, up: 0.6, size: 0.11, gravity: 0, life: 0.5, spread: 0 });
+      }
+    }
+  }
+
   update(dt: number, simSpeed: number): void {
+    this.updateFrontier(dt);
     this.time += dt;
     const run = this.run;
     const cam = this.renderer.camera;
@@ -842,13 +978,26 @@ export class BattleView {
     const hero = run.hero;
     if (hero && this.heroMesh) {
       this.heroMesh.visible = !hero.dead;
+      if (this.heroAura) this.heroAura.visible = !hero.dead;
       this.heroBar.visible = !hero.dead && hero.hp < hero.maxHp;
       if (!hero.dead) {
-        const bob = hero.moving ? Math.abs(Math.sin(this.time * 12)) * 0.06 : 0;
+        const flying = hero.def.id === 'valkyrie';
+        const bob = flying ? 0.28 + Math.sin(this.time * 2.6) * 0.06 : hero.moving ? Math.abs(Math.sin(this.time * 12)) * 0.06 : 0;
         const atk = hero.attackAnim > 0 ? Math.sin((hero.attackAnim / 0.25) * Math.PI) * 0.12 : 0;
+        // Idle breathing, a lean into the run, a lunge on attack.
+        const breathe = 1 + Math.sin(this.time * 2.2) * 0.018;
+        const lean = hero.moving ? 0.12 : 0;
         this.heroMesh.position.set(hero.x, bob, hero.z);
-        this.heroMesh.rotation.set(-atk, hero.facing, 0);
-        this.heroMesh.scale.setScalar(1.25);
+        this.heroMesh.rotation.set(-atk + lean, hero.facing, hero.moving && !flying ? Math.sin(this.time * 12) * 0.06 : 0);
+        this.heroMesh.scale.set(1.3, 1.3 * breathe, 1.3);
+        const flap = Math.sin(this.time * (hero.moving ? 11 : 5));
+        // Panels tilt back so they catch the light from the high camera; flap swings them.
+        for (const w of this.heroWings) w.rotation.set(-0.8, 0.2 + flap * 0.45, 0, 'YXZ');
+        if (this.heroAura) {
+          this.heroAura.visible = true;
+          this.heroAura.position.set(hero.x, 0.025, hero.z);
+          this.heroAura.scale.setScalar(1 + Math.sin(this.time * 3) * 0.06);
+        }
         _m.compose(_p.set(hero.x, 0.015, hero.z), _q.identity(), _s.set(0.6, 1, 0.6));
         if (shadows < this.shadows.instanceMatrix.count) this.shadows.setMatrixAt(shadows++, _m);
         const frac = hero.hp / hero.maxHp;

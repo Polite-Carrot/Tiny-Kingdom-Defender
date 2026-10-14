@@ -83,6 +83,19 @@ export class CameraRig {
   /** Menu mode: slowly circle the kingdom. */
   orbit = false;
   private yaw = 0;
+  /** Cinematic focus: glide to a point and zoom in, then ease back when cleared. */
+  private focus: { x: number; z: number; zoom: number } | null = null;
+  private focusK = 0;
+  private lastFocus = { x: 0, z: 0, zoom: 1 };
+
+  focusOn(x: number, z: number, zoom: number): void {
+    this.focus = { x, z, zoom };
+    this.lastFocus = { x, z, zoom };
+  }
+
+  clearFocus(): void {
+    this.focus = null;
+  }
 
   private place(dist: number, px: number, pz: number, extraY: number, yaw = 0, pitch = PITCH): void {
     const cam = this.camera;
@@ -146,7 +159,14 @@ export class CameraRig {
       this.yaw += (target - this.yaw) * Math.min(1, dt * 4);
     }
     const pitch = this.orbit ? PITCH - 0.42 : PITCH;
-    this.place(this.baseDist / this.zoom * (this.orbit ? 1.12 : 1), this.pan.x + sx, this.pan.y + sz, 0, this.yaw, pitch);
+    // Smoothstep glide in and out of a cinematic focus.
+    this.focusK += ((this.focus ? 1 : 0) - this.focusK) * Math.min(1, dt * 2.2);
+    const k = this.focusK * this.focusK * (3 - 2 * this.focusK);
+    const f = this.lastFocus;
+    const zoom = this.zoom + (f.zoom - this.zoom) * k;
+    const px = this.pan.x + (f.x - this.pan.x) * k;
+    const pz = this.pan.y + (f.z - this.pan.y) * k;
+    this.place(this.baseDist / zoom * (this.orbit ? 1.12 : 1), px + sx, pz + sz, 0, this.yaw, pitch);
     this.camera.updateMatrixWorld();
   }
 }

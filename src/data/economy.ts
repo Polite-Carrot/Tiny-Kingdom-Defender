@@ -75,6 +75,9 @@ export const HERO_UNLOCK_COST: Record<string, number> = {
   ranger: 0,
   knight: 600,
   mage: 900,
+  dwarf: 1400,
+  valkyrie: 1900,
+  ninja: 2500,
 };
 
 export const COSMETICS: { id: string; kind: 'castle' | 'trail'; name: string; cost: number; shardCost: number; color: string }[] = [
