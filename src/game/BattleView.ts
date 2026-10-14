@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { towerModel, enemyModel, heroModel, heroWingModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel } from '../entities/Models';
+import { HeroAnimator } from './HeroAnimator';
 import { Particles, Rings, Bolts } from '../systems/Effects';
 import { Scenery } from '../systems/Scenery';
 import { Grass, type BladeSpot } from '../systems/Grass';
@@ -67,9 +68,8 @@ export class BattleView {
   private projGlow!: THREE.InstancedMesh;
   private towerViews = new Map<number, TowerView>();
   private pads!: THREE.InstancedMesh;
-  private heroMesh: THREE.Mesh | null = null;
-  /** Valkyrie wings (flap separately from the body). */
-  private heroWings: THREE.Object3D[] = [];
+  /** Rigged, animated hero. */
+  private heroAnim: HeroAnimator | null = null;
   /** Soft coloured glow under the hero. */
   private heroAura: THREE.Mesh | null = null;
   private heroRing!: THREE.Mesh;
@@ -428,23 +428,9 @@ export class BattleView {
     this.moveMarker.visible = false;
     this.root.add(this.heroRing, this.moveMarker);
     if (hero) {
-      const winged = hero.def.id === 'valkyrie';
-      this.heroMesh = new THREE.Mesh(heroModel(hero.def.id, !winged), this.material);
-      this.heroMesh.castShadow = true;
-      this.root.add(this.heroMesh);
-      this.heroWings = [];
-      if (winged) {
-        for (const side of [1, -1]) {
-          const pivot = new THREE.Object3D();
-          pivot.position.set(side * 0.06, 0.36, -0.12);
-          pivot.rotation.y = side > 0 ? -0.35 : Math.PI + 0.35;
-          const wing = new THREE.Mesh(heroWingModel(), this.material);
-          wing.castShadow = true;
-          pivot.add(wing);
-          this.heroMesh.add(pivot);
-          this.heroWings.push(wing);
-        }
-      }
+      this.heroAnim = new HeroAnimator(hero.def.id, this.material, (x, z) =>
+        this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }));
+      this.root.add(this.heroAnim.root);
       const auraGeo = this.track(new THREE.CircleGeometry(0.5, 32));
       auraGeo.rotateX(-Math.PI / 2);
       this.heroAura = new THREE.Mesh(auraGeo, this.track(new THREE.MeshBasicMaterial({
@@ -596,12 +582,14 @@ export class BattleView {
       this.hooks.castleHit();
     });
     on('heroAttack', ({ hero }) => {
+      this.heroAnim?.attack();
       if (hero.def.range <= 1.5) this.audio.play('heroHit');
       else if (hero.def.damageType === 'magic') this.audio.play('frost', 0.6);
       else this.audio.play('arrow', 0.8);
     });
     on('heroAbility', (ev) => {
       const { hero, x, z, radius } = ev;
+      this.heroAnim?.ability();
       const kind = hero.def.ability.kind;
       if (kind === 'arrowRain') {
         for (let i = 0; i < 30; i++) {
@@ -663,7 +651,13 @@ export class BattleView {
         this.audio.play('meteor');
       }
     });
+    on('heroRespawn', (h) => {
+      this.heroAnim?.respawn();
+      this.rings.spawn(h.x, h.z, 0.9, h.def.color, 0.5);
+      this.particles.burst(h.x, 0.3, h.z, '#ffffff', 14, { speed: 1.5, up: 2.5, size: 0.07, life: 0.6 });
+    });
     on('heroDeath', (h) => {
+      this.heroAnim?.die();
       this.particles.burst(h.x, 0.4, h.z, '#ffffff', 16, { speed: 2, up: 3, size: 0.08 });
     });
     on('bossMechanic', ({ enemy, kind }) => {
@@ -976,23 +970,12 @@ export class BattleView {
 
     // Hero.
     const hero = run.hero;
-    if (hero && this.heroMesh) {
-      this.heroMesh.visible = !hero.dead;
+    if (hero && this.heroAnim) {
+      // The animator plays the death fall itself, so the hero stays visible until it ends.
+      this.heroAnim.root.visible = this.heroAnim.update(dt, this.time, hero);
       if (this.heroAura) this.heroAura.visible = !hero.dead;
       this.heroBar.visible = !hero.dead && hero.hp < hero.maxHp;
       if (!hero.dead) {
-        const flying = hero.def.id === 'valkyrie';
-        const bob = flying ? 0.28 + Math.sin(this.time * 2.6) * 0.06 : hero.moving ? Math.abs(Math.sin(this.time * 12)) * 0.06 : 0;
-        const atk = hero.attackAnim > 0 ? Math.sin((hero.attackAnim / 0.25) * Math.PI) * 0.12 : 0;
-        // Idle breathing, a lean into the run, a lunge on attack.
-        const breathe = 1 + Math.sin(this.time * 2.2) * 0.018;
-        const lean = hero.moving ? 0.12 : 0;
-        this.heroMesh.position.set(hero.x, bob, hero.z);
-        this.heroMesh.rotation.set(-atk + lean, hero.facing, hero.moving && !flying ? Math.sin(this.time * 12) * 0.06 : 0);
-        this.heroMesh.scale.set(1.3, 1.3 * breathe, 1.3);
-        const flap = Math.sin(this.time * (hero.moving ? 11 : 5));
-        // Panels tilt back so they catch the light from the high camera; flap swings them.
-        for (const w of this.heroWings) w.rotation.set(-0.8, 0.2 + flap * 0.45, 0, 'YXZ');
         if (this.heroAura) {
           this.heroAura.visible = true;
           this.heroAura.position.set(hero.x, 0.025, hero.z);

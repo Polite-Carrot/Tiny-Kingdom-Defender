@@ -565,24 +565,59 @@ function heroFace(b: ModelBuilder, y: number, o: { skin?: string; iris?: string;
   if (!o.mask) b.box(r * 0.28, r * 0.06, r * 0.05, '#9a4a3a', { y: y - r * 0.42, z: r * 0.9 });
 }
 
-/** Legs with boots, torso, arms with hands/gloves. Returns the shoulder height. */
-function heroBody(b: ModelBuilder, o: { pants: string; boots: string; torso: string; arms?: string; hands?: string; w?: number; belt?: string; buckle?: string }) {
+// Heroes are rigged: body (torso, head, gear), two legs and two arms, each a separate mesh that
+// pivots at the hip or shoulder. Held weapons are built into the arm that holds them, so swings,
+// bow draws and casts move them naturally. Parts are authored in model space; the rig moves each
+// part so its pivot sits at the origin.
+
+export type HeroPart = 'body' | 'legL' | 'legR' | 'armL' | 'armR';
+
+class HeroRigBuilder {
+  readonly body = new ModelBuilder();
+  readonly legL = new ModelBuilder();
+  readonly legR = new ModelBuilder();
+  readonly armL = new ModelBuilder();
+  readonly armR = new ModelBuilder();
+  /** Body width scale (moves hips and shoulders out). */
+  w = 1;
+  leg(sx: number): ModelBuilder {
+    return sx < 0 ? this.legL : this.legR;
+  }
+  arm(sx: number): ModelBuilder {
+    return sx < 0 ? this.armL : this.armR;
+  }
+}
+
+export const HIP_Y = 0.19;
+export const SHOULDER_Y = 0.37;
+
+export interface HeroRigPart {
+  name: HeroPart;
+  /** Geometry with its pivot at the origin. */
+  geo: THREE.BufferGeometry;
+  pivot: THREE.Vector3;
+}
+
+/** Legs with boots, torso, arms with hands/gloves. */
+function heroBody(R: HeroRigBuilder, o: { pants: string; boots: string; torso: string; arms?: string; hands?: string; w?: number; belt?: string; buckle?: string }) {
   const w = o.w ?? 1;
+  R.w = w;
   for (const sx of [-1, 1]) {
-    b.capsule(0.045 * w, 0.1, o.pants, { x: sx * 0.065 * w, y: 0.13 });
-    b.box(0.09 * w, 0.06, 0.13, o.boots, { x: sx * 0.065 * w, y: 0.03, z: 0.015 });
-    b.cyl(0.05 * w, 0.05 * w, 0.03, 8, o.boots, { x: sx * 0.065 * w, y: 0.075 });
+    const L = R.leg(sx);
+    L.capsule(0.045 * w, 0.1, o.pants, { x: sx * 0.065 * w, y: 0.13 });
+    L.box(0.09 * w, 0.06, 0.13, o.boots, { x: sx * 0.065 * w, y: 0.03, z: 0.015 });
+    L.cyl(0.05 * w, 0.05 * w, 0.03, 8, o.boots, { x: sx * 0.065 * w, y: 0.075 });
   }
-  b.cyl(0.115 * w, 0.13 * w, 0.2, 10, o.torso, { y: 0.29, sz: 0.8 });
+  R.body.cyl(0.115 * w, 0.13 * w, 0.2, 10, o.torso, { y: 0.29, sz: 0.8 });
   if (o.belt) {
-    b.cyl(0.133 * w, 0.133 * w, 0.035, 10, o.belt, { y: 0.21, sz: 0.82 });
-    b.box(0.045, 0.035, 0.02, o.buckle ?? GOLD, { y: 0.21, z: 0.11 });
+    R.body.cyl(0.133 * w, 0.133 * w, 0.035, 10, o.belt, { y: 0.21, sz: 0.82 });
+    R.body.box(0.045, 0.035, 0.02, o.buckle ?? GOLD, { y: 0.21, z: 0.11 });
   }
   for (const sx of [-1, 1]) {
-    b.capsule(0.033, 0.11, o.arms ?? o.torso, { x: sx * 0.15 * w, y: 0.3, rz: sx * 0.18 });
-    b.ball(0.04, 1, o.hands ?? SKIN, { x: sx * 0.168 * w, y: 0.21, z: 0.01 });
+    const A = R.arm(sx);
+    A.capsule(0.033, 0.11, o.arms ?? o.torso, { x: sx * 0.15 * w, y: 0.3, rz: sx * 0.18 });
+    A.ball(0.04, 1, o.hands ?? SKIN, { x: sx * 0.168 * w, y: 0.21, z: 0.01 });
   }
-  return 0.4;
 }
 
 /** Valkyrie wing, built pointing out to +X from the shoulder. Animated separately in game. */
@@ -602,198 +637,226 @@ export function heroWingModel(): THREE.BufferGeometry {
   });
 }
 
+function buildHeroRig(id: HeroId, R: HeroRigBuilder): void {
+  const B = R.body;
+  switch (id) {
+    case 'ranger': {
+      // Robin: green hood and cloak, leather jerkin, quiver of arrows, longbow.
+      heroBody(R, { pants: '#5b4a33', boots: '#4a3424', torso: '#7a5a38', arms: '#3f7d3a', hands: '#8a6a44', belt: '#3b2a1c' });
+      B.box(0.2, 0.15, 0.02, '#3f7d3a', { y: 0.3, z: 0.105 });
+      B.box(0.05, 0.05, 0.03, '#8a6a44', { x: 0.09, y: 0.19, z: 0.1 });
+      B.box(0.3, 0.3, 0.025, '#2f6a2c', { y: 0.28, z: -0.115, rx: 0.12 });
+      B.box(0.22, 0.04, 0.03, '#2f6a2c', { y: 0.42, z: -0.09 });
+      heroFace(B, 0.55, { iris: '#3f8a3a', brow: '#8a4a24' });
+      B.ball(0.155, 1, '#a0522d', { y: 0.6, z: -0.01, sy: 0.75 });
+      B.cone(0.17, 0.2, 10, '#3f7d3a', { y: 0.7, z: -0.03, rx: -0.35 });
+      B.ball(0.165, 1, '#3f7d3a', { y: 0.58, z: -0.03, sy: 0.95, sz: 0.95 });
+      B.cyl(0.165, 0.17, 0.05, 12, '#2f6a2c', { y: 0.47, z: -0.01 });
+      B.box(0.03, 0.06, 0.01, '#e84a3a', { x: 0.1, y: 0.73, z: -0.02, rz: -0.5 });
+      B.cyl(0.045, 0.04, 0.24, 8, '#8a5a34', { x: -0.06, y: 0.34, z: -0.15, rz: 0.4 });
+      for (let k = 0; k < 3; k++) {
+        B.cyl(0.006, 0.006, 0.12, 3, '#d9c8a0', { x: -0.12 + k * 0.02, y: 0.5, z: -0.15, rz: 0.4 });
+        B.box(0.03, 0.04, 0.005, k === 1 ? '#e84a3a' : '#ffffff', { x: -0.14 + k * 0.02, y: 0.55, z: -0.15, rz: 0.4 });
+      }
+      // Longbow in the left hand (it rises to aim); string drawn by the right.
+      const A = R.armL;
+      A.arc(0.24, 0.014, Math.PI * 0.85, WOOD, { x: -0.19, y: 0.22, z: 0.08, ry: Math.PI / 2, rz: -Math.PI / 2 + Math.PI * 0.425 });
+      A.cyl(0.004, 0.004, 0.46, 3, '#f4efe0', { x: -0.19, y: 0.22, z: 0.0 });
+      A.box(0.03, 0.06, 0.03, '#5b3a22', { x: -0.19, y: 0.22, z: 0.2 });
+      R.armR.cyl(0.006, 0.006, 0.26, 3, '#d9c8a0', { x: 0.17, y: 0.21, z: 0.1, rx: Math.PI / 2 });
+      break;
+    }
+    case 'knight': {
+      // Sir Bramble: plate armour under a royal tabard, open helm with plume, sword and kite shield.
+      const steel = '#c9d2df';
+      heroBody(R, { pants: '#8a93a3', boots: '#5d6470', torso: steel, arms: steel, hands: '#8a93a3', belt: '#4a3424', w: 1.12 });
+      B.box(0.17, 0.22, 0.02, '#3a5fb1', { y: 0.27, z: 0.112 });
+      B.box(0.05, 0.12, 0.022, GOLD, { y: 0.29, z: 0.115 });
+      B.box(0.11, 0.03, 0.022, GOLD, { y: 0.31, z: 0.115 });
+      for (const sx of [-1, 1]) {
+        R.arm(sx).ball(0.07, 1, '#aeb8c8', { x: sx * 0.16, y: 0.39, sy: 0.7 });
+        R.arm(sx).torus(0.06, 0.012, 4, 10, GOLD, { x: sx * 0.16, y: 0.37, rx: Math.PI / 2 });
+      }
+      B.box(0.34, 0.28, 0.02, '#3a5fb1', { y: 0.28, z: -0.13, rx: 0.1 });
+      heroFace(B, 0.55, { iris: '#3a6fd1', brow: '#6a4a2a' });
+      B.ball(0.168, 1, steel, { y: 0.6, z: -0.015, sy: 0.85 });
+      B.cyl(0.17, 0.17, 0.04, 12, '#aeb8c8', { y: 0.55, z: -0.02 });
+      for (const sx of [-1, 1]) B.box(0.03, 0.12, 0.08, '#aeb8c8', { x: sx * 0.15, y: 0.5, z: 0.04 });
+      B.box(0.26, 0.05, 0.05, '#aeb8c8', { y: 0.7, z: 0.1, rx: -0.6 });
+      for (let k = 0; k < 5; k++) B.cone(0.03, 0.16, 5, k % 2 ? '#3a5fb1' : '#5a7fd1', { y: 0.78 + k * 0.01, z: -0.05 - k * 0.035, rx: -0.5 - k * 0.2 });
+      // Sword in the right hand.
+      const S = R.armR;
+      S.box(0.03, 0.42, 0.012, '#eef2f8', { x: 0.2, y: 0.42, z: 0.08 });
+      S.box(0.14, 0.03, 0.04, GOLD, { x: 0.2, y: 0.21, z: 0.08 });
+      S.cyl(0.015, 0.015, 0.08, 6, '#5b3a22', { x: 0.2, y: 0.16, z: 0.08 });
+      S.ball(0.022, 0, GOLD, { x: 0.2, y: 0.11, z: 0.08 });
+      // Kite shield on the left arm.
+      const H = R.armL;
+      H.box(0.24, 0.26, 0.035, '#3a5fb1', { x: -0.21, y: 0.3, z: 0.09, ry: 0.35 });
+      H.cone(0.12, 0.12, 4, '#3a5fb1', { x: -0.21, y: 0.12, z: 0.09, rx: Math.PI, ry: 0.35 + Math.PI / 4, sz: 0.25 });
+      H.box(0.26, 0.025, 0.04, GOLD, { x: -0.21, y: 0.43, z: 0.09, ry: 0.35 });
+      H.box(0.04, 0.2, 0.04, GOLD, { x: -0.205, y: 0.29, z: 0.105, ry: 0.35 });
+      H.box(0.14, 0.04, 0.04, GOLD, { x: -0.205, y: 0.32, z: 0.105, ry: 0.35 });
+      break;
+    }
+    case 'mage': {
+      // Elowen: starry robe (no visible legs), long silver hair, huge bent hat, glowing staff.
+      const robe = '#7d43b3';
+      B.cone(0.24, 0.42, 12, robe, { y: 0.21 });
+      B.cyl(0.24, 0.245, 0.03, 12, GOLD, { y: 0.015 });
+      B.cyl(0.11, 0.13, 0.12, 10, robe, { y: 0.36, sz: 0.85 });
+      B.box(0.05, 0.36, 0.02, GOLD, { y: 0.2, z: 0.13, rx: -0.3 });
+      for (let k = 0; k < 7; k++) {
+        const a = k * 0.9;
+        B.octa(0.018, '#ffe680', { x: Math.sin(a) * 0.17, y: 0.07 + (k % 3) * 0.08, z: Math.cos(a) * 0.17 });
+      }
+      for (const sx of [-1, 1]) {
+        R.arm(sx).cone(0.06, 0.18, 8, robe, { x: sx * 0.15, y: 0.31, rz: sx * 0.5 });
+        R.arm(sx).ball(0.035, 1, SKIN, { x: sx * 0.2, y: 0.24, z: 0.02 });
+      }
+      heroFace(B, 0.54, { iris: '#a15bd1', brow: '#c8c8d8' });
+      B.ball(0.16, 1, '#e6e8f2', { y: 0.57, z: -0.03, sy: 0.9 });
+      for (const sx of [-1, 1]) B.capsule(0.045, 0.2, '#e6e8f2', { x: sx * 0.12, y: 0.42, z: -0.02 });
+      B.box(0.22, 0.22, 0.05, '#e6e8f2', { y: 0.42, z: -0.12 });
+      B.cyl(0.26, 0.26, 0.02, 16, '#5e2f8a', { y: 0.66 });
+      B.cyl(0.14, 0.15, 0.05, 12, GOLD, { y: 0.69 });
+      B.cone(0.14, 0.26, 12, '#5e2f8a', { y: 0.84 });
+      B.cone(0.07, 0.18, 8, '#5e2f8a', { x: 0.06, y: 1.0, rz: -0.6 });
+      B.octa(0.035, glowC('#ffe680', 1.6), { x: 0.14, y: 1.03 });
+      const S = R.armR;
+      S.cyl(0.016, 0.02, 0.78, 6, WOOD, { x: 0.22, y: 0.38, z: 0.04 });
+      for (let k = 0; k < 3; k++) S.cone(0.012, 0.08, 4, GOLD, { x: 0.22 + Math.cos(k * 2.1) * 0.035, y: 0.8, z: 0.04 + Math.sin(k * 2.1) * 0.035, rz: -Math.cos(k * 2.1) * 0.5, rx: Math.sin(k * 2.1) * 0.5 });
+      S.octa(0.06, glowC('#c8a6ff', 1.9), { x: 0.22, y: 0.84, z: 0.04, sy: 1.5 });
+      break;
+    }
+    case 'dwarf': {
+      // Brokk: broad and stocky, horned helm with goggles, braided ginger beard, giant hammer.
+      heroBody(R, { pants: '#6a4a2a', boots: '#3b2a1c', torso: '#a8452a', arms: '#a8452a', hands: '#7a5a3a', belt: '#3b2a1c', buckle: '#c9d2df', w: 1.3 });
+      B.box(0.22, 0.2, 0.02, '#7a5a3a', { y: 0.25, z: 0.13 });
+      for (const sx of [-1, 1]) R.arm(sx).ball(0.07, 1, '#8a93a3', { x: sx * 0.19, y: 0.38, sy: 0.7 });
+      heroFace(B, 0.52, { iris: '#4a7ab8', brow: '#c8642a', r: 0.155 });
+      B.ball(0.05, 1, '#e8a888', { y: 0.5, z: 0.15 });
+      B.ball(0.15, 1, '#d2702e', { y: 0.42, z: 0.06, sy: 0.9, sz: 0.7 });
+      B.cone(0.12, 0.22, 10, '#d2702e', { y: 0.28, z: 0.1, rx: Math.PI });
+      for (const sx of [-1, 1]) {
+        for (let k = 0; k < 3; k++) B.ball(0.028, 0, '#c0602a', { x: sx * 0.07, y: 0.24 - k * 0.045, z: 0.13 });
+        B.box(0.03, 0.025, 0.03, '#c9d2df', { x: sx * 0.07, y: 0.12, z: 0.13 });
+        B.ball(0.06, 1, '#d2702e', { x: sx * 0.07, y: 0.47, z: 0.13, sx: 1.4, sy: 0.6 });
+      }
+      B.ball(0.165, 1, '#9ea7b7', { y: 0.58, sy: 0.75 });
+      B.cyl(0.168, 0.168, 0.04, 12, '#c9a24a', { y: 0.57 });
+      for (const sx of [-1, 1]) {
+        B.cone(0.045, 0.14, 8, '#f4efe0', { x: sx * 0.19, y: 0.64, rz: sx * -1.1 });
+        B.cone(0.03, 0.12, 8, '#e8e0c8', { x: sx * 0.27, y: 0.71, rz: sx * -0.35 });
+        B.cyl(0.05, 0.05, 0.03, 8, '#c9a24a', { x: sx * 0.15, y: 0.62, rz: sx * -1.1 });
+        B.torus(0.035, 0.012, 4, 10, '#5d4a3a', { x: sx * 0.055, y: 0.67, z: 0.12, rx: 0.3 });
+        B.ball(0.028, 0, glowC('#8fd8ff', 1.3), { x: sx * 0.055, y: 0.67, z: 0.12 });
+      }
+      const S = R.armR;
+      S.cyl(0.018, 0.022, 0.62, 6, WOOD_D, { x: 0.24, y: 0.36, z: 0.06, rz: -0.05 });
+      S.box(0.22, 0.13, 0.13, '#8a93a3', { x: 0.26, y: 0.68, z: 0.06, rz: -0.05 });
+      for (const dx of [-0.07, 0.07]) S.box(0.03, 0.14, 0.14, '#c9a24a', { x: 0.26 + dx, y: 0.68 - dx * 0.05, z: 0.06, rz: -0.05 });
+      S.ball(0.03, 0, glowC('#ff8a3d', 1.6), { x: 0.26, y: 0.68, z: 0.13 });
+      break;
+    }
+    case 'valkyrie': {
+      // Seraphine: white-and-gold armour, flowing golden hair, winged helm, halo, spear.
+      heroBody(R, { pants: '#f4f6ff', boots: '#c9a24a', torso: '#f4f6ff', arms: '#f4f6ff', hands: '#f1c9a0', belt: GOLD, buckle: '#8fd8ff' });
+      B.cone(0.17, 0.2, 12, '#e8ecfa', { y: 0.13 });
+      B.box(0.18, 0.15, 0.02, GOLD, { y: 0.31, z: 0.105 });
+      B.octa(0.03, glowC('#8fd8ff', 1.5), { y: 0.32, z: 0.12 });
+      for (const sx of [-1, 1]) R.arm(sx).ball(0.065, 1, GOLD, { x: sx * 0.155, y: 0.39, sy: 0.65 });
+      heroFace(B, 0.55, { iris: '#3a8ad8', brow: '#c8a04a' });
+      B.ball(0.16, 1, '#f2d16b', { y: 0.58, z: -0.02, sy: 0.9 });
+      B.box(0.26, 0.3, 0.06, '#f2d16b', { y: 0.42, z: -0.12 });
+      for (const sx of [-1, 1]) B.capsule(0.04, 0.18, '#f2d16b', { x: sx * 0.13, y: 0.44, z: 0.0 });
+      B.ball(0.163, 1, '#f4f6ff', { y: 0.62, z: -0.02, sy: 0.6 });
+      B.box(0.04, 0.05, 0.03, GOLD, { y: 0.66, z: 0.14 });
+      for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) B.box(0.13 - k * 0.025, 0.012, 0.04, k ? '#ffffff' : GOLD, { x: sx * (0.18 + k * 0.01), y: 0.65 + k * 0.035, z: -0.02, rz: sx * (0.5 + k * 0.2) });
+      B.torus(0.12, 0.014, 4, 20, glowC('#fff2a8', 2.0), { y: 0.84, rx: Math.PI / 2 });
+      const S = R.armR;
+      S.cyl(0.013, 0.013, 0.8, 6, '#c9a24a', { x: 0.19, y: 0.4, z: 0.07 });
+      S.cone(0.035, 0.14, 4, glowC('#ffffff', 1.3), { x: 0.19, y: 0.86, z: 0.07 });
+      S.box(0.08, 0.02, 0.02, GOLD, { x: 0.19, y: 0.78, z: 0.07 });
+      break;
+    }
+    case 'ninja': {
+      // Kage: midnight garb, masked face, red headband and scarf, katana in hand and on the back.
+      const navy = '#2b2a4a';
+      heroBody(R, { pants: navy, boots: '#1a1a2a', torso: navy, arms: navy, hands: '#1a1a2a', belt: '#c0392b', buckle: '#c0392b' });
+      B.box(0.03, 0.2, 0.02, '#3d3c66', { x: 0.03, y: 0.3, z: 0.105, rz: 0.4 });
+      heroFace(B, 0.55, { iris: '#c0392b', brow: '#1a1a2a', mask: true });
+      B.ball(0.162, 1, navy, { y: 0.57, z: -0.02, sy: 0.95 });
+      B.box(0.3, 0.12, 0.2, navy, { y: 0.49, z: 0.05 });
+      B.cyl(0.165, 0.165, 0.035, 12, '#c0392b', { y: 0.63 });
+      B.box(0.06, 0.04, 0.02, '#c9d2df', { y: 0.63, z: 0.16 });
+      for (const sx of [-1, 1]) B.box(0.03, 0.2, 0.01, '#c0392b', { x: sx * 0.04, y: 0.55, z: -0.18, rx: 0.6, rz: sx * 0.2 });
+      B.cyl(0.13, 0.13, 0.05, 10, '#c0392b', { y: 0.42 });
+      B.box(0.07, 0.24, 0.015, '#c0392b', { x: -0.08, y: 0.3, z: -0.14, rx: 0.5, rz: 0.3 });
+      B.box(0.03, 0.5, 0.025, '#1a1a2a', { y: 0.36, z: -0.14, rz: 0.75 });
+      B.box(0.07, 0.015, 0.06, GOLD, { x: 0.13, y: 0.53, z: -0.14, rz: 0.75 });
+      for (let k = 0; k < 4; k++) B.box(0.05, 0.006, 0.014, '#c9d2df', { x: -0.1, y: 0.21, z: 0.1, ry: (k * Math.PI) / 4 });
+      const S = R.armR;
+      S.box(0.018, 0.4, 0.008, '#eef2f8', { x: 0.18, y: 0.4, z: 0.12, rx: 0.3 });
+      S.box(0.06, 0.012, 0.05, GOLD, { x: 0.18, y: 0.21, z: 0.07, rx: 0.3 });
+      S.cyl(0.014, 0.014, 0.08, 5, '#c0392b', { x: 0.18, y: 0.17, z: 0.05, rx: 0.3 });
+      break;
+    }
+  }
+}
+
+const rigCache = new Map<string, { parts: HeroRigPart[]; rest: THREE.BufferGeometry[] }>();
+
+/** The rigged hero: pivot-centred parts for animation plus the rest-pose pieces. */
+export function heroRig(id: HeroId): { parts: HeroRigPart[]; rest: THREE.BufferGeometry[] } {
+  let r = rigCache.get(id);
+  if (r) return r;
+  const R = new HeroRigBuilder();
+  buildHeroRig(id, R);
+  const w = R.w;
+  const pivots: Record<HeroPart, THREE.Vector3> = {
+    body: new THREE.Vector3(0, 0, 0),
+    legL: new THREE.Vector3(-0.065 * w, HIP_Y, 0),
+    legR: new THREE.Vector3(0.065 * w, HIP_Y, 0),
+    armL: new THREE.Vector3(-0.15 * w, SHOULDER_Y, 0),
+    armR: new THREE.Vector3(0.15 * w, SHOULDER_Y, 0),
+  };
+  const parts: HeroRigPart[] = [];
+  const rest: THREE.BufferGeometry[] = [];
+  for (const name of ['body', 'legL', 'legR', 'armL', 'armR'] as HeroPart[]) {
+    const geo = R[name].build();
+    if (!geo.attributes.position) continue;
+    rest.push(geo);
+    const g = geo.clone();
+    g.translate(-pivots[name].x, -pivots[name].y, -pivots[name].z);
+    g.computeBoundingSphere();
+    parts.push({ name, geo: g, pivot: pivots[name] });
+  }
+  r = { parts, rest };
+  rigCache.set(id, r);
+  return r;
+}
+
+/** Merged rest pose (UI portraits, and anything that doesn't animate limbs). */
 export function heroModel(id: HeroId | 'champion', withWings = true): THREE.BufferGeometry {
   return cached(`hero-${id}-${withWings}`, () => {
-    const b = new ModelBuilder();
-    switch (id) {
-      case 'ranger': {
-        // Robin: green hood and cloak, leather jerkin, quiver of arrows, longbow.
-        heroBody(b, { pants: '#5b4a33', boots: '#4a3424', torso: '#7a5a38', arms: '#3f7d3a', hands: '#8a6a44', belt: '#3b2a1c' });
-        b.box(0.2, 0.15, 0.02, '#3f7d3a', { y: 0.3, z: 0.105 });
-        b.box(0.05, 0.05, 0.03, '#8a6a44', { x: 0.09, y: 0.19, z: 0.1 });
-        // Cloak.
-        b.box(0.3, 0.3, 0.025, '#2f6a2c', { y: 0.28, z: -0.115, rx: 0.12 });
-        b.box(0.22, 0.04, 0.03, '#2f6a2c', { y: 0.42, z: -0.09 });
-        heroFace(b, 0.55, { iris: '#3f8a3a', brow: '#8a4a24' });
-        // Auburn fringe under a pointed hood.
-        b.ball(0.155, 1, '#a0522d', { y: 0.6, z: -0.01, sy: 0.75 });
-        b.cone(0.17, 0.2, 10, '#3f7d3a', { y: 0.7, z: -0.03, rx: -0.35 });
-        b.ball(0.165, 1, '#3f7d3a', { y: 0.58, z: -0.03, sy: 0.95, sz: 0.95 });
-        b.cyl(0.165, 0.17, 0.05, 12, '#2f6a2c', { y: 0.47, z: -0.01 });
-        b.box(0.03, 0.06, 0.01, '#e84a3a', { x: 0.1, y: 0.73, z: -0.02, rz: -0.5 });
-        // Quiver with fletched arrows.
-        b.cyl(0.045, 0.04, 0.24, 8, '#8a5a34', { x: -0.06, y: 0.34, z: -0.15, rz: 0.4 });
-        for (let k = 0; k < 3; k++) {
-          b.cyl(0.006, 0.006, 0.12, 3, '#d9c8a0', { x: -0.12 + k * 0.02, y: 0.5, z: -0.15, rz: 0.4 });
-          b.box(0.03, 0.04, 0.005, k === 1 ? '#e84a3a' : '#ffffff', { x: -0.14 + k * 0.02, y: 0.55, z: -0.15, rz: 0.4 });
-        }
-        // Longbow with string.
-        b.arc(0.24, 0.014, Math.PI * 0.85, WOOD, { x: 0.2, y: 0.3, z: 0.06, ry: Math.PI / 2, rz: -Math.PI / 2 + Math.PI * 0.425 });
-        b.cyl(0.004, 0.004, 0.46, 3, '#f4efe0', { x: 0.2, y: 0.3, z: -0.02 });
-        b.box(0.03, 0.06, 0.03, '#5b3a22', { x: 0.2, y: 0.3, z: 0.18 });
-        break;
-      }
-      case 'knight': {
-        // Sir Bramble: plate armour under a royal tabard, open helm with plume, sword and kite shield.
-        const steel = '#c9d2df';
-        heroBody(b, { pants: '#8a93a3', boots: '#5d6470', torso: steel, arms: steel, hands: '#8a93a3', belt: '#4a3424', w: 1.12 });
-        b.box(0.17, 0.22, 0.02, '#3a5fb1', { y: 0.27, z: 0.112 });
-        b.box(0.05, 0.12, 0.022, GOLD, { y: 0.29, z: 0.115 });
-        b.box(0.11, 0.03, 0.022, GOLD, { y: 0.31, z: 0.115 });
-        for (const sx of [-1, 1]) {
-          b.ball(0.07, 1, '#aeb8c8', { x: sx * 0.16, y: 0.39, sy: 0.7 });
-          b.torus(0.06, 0.012, 4, 10, GOLD, { x: sx * 0.16, y: 0.37, rx: Math.PI / 2 });
-        }
-        b.box(0.34, 0.28, 0.02, '#3a5fb1', { y: 0.28, z: -0.13, rx: 0.1 });
-        heroFace(b, 0.55, { iris: '#3a6fd1', brow: '#6a4a2a' });
-        // Helm: dome, cheek guards, raised visor, plume.
-        b.ball(0.168, 1, steel, { y: 0.6, z: -0.015, sy: 0.85 });
-        b.cyl(0.17, 0.17, 0.04, 12, '#aeb8c8', { y: 0.55, z: -0.02 });
-        for (const sx of [-1, 1]) b.box(0.03, 0.12, 0.08, '#aeb8c8', { x: sx * 0.15, y: 0.5, z: 0.04 });
-        b.box(0.26, 0.05, 0.05, '#aeb8c8', { y: 0.7, z: 0.1, rx: -0.6 });
-        for (let k = 0; k < 5; k++) b.cone(0.03, 0.16, 5, k % 2 ? '#3a5fb1' : '#5a7fd1', { y: 0.78 + k * 0.01, z: -0.05 - k * 0.035, rx: -0.5 - k * 0.2 });
-        // Sword.
-        b.box(0.03, 0.42, 0.012, '#eef2f8', { x: 0.2, y: 0.42, z: 0.08 });
-        b.box(0.14, 0.03, 0.04, GOLD, { x: 0.2, y: 0.21, z: 0.08 });
-        b.cyl(0.015, 0.015, 0.08, 6, '#5b3a22', { x: 0.2, y: 0.16, z: 0.08 });
-        b.ball(0.022, 0, GOLD, { x: 0.2, y: 0.11, z: 0.08 });
-        // Kite shield with a golden lion-ish emblem.
-        b.box(0.24, 0.26, 0.035, '#3a5fb1', { x: -0.21, y: 0.3, z: 0.09, ry: 0.35 });
-        b.cone(0.12, 0.12, 4, '#3a5fb1', { x: -0.21, y: 0.12, z: 0.09, rx: Math.PI, ry: 0.35 + Math.PI / 4, sz: 0.25 });
-        b.box(0.26, 0.025, 0.04, GOLD, { x: -0.21, y: 0.43, z: 0.09, ry: 0.35 });
-        b.box(0.04, 0.2, 0.04, GOLD, { x: -0.205, y: 0.29, z: 0.105, ry: 0.35 });
-        b.box(0.14, 0.04, 0.04, GOLD, { x: -0.205, y: 0.32, z: 0.105, ry: 0.35 });
-        break;
-      }
-      case 'mage': {
-        // Elowen: starry robe, long silver hair, huge bent hat, staff with a glowing crystal.
-        const robe = '#7d43b3';
-        b.cone(0.24, 0.42, 12, robe, { y: 0.21 });
-        b.cyl(0.24, 0.245, 0.03, 12, GOLD, { y: 0.015 });
-        b.cyl(0.11, 0.13, 0.12, 10, robe, { y: 0.36, sz: 0.85 });
-        b.box(0.05, 0.36, 0.02, GOLD, { y: 0.2, z: 0.13, rx: -0.3 });
-        for (let k = 0; k < 7; k++) {
-          const a = k * 0.9;
-          b.octa(0.018, '#ffe680', { x: Math.sin(a) * 0.17, y: 0.07 + (k % 3) * 0.08, z: Math.cos(a) * 0.17 });
-        }
-        for (const sx of [-1, 1]) {
-          b.cone(0.06, 0.18, 8, robe, { x: sx * 0.15, y: 0.31, rz: sx * 0.5 });
-          b.ball(0.035, 1, SKIN, { x: sx * 0.2, y: 0.24, z: 0.02 });
-        }
-        heroFace(b, 0.54, { iris: '#a15bd1', brow: '#c8c8d8' });
-        // Long silver hair.
-        b.ball(0.16, 1, '#e6e8f2', { y: 0.57, z: -0.03, sy: 0.9 });
-        for (const sx of [-1, 1]) b.capsule(0.045, 0.2, '#e6e8f2', { x: sx * 0.12, y: 0.42, z: -0.02 });
-        b.box(0.22, 0.22, 0.05, '#e6e8f2', { y: 0.42, z: -0.12 });
-        // Hat: wide brim, tall bent cone, gold band, star.
-        b.cyl(0.26, 0.26, 0.02, 16, '#5e2f8a', { y: 0.66 });
-        b.cyl(0.14, 0.15, 0.05, 12, GOLD, { y: 0.69 });
-        b.cone(0.14, 0.26, 12, '#5e2f8a', { y: 0.84 });
-        b.cone(0.07, 0.18, 8, '#5e2f8a', { x: 0.06, y: 1.0, rz: -0.6 });
-        b.octa(0.035, glowC('#ffe680', 1.6), { x: 0.14, y: 1.03 });
-        // Staff with a glowing crystal in a gold claw.
-        b.cyl(0.016, 0.02, 0.78, 6, WOOD, { x: 0.24, y: 0.38, z: 0.04 });
-        for (let k = 0; k < 3; k++) b.cone(0.012, 0.08, 4, GOLD, { x: 0.24 + Math.cos(k * 2.1) * 0.035, y: 0.8, z: 0.04 + Math.sin(k * 2.1) * 0.035, rz: -Math.cos(k * 2.1) * 0.5, rx: Math.sin(k * 2.1) * 0.5 });
-        b.octa(0.06, glowC('#c8a6ff', 1.9), { x: 0.24, y: 0.84, z: 0.04, sy: 1.5 });
-        break;
-      }
-      case 'dwarf': {
-        // Brokk: broad and stocky, horned helm with goggles, braided ginger beard, giant hammer.
-        heroBody(b, { pants: '#6a4a2a', boots: '#3b2a1c', torso: '#a8452a', arms: '#a8452a', hands: '#7a5a3a', belt: '#3b2a1c', buckle: '#c9d2df', w: 1.3 });
-        b.box(0.22, 0.2, 0.02, '#7a5a3a', { y: 0.25, z: 0.13 });
-        for (const sx of [-1, 1]) b.ball(0.07, 1, '#8a93a3', { x: sx * 0.19, y: 0.38, sy: 0.7 });
-        heroFace(b, 0.52, { iris: '#4a7ab8', brow: '#c8642a', r: 0.155 });
-        b.ball(0.05, 1, '#e8a888', { y: 0.5, z: 0.15 });
-        // Beard and braids.
-        b.ball(0.15, 1, '#d2702e', { y: 0.42, z: 0.06, sy: 0.9, sz: 0.7 });
-        b.cone(0.12, 0.22, 10, '#d2702e', { y: 0.28, z: 0.1, rx: Math.PI });
-        for (const sx of [-1, 1]) {
-          for (let k = 0; k < 3; k++) b.ball(0.028, 0, '#c0602a', { x: sx * 0.07, y: 0.24 - k * 0.045, z: 0.13 });
-          b.box(0.03, 0.025, 0.03, '#c9d2df', { x: sx * 0.07, y: 0.12, z: 0.13 });
-          b.ball(0.06, 1, '#d2702e', { x: sx * 0.07, y: 0.47, z: 0.13, sx: 1.4, sy: 0.6 });
-        }
-        // Helm, horns and goggles.
-        b.ball(0.165, 1, '#9ea7b7', { y: 0.58, sy: 0.75 });
-        b.cyl(0.168, 0.168, 0.04, 12, '#c9a24a', { y: 0.57 });
-        for (const sx of [-1, 1]) {
-          // Horns sweep out and up from the helm.
-          b.cone(0.045, 0.14, 8, '#f4efe0', { x: sx * 0.19, y: 0.64, rz: sx * -1.1 });
-          b.cone(0.03, 0.12, 8, '#e8e0c8', { x: sx * 0.27, y: 0.71, rz: sx * -0.35 });
-          b.cyl(0.05, 0.05, 0.03, 8, '#c9a24a', { x: sx * 0.15, y: 0.62, rz: sx * -1.1 });
-          b.torus(0.035, 0.012, 4, 10, '#5d4a3a', { x: sx * 0.055, y: 0.67, z: 0.12, rx: 0.3 });
-          b.ball(0.028, 0, glowC('#8fd8ff', 1.3), { x: sx * 0.055, y: 0.67, z: 0.12 });
-        }
-        // War hammer.
-        b.cyl(0.018, 0.022, 0.62, 6, WOOD_D, { x: 0.27, y: 0.36, z: 0.06, rz: -0.1 });
-        b.box(0.22, 0.13, 0.13, '#8a93a3', { x: 0.3, y: 0.68, z: 0.06, rz: -0.1 });
-        for (const dx of [-0.07, 0.07]) b.box(0.03, 0.14, 0.14, '#c9a24a', { x: 0.3 + dx, y: 0.68 - dx * 0.1, z: 0.06, rz: -0.1 });
-        b.ball(0.03, 0, glowC('#ff8a3d', 1.6), { x: 0.3, y: 0.68, z: 0.13 });
-        break;
-      }
-      case 'valkyrie': {
-        // Seraphine: white-and-gold armour, flowing golden hair, winged helm, halo, spear, wings.
-        heroBody(b, { pants: '#f4f6ff', boots: '#c9a24a', torso: '#f4f6ff', arms: '#f4f6ff', hands: '#f1c9a0', belt: GOLD, buckle: '#8fd8ff' });
-        b.cone(0.17, 0.2, 12, '#e8ecfa', { y: 0.13 });
-        b.box(0.18, 0.15, 0.02, GOLD, { y: 0.31, z: 0.105 });
-        b.octa(0.03, glowC('#8fd8ff', 1.5), { y: 0.32, z: 0.12 });
-        for (const sx of [-1, 1]) b.ball(0.065, 1, GOLD, { x: sx * 0.155, y: 0.39, sy: 0.65 });
-        heroFace(b, 0.55, { iris: '#3a8ad8', brow: '#c8a04a' });
-        // Golden hair.
-        b.ball(0.16, 1, '#f2d16b', { y: 0.58, z: -0.02, sy: 0.9 });
-        b.box(0.26, 0.3, 0.06, '#f2d16b', { y: 0.42, z: -0.12 });
-        for (const sx of [-1, 1]) b.capsule(0.04, 0.18, '#f2d16b', { x: sx * 0.13, y: 0.44, z: 0.0 });
-        // Winged helm and halo.
-        b.ball(0.163, 1, '#f4f6ff', { y: 0.62, z: -0.02, sy: 0.6 });
-        b.box(0.04, 0.05, 0.03, GOLD, { y: 0.66, z: 0.14 });
-        for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) b.box(0.13 - k * 0.025, 0.012, 0.04, k ? '#ffffff' : GOLD, { x: sx * (0.18 + k * 0.01), y: 0.65 + k * 0.035, z: -0.02, rz: sx * (0.5 + k * 0.2) });
-        b.torus(0.12, 0.014, 4, 20, glowC('#fff2a8', 2.0), { y: 0.84, rx: Math.PI / 2 });
-        // Spear.
-        b.cyl(0.013, 0.013, 0.8, 6, '#c9a24a', { x: 0.21, y: 0.4, z: 0.07 });
-        b.cone(0.035, 0.14, 4, glowC('#ffffff', 1.3), { x: 0.21, y: 0.86, z: 0.07 });
-        b.box(0.08, 0.02, 0.02, GOLD, { x: 0.21, y: 0.78, z: 0.07 });
-        if (withWings) {
-          const wing = heroWingModel();
-          const w = mergeTransformed([
-            { geo: wing, x: 0.06, y: 0.36, z: -0.12, ry: -0.35, s: 1 },
-            { geo: wing, x: -0.06, y: 0.36, z: -0.12, ry: Math.PI + 0.35, s: 1 },
-          ]);
-          b.add(w, '#ffffff');
-        }
-        break;
-      }
-      case 'ninja': {
-        // Kage: midnight garb, masked face, red headband and scarf, katana in hand and on the back.
-        const navy = '#2b2a4a';
-        heroBody(b, { pants: navy, boots: '#1a1a2a', torso: navy, arms: navy, hands: '#1a1a2a', belt: '#c0392b', buckle: '#c0392b' });
-        b.box(0.03, 0.2, 0.02, '#3d3c66', { x: 0.03, y: 0.3, z: 0.105, rz: 0.4 });
-        heroFace(b, 0.55, { iris: '#c0392b', brow: '#1a1a2a', mask: true });
-        // Hood and mask.
-        b.ball(0.162, 1, navy, { y: 0.57, z: -0.02, sy: 0.95 });
-        b.box(0.3, 0.12, 0.2, navy, { y: 0.49, z: 0.05 });
-        // Headband with flowing tails, scarf.
-        b.cyl(0.165, 0.165, 0.035, 12, '#c0392b', { y: 0.63 });
-        b.box(0.06, 0.04, 0.02, '#c9d2df', { y: 0.63, z: 0.16 });
-        for (const sx of [-1, 1]) b.box(0.03, 0.2, 0.01, '#c0392b', { x: sx * 0.04, y: 0.55, z: -0.18, rx: 0.6, rz: sx * 0.2 });
-        b.cyl(0.13, 0.13, 0.05, 10, '#c0392b', { y: 0.42 });
-        b.box(0.07, 0.24, 0.015, '#c0392b', { x: -0.08, y: 0.3, z: -0.14, rx: 0.5, rz: 0.3 });
-        // Katana on the back and in hand, shuriken on the belt.
-        b.box(0.03, 0.5, 0.025, '#1a1a2a', { y: 0.36, z: -0.14, rz: 0.75 });
-        b.box(0.07, 0.015, 0.06, GOLD, { x: 0.13, y: 0.53, z: -0.14, rz: 0.75 });
-        b.box(0.018, 0.4, 0.008, '#eef2f8', { x: 0.2, y: 0.42, z: 0.12, rx: 0.3 });
-        b.box(0.06, 0.012, 0.05, GOLD, { x: 0.2, y: 0.22, z: 0.06, rx: 0.3 });
-        b.cyl(0.014, 0.014, 0.08, 5, '#c0392b', { x: 0.2, y: 0.17, z: 0.04, rx: 0.3 });
-        for (let k = 0; k < 4; k++) b.box(0.05, 0.006, 0.014, '#c9d2df', { x: -0.1, y: 0.21, z: 0.1, ry: (k * Math.PI) / 4 });
-        break;
-      }
-      case 'champion':
-        b.box(0.36, 0.32, 0.22, '#e8c547', { y: 0.32 });
-        b.cyl(0.14, 0.14, 0.2, 8, '#f6dc7a', { y: 0.58 });
-        b.cone(0.06, 0.24, 4, '#e84a3a', { y: 0.78 });
-        b.box(0.05, 0.55, 0.05, '#ffffff', { x: 0.24, y: 0.46, z: 0.08 });
-        b.box(0.4, 0.4, 0.04, '#c0392b', { y: 0.36, z: -0.13 });
-        break;
+    if (id === 'champion') {
+      const b = new ModelBuilder();
+      b.box(0.36, 0.32, 0.22, '#e8c547', { y: 0.32 });
+      b.cyl(0.14, 0.14, 0.2, 8, '#f6dc7a', { y: 0.58 });
+      b.cone(0.06, 0.24, 4, '#e84a3a', { y: 0.78 });
+      b.box(0.05, 0.55, 0.05, '#ffffff', { x: 0.24, y: 0.46, z: 0.08 });
+      b.box(0.4, 0.4, 0.04, '#c0392b', { y: 0.36, z: -0.13 });
+      return b.build();
     }
-    return b.build();
+    const pieces = heroRig(id).rest.map((g) => ({ geo: g, x: 0, y: 0, z: 0, ry: 0, s: 1 }));
+    if (id === 'valkyrie' && withWings) {
+      pieces.push({ geo: heroWingModel(), x: 0.06, y: 0.36, z: -0.12, ry: -0.35, s: 1 });
+      pieces.push({ geo: heroWingModel(), x: -0.06, y: 0.36, z: -0.12, ry: Math.PI + 0.35, s: 1 });
+    }
+    const g = mergeTransformed(pieces);
+    g.computeVertexNormals();
+    return g;
   });
 }
 

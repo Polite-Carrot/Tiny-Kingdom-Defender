@@ -92,6 +92,7 @@ export class ModelBuilder {
   }
 
   build(): THREE.BufferGeometry {
+    if (!this.parts.length) return new THREE.BufferGeometry();
     const g = mergeGeometries(this.parts, false) ?? new THREE.BufferGeometry();
     g.computeVertexNormals();
     g.computeBoundingSphere();
