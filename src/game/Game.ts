@@ -68,7 +68,6 @@ export class Game {
       nextWave: () => this.battle?.nextWave(),
       selectHero: () => this.battle?.toggleHero(),
       ability: () => this.battle?.ability(),
-      reinforce: () => this.reinforce(),
       buildPreview: (id) => this.battle?.buildPreview(id),
       build: (id) => this.battle?.build(id),
       upgrade: (b) => this.battle?.upgrade(b),
@@ -76,7 +75,6 @@ export class Game {
       targetMode: (m) => this.battle?.setTargetMode(m),
       closeCtx: () => this.battle?.deselect(),
       clearLand: () => this.battle?.clearLand(),
-      goldRush: () => this.goldRush(),
       shop: () => this.openShopInSiege(),
     });
     ui.addScreen('battle', this.hud.el);
@@ -315,16 +313,6 @@ export class Game {
     this.adPaused = false;
   }
 
-  private async goldRush(): Promise<void> {
-    const b = this.battle;
-    if (!b || b.run.goldRushUsed) return;
-    const ok = await this.s.ads.showRewarded('gold_rush');
-    if (ok && this.battle === b && b.run.activateGoldRush()) {
-      this.s.ui.banner('Gold Rush!', 'Enemies drop double gold');
-      b.persist();
-    }
-  }
-
   /** Shop opened from the siege: pauses, then applies new permanent upgrades. */
   openShopInSiege(): void {
     const b = this.battle;
@@ -340,16 +328,6 @@ export class Game {
       b.applyMeta();
       if (!this.s.ads.showing) b.paused = false;
     });
-  }
-
-  private async reinforce(): Promise<void> {
-    const b = this.battle;
-    if (!b || b.run.reinforcementsUsed) return;
-    const ok = await this.s.ads.showRewarded('reinforcements');
-    if (ok && this.battle === b && b.run.summonReinforcements()) {
-      this.s.ui.banner('Reinforcements!', 'A Royal Champion joins the fight');
-      this.s.audio.play('reward');
-    }
   }
 
   /** Debug: hand the current battle to the heuristic AI. */

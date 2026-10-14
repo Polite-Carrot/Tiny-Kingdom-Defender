@@ -92,7 +92,7 @@ export const SIEGE_COINS = {
 };
 
 /** Best wave reached (0-based count of waves cleared) needed to unlock things. */
-export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'reinforcements' | 'goldRush' | 'lightning', number> = {
+export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning', number> = {
   cannon: 2,
   frost: 5,
   dailyLogin: 1,
@@ -100,8 +100,6 @@ export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dai
   missions: 4,
   treasury: 4,
   chests: 6,
-  reinforcements: 8,
-  goldRush: 8,
   heroes: 12,
   lightning: 15, // also needs a coin purchase in the Shop
 };

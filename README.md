@@ -22,7 +22,7 @@ npm run sim        # headless balance simulator (see "Balancing")
 | The kingdom | One 15×15 map with the castle in the centre. You start with 6 build pads. 28 more are covered in overgrowth and can be **cleared with gold**, and each clearing costs more than the last. Roads that haven't opened yet show as overgrown trails, so you can plan ahead. |
 | Endless siege | Waves never stop. A boss comes every 10 waves. **Checkpoints** are every 10 waves: if the castle falls you regroup there, keeping all towers and gold. The game saves at the start of every wave, and resuming replays that wave. |
 | Roads | The West Road is open from wave 1. The North-East Road opens at wave 25 and the South Road at wave 50. |
-| World | The board is a raised plateau with a moat, on an island of rolling hills and trees. Around it are water (an oasis, icy water or lava, depending on the Age), distant mountains, a sky gradient, drifting clouds and floating pollen, dust, snow or embers (`systems/Scenery.ts`). The game opens on a menu where the camera slowly circles your kingdom. |
+| World | The board is a raised plateau with a moat, on an island of rolling hills and trees. Around it are sandy beaches and the sea (`systems/Water.ts`): Gerstner waves displaced on the GPU, with depth colour, sun glint, sky reflection, white caps, and surf that rolls in to shore. The Age of Frost adds drifting ice floes; the Age of Fire swaps the sea for flowing, crusting lava. Beyond the sea are distant mountains, a sky gradient, drifting clouds and floating pollen, dust, snow or embers (`systems/Scenery.ts`). The game opens on a menu where the camera slowly circles your kingdom. |
 | Ages | Every 25 waves the land changes: Age of Meadows → Sands → Frost → Fire, then repeats harder (II, III…). Each Age has its own palette, props, sky, music and enemy mix. |
 | Towers | Archer, Cannon, Frost, Lightning. Each has **10 material tiers**, and each upgrade rebuilds the tower in a new material: **Wood → Stone → Iron → Bronze → Silver → Gold → Jade → Crystal → Obsidian → Celestial**. Every tier adds ornaments: a roof, then a flag, banners, trim bands, a floating gem, spikes and finally a halo. Precious materials sparkle. Upgrading from tier 3 picks one of 2 specialisations (e.g. Longbow / Volley). After Celestial, towers keep growing with **star levels** (★1 … ★30) as an endless gold sink. You can sell towers for a 70% refund and set targeting to first / strongest / closest. |
 | Enemies | Grunt, Runner, Knight (resists physical damage), Bat (flies), Shaman (heals others), Shield-bearer (shields allies behind it), Imp (summoned). |
@@ -82,7 +82,7 @@ Every gameplay number lives in `src/data/`. The gameplay code has no magic numbe
 | `data/enemies.ts` | HP, speed, armour/magic resist, bounty, leak damage, wave-budget cost, healer/shield/boss mechanics |
 | `data/themes.ts` | The four Ages: colours, props, music, enemy weights |
 | `data/economy.ts` | Permanent upgrades and their cost curve (`COST_GROWTH = 1.35`), Lightning/hero unlock prices, treasury, chests, daily login, ad rewards, cosmetics |
-| `data/heroes.ts` | Hero stats and abilities, the Reinforcements champion |
+| `data/heroes.ts` | Hero stats and abilities |
 | `data/ads.ts` | Rewarded placements, interstitial rules, mock ad duration |
 | `data/missions.ts` | Mission pool |
 
@@ -91,7 +91,7 @@ Every gameplay number lives in `src/data/`. The gameplay code has no magic numbe
 * **Bounties:** scale with `hp^0.35`, and battle gold tapers from ×1 (wave 1) to ×0.45 (wave 30+).
 * **Tier costs:** grow ×1.8 per tier while damage grows ×1.4.
 
-So gold per HP keeps falling and tiers keep getting pricier. Every wall is beaten by replaying earlier waves for gold (after a fall), buying permanent upgrades with coins, or Gold Rush.
+So gold per HP keeps falling and tiers keep getting pricier. Every wall is beaten by replaying earlier waves for gold (after a fall), buying permanent upgrades with coins.
 
 ## Balancing tool
 
@@ -152,7 +152,7 @@ The numbers above are game time at 1x speed for a greedy AI. In short:
 * **Steady progress to wave 50.** It takes about 45 minutes, with towers reaching Gold.
 * **Then the siege gets serious.** Celestial towers arrive around wave 80, after about 4 hours. Wave 100 takes about 9 hours, and wave 120 about 13–20 hours. It is still climbing after 20 hours.
 * **Permanent upgrades matter.** A player who never buys them is several hours behind by wave 100. A single push from a fresh kingdom reaches wave 18 with no upgrades and about wave 75 with every upgrade at level 20.
-* **Falls are part of the loop.** Late-game progress comes from replaying the last checkpoint segment for gold and coins. The fall counts are high because the AI keeps pushing into the wall; a person would also use Gold Rush, the hero and smarter placement.
+* **Falls are part of the loop.** Late-game progress comes from replaying the last checkpoint segment for gold and coins. The fall counts are high because the AI keeps pushing into the wall; a person would also use the hero and smarter placement.
 
 The full output is saved in `docs/balance-report.txt`.
 
@@ -177,11 +177,11 @@ The full output is saved in `docs/balance-report.txt`.
 |---|---|
 | `checkpoint_double` | Double the checkpoint coins |
 | `revive` | Restore 50% castle HP and clear the gate. Once per checkpoint segment (10 waves) |
-| `reinforcements` | A Royal Champion fights for 30 s. Once per checkpoint segment |
 | `treasury_double` | Double the idle coins |
 | `chest_skip` | Open the free chest now |
-| `gold_rush` | Double gold from enemies for 3 waves. Once per checkpoint segment |
 | `shop_bundle` | +60 coins, 3 times per day |
+
+No ad is ever offered while a wave is being fought. Rewarded ads appear only at natural breaks: checkpoints, a fallen castle, the Treasury, the chest and the shop.
 
 The mock provider shows a fullscreen overlay with a 5 s countdown and a close button. Closing a rewarded ad early counts as `skipped`. To test failures, go to **Settings → Developer → Mock ad result**, which can force Complete, Skip, Fail or Random. The same section has an "Ads unavailable" toggle.
 

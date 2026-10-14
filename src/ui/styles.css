@@ -226,9 +226,6 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 .hud-actions { right: calc(var(--sar) + 10px); bottom: calc(var(--sab) + 10px); justify-content: flex-end; }
 .hud-hero { position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 10px); display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
 body.landscape .hud-hero { left: calc(var(--sal) + 10px); flex-direction: column-reverse; align-items: center; }
-.btn.reinforce, .btn.goldrush { position: absolute; top: calc(var(--sat) + 60px); max-width: 210px; font-size: 13px; padding: 6px 12px; min-height: 52px; line-height: 1.1; }
-body.portrait .btn.reinforce, body.portrait .btn.goldrush { right: calc(var(--sar) + 8px); }
-body.landscape .btn.reinforce, body.landscape .btn.goldrush { left: calc(var(--sal) + 10px); }
 .rush-pill { position: absolute; top: calc(var(--sat) + 60px); left: calc(var(--sal) + 8px); background: linear-gradient(180deg, #ffe27a, #e09a12); color: #4a2c00; font-weight: 900; font-size: 13px; padding: 6px 10px; border-radius: 12px; box-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 12px rgba(255,210,90,.8); pointer-events: none; }
 body.landscape .rush-pill { top: calc(var(--sat) + 120px); }
 .wave-pill { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; line-height: 1.05; }
@@ -301,7 +298,6 @@ body.landscape .seg.targets button { font-size: 12px; padding: 0 4px; }
 .seg.targets { width: 100%; margin-bottom: 8px; }
 .seg.targets button { flex: 1; min-width: 0; font-size: 13px; }
 
-.reinforce { max-width: 200px; font-size: 13px; padding: 6px 12px; min-height: 52px; line-height: 1.1; }
 
 /* Floating text + coins */
 .ftext { position: absolute; left: 0; top: 0; font-weight: 900; font-size: 16px; color: #fff; pointer-events: none; white-space: nowrap; z-index: 5;

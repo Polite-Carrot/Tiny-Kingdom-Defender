@@ -52,8 +52,7 @@ export class Battle {
     if (opts.demo) return;
 
     if (!s.save.data.base) this.persist(true);
-    this.hud.bind(this.run, { reinforcementsAllowed: () => meta.featureUnlocked('reinforcements'), goldRushAllowed: () => meta.featureUnlocked('goldRush') });
-    this.hud.onAdOfferShown = (p) => s.ads.offerShown(p);
+    this.hud.bind(this.run);
     this.bindRunEvents();
     this.tutorial = new Tutorial(s, this, hud);
     s.analytics.track('level_start', { level: 'siege', wave: this.run.waveIndex + 1, towers: this.run.towers.length, gold: this.run.gold, hero: this.run.hero?.def.id ?? 'none' });

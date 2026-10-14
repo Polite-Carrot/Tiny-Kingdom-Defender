@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
 import { propModel } from '../entities/Models';
 import type { Theme } from '../data/themes';
+import { Water } from './Water';
 
 /** Smooth 2D value noise in [0, 1]. */
 function hash(x: number, y: number): number {
@@ -26,7 +27,10 @@ const smooth = (a: number, b: number, x: number) => {
 };
 
 interface Look {
+  /** Dry sand, wet sand at the waterline, and the sea floor further out. */
   beach: string;
+  wet: string;
+  floor: string;
   low: string;
   high: string;
   rock: string;
@@ -37,21 +41,21 @@ interface Look {
 }
 
 const LOOKS: Record<Theme['id'], Look> = {
-  meadow: { beach: '#ead9a2', low: '#7fc057', high: '#5fa44a', rock: '#8d8577', peak: '#f4f8fb', cloud: '#ffffff', particle: '#fff3a6', particleMode: 'pollen' },
-  desert: { beach: '#f2d8a0', low: '#e8c47e', high: '#d7a462', rock: '#b9773f', peak: null, cloud: '#fff8ec', particle: '#f0d8a8', particleMode: 'dust' },
-  snow: { beach: '#dfe9f2', low: '#eef5fb', high: '#dce7f1', rock: '#7d8fa6', peak: '#ffffff', cloud: '#f4f8ff', particle: '#ffffff', particleMode: 'snow' },
-  volcano: { beach: '#3a2e30', low: '#5e4c50', high: '#4a3a3f', rock: '#241b1f', peak: '#ff7a2a', cloud: '#5b4b52', particle: '#ffb347', particleMode: 'embers' },
+  meadow: { beach: '#ecdcaa', wet: '#bba274', floor: '#5f8f86', low: '#7fc057', high: '#5fa44a', rock: '#8d8577', peak: '#f4f8fb', cloud: '#ffffff', particle: '#fff3a6', particleMode: 'pollen' },
+  desert: { beach: '#f4dcaa', wet: '#c9a978', floor: '#5f9a8e', low: '#e8c47e', high: '#d7a462', rock: '#b9773f', peak: null, cloud: '#fff8ec', particle: '#f0d8a8', particleMode: 'dust' },
+  snow: { beach: '#e6eef5', wet: '#aab9c8', floor: '#56738c', low: '#eef5fb', high: '#dce7f1', rock: '#7d8fa6', peak: '#ffffff', cloud: '#f4f8ff', particle: '#ffffff', particleMode: 'snow' },
+  volcano: { beach: '#3a2e30', wet: '#241b1d', floor: '#2a1612', low: '#5e4c50', high: '#4a3a3f', rock: '#241b1f', peak: '#ff7a2a', cloud: '#5b4b52', particle: '#ffb347', particleMode: 'embers' },
 };
 
 /** Half-size of the board's square footprint (the plateau). */
 const BOARD_HALF = 8.6;
 const WATER_Y = -1.18;
+const TERRAIN_SIZE = 84;
 
 export class Scenery {
   readonly group = new THREE.Group();
   private disposables: { dispose(): void }[] = [];
-  private water: THREE.Mesh;
-  private waterBase: Float32Array;
+  private water: Water;
   private clouds = new THREE.Group();
   private particles: THREE.Points;
   private pVel: Float32Array;
@@ -70,17 +74,9 @@ export class Scenery {
     this.buildClouds(cloudMat);
     this.group.add(this.clouds);
 
-    // Water / sand sea / ice / lava.
-    const wgeo = this.track(new THREE.PlaneGeometry(260, 260, 56, 56));
-    wgeo.rotateX(-Math.PI / 2);
-    this.waterBase = (wgeo.attributes.position.array as Float32Array).slice();
-    const wmat = this.track(theme.groundGlow
-      ? new THREE.MeshBasicMaterial({ color: theme.ground })
-      : new THREE.MeshLambertMaterial({ color: theme.ground, flatShading: true }));
-    this.water = new THREE.Mesh(wgeo, wmat);
-    this.water.position.y = WATER_Y;
-    this.group.add(this.water);
-    this.animateWater();
+    // Sea (or lava), with waves; a lighter grid on low quality.
+    this.water = this.track(new Water(theme, WATER_Y, BOARD_HALF, (x, z) => this.groundHeight(x, z), TERRAIN_SIZE, animated ? 200 : 110));
+    this.group.add(this.water.mesh);
 
     // Ambient particles: pollen, dust, snow or embers.
     const n = animated ? 220 : 90;
@@ -139,13 +135,23 @@ export class Scenery {
     // A moat right around the plateau, then a bank rising into hills.
     if (d < 1.7) return -1.6 + smooth(1.1, 1.7, d) * 0.62;
     let h = -0.98 + smooth(1.7, 8, d) * (hills * 3.6 - 0.4);
-    h -= smooth(coast - 6, coast + 2, r) * 4.5;
+    // Beaches: the hills settle onto a gentle sandy shelf that runs out under the sea,
+    // then the floor drops away into deep water.
+    const shelf = smooth(coast - 8, coast - 2, r);
+    h = h * (1 - shelf) + (WATER_Y + 0.3 - (r - (coast - 5)) * 0.09) * shelf;
+    h -= smooth(coast + 1, coast + 10, r) * 3.6;
     return h;
   }
 
+  /** Height the water sees: the board's plateau counts as solid ground. */
+  private groundHeight(x: number, z: number): number {
+    if (Math.abs(x) < BOARD_HALF && Math.abs(z) < BOARD_HALF) return 1;
+    return this.height(x, z);
+  }
+
   private buildTerrain(): THREE.BufferGeometry {
-    const size = 84;
-    const seg = 84;
+    const size = TERRAIN_SIZE;
+    const seg = 96;
     const geo = new THREE.PlaneGeometry(size, size, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
@@ -155,20 +161,35 @@ export class Scenery {
     const p = flat.attributes.position;
     const colors = new Float32Array(p.count * 3);
     const L = this.look;
-    const beach = new THREE.Color(L.beach), low = new THREE.Color(L.low), high = new THREE.Color(L.high), rock = new THREE.Color(L.rock);
-    const c = new THREE.Color();
+    const beach = new THREE.Color(L.beach), wet = new THREE.Color(L.wet), floor = new THREE.Color(L.floor);
+    const low = new THREE.Color(L.low), high = new THREE.Color(L.high), rock = new THREE.Color(L.rock);
+    const c = new THREE.Color(), g = new THREE.Color();
+    // Colours are per vertex (faces stay flat-lit), so sand, wet sand and grass blend smoothly.
     for (let i = 0; i < p.count; i += 3) {
-      const y = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3;
-      const x = p.getX(i), z = p.getZ(i);
-      // Slope: steep faces read as rock.
       const ys = [p.getY(i), p.getY(i + 1), p.getY(i + 2)];
-      const slope = Math.max(...ys) - Math.min(...ys);
-      if (y < WATER_Y + 0.1) c.copy(beach);
-      else if (slope > 0.75 || y > 1.6) c.copy(rock);
-      else c.copy(low).lerp(high, smooth(-0.6, 1.4, y));
-      // Slightly dimmer than the board so the playfield stays the focus.
-      c.multiplyScalar((0.93 + hash(x * 3.1, z * 2.7) * 0.12) * 0.88);
-      for (let j = 0; j < 3; j++) colors.set([c.r, c.g, c.b], (i + j) * 3);
+      // Steep faces read as rock.
+      const steep = Math.max(...ys) - Math.min(...ys) > 0.75;
+      for (let j = 0; j < 3; j++) {
+        const x = p.getX(i + j), y = ys[j], z = p.getZ(i + j);
+        const n = noise(x * 0.7, z * 0.7);
+        const above = y - WATER_Y;
+        g.copy(low).lerp(high, smooth(-0.6, 1.4, y));
+        if (steep || y > 1.6) g.copy(rock);
+        if (above < 0) {
+          // Under water: wet sand fading to the sea floor with depth.
+          c.copy(wet).lerp(floor, smooth(0.05, 2.2, -above));
+        } else {
+          // Wet band at the waterline, dry sand, then grass with a ragged edge. Sea coasts get
+          // wide beaches; the moat banks by the board just a thin strip.
+          const coastal = smooth(3, 7, Math.hypot(Math.max(0, Math.abs(x) - BOARD_HALF), Math.max(0, Math.abs(z) - BOARD_HALF)));
+          c.copy(wet).lerp(beach, smooth(0.0, 0.05 + (0.11 + n * 0.08) * coastal, above));
+          const top = 0.06 + (0.24 + n * 0.25) * coastal;
+          c.lerp(g, smooth(top, top + 0.06 + 0.2 * coastal, above));
+        }
+        // Slightly dimmer than the board so the playfield stays the focus.
+        c.multiplyScalar((0.94 + hash(x * 3.1, z * 2.7) * 0.08) * 0.9);
+        colors.set([c.r, c.g, c.b], (i + j) * 3);
+      }
     }
     flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     flat.deleteAttribute('uv');
@@ -185,7 +206,7 @@ export class Scenery {
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (Math.abs(x) < BOARD_HALF + 0.6 && Math.abs(z) < BOARD_HALF + 0.6) continue;
       const y = this.height(x, z);
-      if (y < WATER_Y + 0.35 || y > 2.2) continue;
+      if (y < WATER_Y + 0.6 || y > 2.2) continue;
       // Clump props into groves.
       if (fbm(x * 0.15 + 40, z * 0.15) < 0.45) continue;
       const type = types[Math.floor(hash(i, 3.3) * types.length)];
@@ -245,19 +266,6 @@ export class Scenery {
 
   // --- Animation ---------------------------------------------------------------------
 
-  private animateWater(): void {
-    const pos = this.water.geometry.attributes.position as THREE.BufferAttribute;
-    const arr = pos.array as Float32Array;
-    const base = this.waterBase;
-    const t = this.time;
-    const amp = this.theme.id === 'desert' ? 0.05 : this.theme.id === 'snow' ? 0.03 : 0.12;
-    for (let i = 0; i < arr.length; i += 3) {
-      const x = base[i], z = base[i + 2];
-      arr[i + 1] = Math.sin(x * 0.35 + t * 1.1) * amp + Math.cos(z * 0.42 + t * 0.8) * amp;
-    }
-    pos.needsUpdate = true;
-  }
-
   private resetParticle(pos: Float32Array, i: number, anywhere: boolean): void {
     const mode = this.look.particleMode;
     pos[i * 3] = (Math.random() - 0.5) * 26;
@@ -273,8 +281,8 @@ export class Scenery {
   update(dt: number): void {
     this.time += dt;
     this.clouds.rotation.y += dt * 0.006;
+    this.water.update(this.time);
     if (!this.animated) return;
-    this.animateWater();
     const attr = this.particles.geometry.attributes.position as THREE.BufferAttribute;
     const pos = attr.array as Float32Array;
     const v = this.pVel;

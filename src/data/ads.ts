@@ -3,19 +3,15 @@
 export type RewardedPlacement =
   | 'checkpoint_double'
   | 'revive'
-  | 'reinforcements'
   | 'treasury_double'
   | 'chest_skip'
-  | 'gold_rush'
   | 'shop_bundle';
 
 export const REWARDED_PLACEMENTS: Record<RewardedPlacement, { label: string }> = {
   checkpoint_double: { label: 'Double checkpoint coins' },
   revive: { label: 'Revive castle' },
-  reinforcements: { label: 'Reinforcements' },
   treasury_double: { label: 'Double treasury' },
   chest_skip: { label: 'Open chest now' },
-  gold_rush: { label: 'Gold Rush: double kill gold for 3 waves' },
   shop_bundle: { label: 'Free coin bundle' },
 };
 

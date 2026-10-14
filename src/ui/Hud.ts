@@ -6,9 +6,7 @@ import { towerThumb, enemyThumb, heroThumb } from './Thumbnails';
 import { TOWERS, TOWER_ORDER, type TowerId, type TargetMode, type TowerStats } from '../data/towers';
 import { TOWER_UNLOCK_WAVE } from '../data/base';
 import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf } from '../data/towers';
-import { SIEGE } from '../data/base';
 import { ageTitle } from '../game/Siege';
-import { AD_REWARDS } from '../data/economy';
 import { waveSummary } from '../game/WaveComposer';
 import type { Run, Tower } from '../game/Run';
 
@@ -18,7 +16,6 @@ export interface HudCallbacks {
   nextWave(): void;
   selectHero(): void;
   ability(): void;
-  reinforce(): void;
   buildPreview(id: TowerId | null): void;
   build(id: TowerId): void;
   upgrade(branch: number): void;
@@ -26,13 +23,7 @@ export interface HudCallbacks {
   targetMode(mode: TargetMode): void;
   closeCtx(): void;
   clearLand(): void;
-  goldRush(): void;
   shop(): void;
-}
-
-export interface HudOptions {
-  reinforcementsAllowed: () => boolean;
-  goldRushAllowed: () => boolean;
 }
 
 const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor' } as const;
@@ -51,16 +42,12 @@ export class Hud {
   private heroWrap: HTMLElement;
   private abilityBtn: HTMLButtonElement;
   private abilityCd: HTMLElement;
-  private reinforceBtn: HTMLButtonElement;
-  private rushBtn: HTMLButtonElement;
   private rushPill: HTMLElement;
   private ageEl: HTMLElement;
-  private rushShown = false;
   private ctx: HTMLElement;
   private vignette: HTMLElement;
   private fpsEl: HTMLElement;
   private run: Run | null = null;
-  private opts!: HudOptions;
   private ctxMode: 'none' | 'build' | 'tower' | 'land' = 'none';
   private ctxSpot = -1;
   private ctxTower: Tower | null = null;
@@ -69,9 +56,7 @@ export class Hud {
   private lastHp = -1;
   private lastWaveKey = '';
   private lastCtxKey = '';
-  private reinforceShown = false;
   private sellArmedUntil = 0;
-  onAdOfferShown: (placement: 'reinforcements' | 'gold_rush') => void = () => {};
 
   constructor(private cb: HudCallbacks) {
     this.el = el('div', 'hud');
@@ -90,8 +75,6 @@ export class Hud {
         <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
       </div>
       <div class="rush-pill" style="display:none"></div>
-      <button class="btn ad goldrush" aria-label="Gold Rush"><span class="adtag">▶ AD</span><span>Gold Rush<span class="sub">2× gold from enemies for ${SIEGE.goldRushWaves} waves</span></span></button>
-      <button class="btn ad reinforce" aria-label="Reinforcements"><span class="adtag">▶ AD</span><span>Reinforcements<span class="sub">Royal Champion fights for ${AD_REWARDS.reinforcementDuration}s</span></span></button>
       <div class="hud-actions">
         <div class="next-wave">
           <div class="wave-preview"></div>
@@ -116,7 +99,6 @@ export class Hud {
     this.heroBtn = $(this.el, '.hero-btn') as HTMLButtonElement;
     this.abilityBtn = $(this.el, '.ability-btn') as HTMLButtonElement;
     this.abilityCd = $(this.abilityBtn, '.cd');
-    this.reinforceBtn = $(this.el, '.reinforce') as HTMLButtonElement;
     this.ctx = $(this.el, '.ctx');
     this.fpsEl = $(this.el, '.fps');
 
@@ -125,21 +107,15 @@ export class Hud {
     this.nextBtn.onclick = () => cb.nextWave();
     this.heroBtn.onclick = () => cb.selectHero();
     this.abilityBtn.onclick = () => cb.ability();
-    this.reinforceBtn.onclick = () => cb.reinforce();
-    this.rushBtn = $(this.el, '.goldrush') as HTMLButtonElement;
     this.rushPill = $(this.el, '.rush-pill');
     this.ageEl = $(this.el, '.wave-pill .age');
-    this.rushBtn.onclick = () => cb.goldRush();
     $(this.el, '.shop-btn').onclick = () => cb.shop();
   }
 
-  bind(run: Run, opts: HudOptions): void {
+  bind(run: Run): void {
     this.run = run;
-    this.opts = opts;
     this.lastGold = this.lastHp = -1;
     this.lastWaveKey = this.lastCtxKey = '';
-    this.reinforceShown = false;
-    this.rushShown = false;
     this.closeCtx();
     const hero = run.hero;
     this.heroWrap.style.display = hero ? '' : 'none';
@@ -246,21 +222,7 @@ export class Hud {
         ? `conic-gradient(rgba(20,10,40,.65) ${cdFrac * 360}deg, rgba(0,0,0,0) 0)` : 'none';
     }
 
-    // Reinforcements (rewarded ad) – shown mid-wave only.
-    const showR = this.opts.reinforcementsAllowed() && run.state === 'playing' && !run.reinforcementsUsed && run.aliveCount() > 0;
-    this.reinforceBtn.style.display = showR ? '' : 'none';
-    if (showR && !this.reinforceShown) {
-      this.reinforceShown = true;
-      this.onAdOfferShown('reinforcements');
-    }
-
-    // Gold Rush (rewarded ad) and its active indicator.
-    const showRush = this.opts.goldRushAllowed() && !run.goldRushUsed && run.state !== 'lost' && run.state !== 'reviveOffer';
-    this.rushBtn.style.display = showRush && !showR ? '' : 'none';
-    if (showRush && !this.rushShown) {
-      this.rushShown = true;
-      this.onAdOfferShown('gold_rush');
-    }
+    // Gold Rush indicator (from saves made while it was a rewarded placement).
     const rushTxt = run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
     if (this.rushPill.dataset.t !== rushTxt) {
       this.rushPill.dataset.t = rushTxt;
