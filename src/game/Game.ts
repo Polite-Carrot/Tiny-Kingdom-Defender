@@ -15,7 +15,8 @@ import { Battle } from './Battle';
 import { AutoPlayer } from './AutoPlayer';
 import type { Services } from './Services';
 import { GRID_SIZE } from '../data/base';
-import { themeOf } from './Siege';
+import { themeOf, setActiveMap } from './Siege';
+import type { MapId } from '../data/maps';
 import { TitleScreen } from '../ui/Screens';
 import * as Modals from '../ui/Modals';
 import { TWISTS } from '../data/challenge';
@@ -122,6 +123,7 @@ export class Game {
     meta.markSeen();
     const abandoned = meta.settleAbandonedChallenge();
     meta.commit();
+    setActiveMap(meta.mapId());
     // Always open on the main menu; Play / Begin takes you into the kingdom.
     this.goTitle();
     requestAnimationFrame(this.frame);
@@ -199,6 +201,7 @@ export class Game {
 
   goTitle(): void {
     this.leaveBattle();
+    setActiveMap(this.s.meta.mapId());
     this.startDemo();
     this.onResize();
     this.title.render();
@@ -234,6 +237,7 @@ export class Game {
     this.leaveBattle();
     this.demo?.dispose();
     this.demo = null;
+    setActiveMap(this.s.meta.mapId());
     const battle = new Battle(this.s, this.hud);
     this.battle = battle;
     this.lastStats = { ...battle.run.stats };
@@ -330,6 +334,12 @@ export class Game {
     Modals.welcomeBack(this, info);
   }
 
+  /** Moves to another realm and shows its kingdom behind the menu. */
+  switchMap(id: MapId): void {
+    if (!this.s.meta.switchMap(id)) return;
+    this.goTitle();
+  }
+
   /** Buildings changed: show them around the castle and apply their bonuses. */
   refreshKingdomView(): void {
     const ids = this.s.meta.d.buildings;
@@ -354,6 +364,8 @@ export class Game {
     this.leaveBattle();
     this.demo?.dispose();
     this.demo = null;
+    // The challenge is the same for everyone, so it is always fought in Kingdom Vale.
+    setActiveMap('vale');
     const battle = new Battle(this.s, this.hud, { challenge: def });
     this.battle = battle;
     this.lastStats = null;

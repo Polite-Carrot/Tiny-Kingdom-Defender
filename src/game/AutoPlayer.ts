@@ -31,7 +31,7 @@ export class AutoPlayer {
   }
 
   private cycle(): TowerId[] {
-    const avail = (['archer', 'cannon', 'mage', 'frost', 'ballista', 'lightning', 'flame', 'archer', 'alchemist', 'cannon'] as TowerId[]).filter((t) => this.run.isTowerAvailable(t));
+    const avail = (['archer', 'cannon', 'mage', 'frost', 'mine', 'ballista', 'lightning', 'flame', 'catapult', 'archer', 'gale', 'alchemist', 'beacon', 'cannon'] as TowerId[]).filter((t) => this.run.isTowerAvailable(t));
     return avail.length ? avail : ['archer'];
   }
 

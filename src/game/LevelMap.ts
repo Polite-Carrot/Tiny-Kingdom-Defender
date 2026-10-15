@@ -46,6 +46,11 @@ export class LevelMap {
   readonly paths: PathData[] = [];
   readonly pathCells = new Set<number>();
   readonly buildSpots: BuildSpot[] = [];
+  /**
+   * The first `classicSpots` build spots are the hand-picked pads beside the roads (shown as
+   * overgrown pads); every other open grass square follows, so any square can be cleared and built on.
+   */
+  classicSpots = 0;
   readonly props: Prop[] = [];
   readonly castle: { x: number; z: number; col: number; row: number };
   /** Spawn points (start of each path), world space. */
@@ -74,6 +79,25 @@ export class LevelMap {
     this.castle = { col: last[0], row: last[1], x: tileToWorld(last[0]), z: tileToWorld(last[1]) };
     this.generateSpots(spotCount, rng);
     this.generateProps(rng);
+    this.classicSpots = this.buildSpots.length;
+    this.addFieldSpots();
+  }
+
+  /** Every remaining grass square (not road, castle or a tunnel mouth) becomes a spot too. */
+  private addFieldSpots(): void {
+    const taken = new Set(this.buildSpots.map((s) => LevelMap.key(s.col, s.row)));
+    const nearSpawn = (c: number, r: number) => this.paths.some((p) => Math.max(Math.abs(c - worldToTile(p.xs[0])), Math.abs(r - worldToTile(p.zs[0]))) <= 1);
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const k = LevelMap.key(c, r);
+        if (taken.has(k) || this.pathCells.has(k) || this.nearCastle(c, r, 1) || nearSpawn(c, r)) continue;
+        this.buildSpots.push({ index: this.buildSpots.length, col: c, row: r, x: tileToWorld(c), z: tileToWorld(r) });
+      }
+    }
+  }
+
+  isClassic(spot: number): boolean {
+    return spot < this.classicSpots;
   }
 
   /** Number of road tiles of a given road within `radius` of a spot. */

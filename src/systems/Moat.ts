@@ -48,6 +48,7 @@ uniform float uBoardHalf;
 uniform float uWidth;
 uniform float uIce;
 uniform float uReflect;
+uniform float uNight;
 varying vec4 vUv;
 varying vec3 vWorld;
 #include <fog_pars_fragment>
@@ -110,6 +111,7 @@ void main() {
     col = mix(col, iceCol, ice);
   }
 
+  col = mix(col, col * vec3(0.38, 0.45, 0.65), uNight);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -161,6 +163,7 @@ export class Moat {
       color: { value: new THREE.Color('#ffffff') },
       textureMatrix: { value: new THREE.Matrix4() },
       uTime: { value: 0 },
+      uNight: { value: 0 },
       uDeep: { value: new THREE.Color(look.deep) },
       uMurk: { value: new THREE.Color(look.murk) },
       uSky: { value: new THREE.Color(theme.sky).lerp(new THREE.Color(theme.fog), 0.4).multiplyScalar(0.85) },
@@ -199,6 +202,18 @@ export class Moat {
 
   update(time: number): void {
     this.material.uniforms.uTime.value = time;
+  }
+
+  private daySky: THREE.Color | null = null;
+  private daySun: THREE.Color | null = null;
+
+  setNight(k: number): void {
+    const u = this.material.uniforms;
+    u.uNight.value = k;
+    this.daySky ??= (u.uSky.value as THREE.Color).clone();
+    this.daySun ??= (u.uSunColor.value as THREE.Color).clone();
+    (u.uSky.value as THREE.Color).copy(this.daySky).lerp(new THREE.Color('#121a38'), k);
+    (u.uSunColor.value as THREE.Color).copy(this.daySun).lerp(new THREE.Color('#8fa6e8'), k).multiplyScalar(1 - 0.5 * k);
   }
 
   dispose(): void {

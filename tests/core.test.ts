@@ -16,7 +16,7 @@ function mem(init: Record<string, string> = {}): StorageLike & { m: Map<string, 
 }
 
 const nullAnalytics: Analytics = { track: () => {}, sessionEvents: () => [] };
-const noMeta: MetaBonuses = { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 }, castleHpBonus: 0, goldBonus: 0, heroPower: 0, heroId: null };
+const noMeta: MetaBonuses = { towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0, catapult: 0, gale: 0, mine: 0, beacon: 0 }, castleHpBonus: 0, goldBonus: 0, heroPower: 0, heroId: null };
 
 describe('save system', () => {
   it('migrates a v1 save all the way to the current version', () => {
@@ -130,10 +130,12 @@ describe('towers', () => {
       let prevCost = 0;
       for (let tier = 1; tier < MAX_LEVEL; tier++) {
         const st = towerStats(def, tier, tier > 3 ? 0 : -1);
-        expect(st.damage).toBeGreaterThan(prevDmg);
+        // Attackers grow in damage, the Gold Mine in income, the Beacon in its bonus.
+        const power = st.damage || st.income || st.buff;
+        expect(power).toBeGreaterThan(prevDmg);
         const c = upgradeCost(def, tier);
         expect(c).toBeGreaterThan(prevCost);
-        prevDmg = st.damage;
+        prevDmg = power;
         prevCost = c;
       }
     }
@@ -147,7 +149,12 @@ describe('towers', () => {
 describe('kingdom siege', () => {
   it('has one map whose roads all end at the castle, with enough pads', () => {
     const map = kingdomMap();
-    expect(map.buildSpots.length).toBe(LAND.totalSpots);
+    expect(map.classicSpots).toBe(LAND.totalSpots);
+    // Every other open grass square can be cleared and built on too.
+    expect(map.buildSpots.length).toBeGreaterThan(LAND.totalSpots * 3);
+    const keys = new Set(map.buildSpots.map((s) => `${s.col},${s.row}`));
+    expect(keys.size).toBe(map.buildSpots.length);
+    for (const s of map.buildSpots) expect(map.isPath(s.col, s.row)).toBe(false);
     for (const p of map.paths) {
       expect(p.xs[p.xs.length - 1]).toBe(map.castle.x);
       expect(p.zs[p.zs.length - 1]).toBe(map.castle.z);

@@ -5,7 +5,7 @@ import { icon, ICONS } from './icons';
 import { towerThumb, enemyThumb, heroThumb } from './Thumbnails';
 import { TOWERS, TOWER_ORDER, type TowerId, type TargetMode, type TowerStats } from '../data/towers';
 import { TOWER_UNLOCK_WAVE } from '../data/base';
-import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf } from '../data/towers';
+import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf, isSupport } from '../data/towers';
 import { ageTitle } from '../game/Siege';
 import { waveSummary } from '../game/WaveComposer';
 import { SYNERGIES, SYNERGY_BY_ID } from '../data/synergies';
@@ -366,8 +366,8 @@ export class Hud {
     const run = this.run!;
     const cost = run.clearLandCost();
     this.ctx.innerHTML = `
-      <div class="ctx-head"><span class="name">Overgrown land</span><button class="x" aria-label="Close">✕</button></div>
-      <div class="ctx-info" style="margin:0 0 8px">Clear it to get a new build pad. Each clearing costs more, so choose spots that cover the roads well.</div>
+      <div class="ctx-head"><span class="name">${run.map.isClassic(this.ctxSpot) ? 'Overgrown land' : 'Open ground'}</span><button class="x" aria-label="Close">✕</button></div>
+      <div class="ctx-info" style="margin:0 0 8px">Clear it to get a new build pad. Any square off the road can be cleared. Each clearing costs more, so choose spots that cover the roads well.</div>
       <div class="ctx-row"><button class="btn land-btn ${run.gold < cost ? 'disabled' : ''}">Clear land <span class="cost">${icon('coin')}${cost}</span></button></div>`;
     $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
     $(this.ctx, '.land-btn').onclick = () => this.cb.clearLand();
@@ -439,6 +439,20 @@ export class Hud {
   }
 
   private statsBlock(st: TowerStats, next: TowerStats | null, id: TowerId): string {
+    const d1 = (a: number, b: number | undefined, digits = 0) => (b !== undefined && b > a + 0.001 ? `<span class="up">+${(b - a).toFixed(digits)}</span>` : '');
+    if (id === 'mine') {
+      return `<div class="tstats">
+        <div>${Math.round(st.income)}${d1(Math.round(st.income), next ? Math.round(next.income) : undefined)}<small>GOLD / WAVE</small></div>
+        ${st.goldAura > 0 ? `<div>+${Math.round(st.goldAura * 100)}%<small>KILL GOLD NEARBY</small></div><div>${st.range.toFixed(1)}<small>RANGE</small></div>` : '<div>Pays out<small>EVERY WAVE</small></div>'}
+      </div>`;
+    }
+    if (id === 'beacon') {
+      return `<div class="tstats">
+        <div>+${Math.round(st.buff * 100)}%${d1(Math.round(st.buff * 100), next ? Math.round(next.buff * 100) : undefined)}<small>TOWER DAMAGE</small></div>
+        <div>${st.range.toFixed(1)}${d1(st.range, next?.range, 1)}<small>RANGE</small></div>
+        ${st.haste > 0 ? `<div>+${Math.round(st.haste * 100)}%<small>FIRE RATE</small></div>` : ''}
+      </div>`;
+    }
     const rate = (s: TowerStats) => (1 / s.cooldown).toFixed(1);
     const delta = (a: number, b: number | undefined, digits = 0) => (b !== undefined && b > a + 0.01 ? `<span class="up">+${(b - a).toFixed(digits)}</span>` : '');
     const dmgLabel = st.multishot > 1 ? `${Math.round(st.damage)}×${st.multishot}` : `${Math.round(st.damage)}`;
@@ -449,6 +463,7 @@ export class Hud {
       const total = (s: TowerStats) => s.damage * s.dot * s.dotDuration;
       special = `<div>${Math.round(total(st))}${delta(total(st), next ? total(next) : undefined)}<small>${id === 'alchemist' ? 'POISON' : 'BURN'}</small></div>`;
     }
+    else if (st.knockback > 0) special = `<div>${st.knockback.toFixed(1)}${delta(st.knockback, next?.knockback, 1)}<small>PUSH BACK</small></div>`;
     else if (st.chains > 0) special = `<div>${st.chains}${delta(st.chains, next?.chains)}<small>CHAINS</small></div>`;
     else if (st.slowFactor < 1) special = `<div>${Math.round((1 - st.slowFactor) * 100)}%${delta((1 - st.slowFactor) * 100, next ? (1 - next.slowFactor) * 100 : undefined)}<small>SLOW</small></div>`;
     else if (st.splash > 0) special = `<div>${st.splash.toFixed(1)}${delta(st.splash, next?.splash, 1)}<small>SPLASH</small></div>`;
@@ -465,8 +480,10 @@ export class Hud {
   private synergyBlock(t: Tower): string {
     const active = t.synergies.map((id) => SYNERGY_BY_ID[id]);
     const possible = SYNERGIES.filter((s) => s.towers.includes(t.def.id) && !t.synergies.includes(s.id));
-    if (!active.length && !possible.length) return '';
-    const chips = active.map((s) => `<span class="syn on" style="--sc:${s.color}" title="${s.description}">⚡ ${s.name}</span>`).join('');
+    const beacon = t.buffedBy >= 0 ? this.run?.towers.find((o) => o.id === t.buffedBy) : undefined;
+    const lit = beacon ? `<span class="syn on" style="--sc:#ffe08a">☀ Beacon +${Math.round(beacon.stats.buff * 100)}%${beacon.stats.haste ? ` · +${Math.round(beacon.stats.haste * 100)}% speed` : ''}</span>` : '';
+    if (!active.length && !possible.length) return lit ? `<div class="syns">${lit}</div>` : '';
+    const chips = lit + active.map((s) => `<span class="syn on" style="--sc:${s.color}" title="${s.description}">⚡ ${s.name}</span>`).join('');
     const hints = possible.map((s) => {
       const other = s.towers[0] === t.def.id ? s.towers[1] : s.towers[0];
       return `<span class="syn" style="--sc:${s.color}" title="${s.description}">+ ${TOWERS[other].name} → ${s.name}</span>`;
@@ -495,7 +512,7 @@ export class Hud {
       upgrade = `<button class="btn gold disabled" disabled>★ ${levelName(t.tier)} · MAX</button>`;
     }
     const modes: TargetMode[] = ['first', 'strongest', 'closest'];
-    const showTargets = !t.stats.aura;
+    const showTargets = !t.stats.aura && !isSupport(def.id);
     this.ctx.innerHTML = `
       <div class="ctx-head"><img src="${towerThumb(def.id, t.tier, t.branch)}" style="width:40px;height:40px" alt=""/>
         <span class="name">${title}<div class="tier-pips small">${pips}</div></span>

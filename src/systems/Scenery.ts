@@ -77,6 +77,10 @@ export class Scenery {
   private look: Look;
 
   private buildings: THREE.Mesh | null = null;
+  private sky!: THREE.Mesh;
+  private stars!: THREE.Points;
+  private sunGlow!: THREE.Sprite;
+  private sunGlowColor = new THREE.Color();
   private sails: THREE.Mesh | null = null;
   private lambert: THREE.MeshLambertMaterial;
 
@@ -84,7 +88,10 @@ export class Scenery {
     this.look = LOOKS[theme.id];
     const lambert = this.track(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
     this.lambert = lambert;
-    this.group.add(this.buildSky());
+    this.sky = this.buildSky();
+    this.group.add(this.sky);
+    this.stars = this.buildStars();
+    this.group.add(this.stars);
     this.group.add(new THREE.Mesh(this.track(this.buildTerrain()), lambert));
     const props = this.buildProps();
     if (props) this.group.add(new THREE.Mesh(this.track(props), lambert));
@@ -94,7 +101,8 @@ export class Scenery {
     this.group.add(this.clouds);
 
     if (animated) this.buildGrass();
-    this.group.add(this.buildSunGlow());
+    this.sunGlow = this.buildSunGlow();
+    this.group.add(this.sunGlow);
 
     // The moat: stone walls, reflective still water, lily pads and reeds (lava stays lava).
     this.group.add(new THREE.Mesh(this.track(this.buildMoatWalls()), lambert));
@@ -201,6 +209,40 @@ export class Scenery {
     return sky;
   }
 
+  /** Stars across the upper sky, faded in at night. */
+  private buildStars(): THREE.Points {
+    const n = 420;
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = hash(i, 91.3) * Math.PI * 2;
+      const el = 0.08 + Math.pow(hash(i, 17.7), 0.7) * 1.3;
+      pos.set([Math.cos(a) * Math.cos(el) * 225, Math.sin(el) * 225, Math.sin(a) * Math.cos(el) * 225], i * 3);
+    }
+    const geo = this.track(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = this.track(new THREE.PointsMaterial({ color: new THREE.Color('#ffffff').multiplyScalar(1.6), size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    const p = new THREE.Points(geo, mat);
+    p.renderOrder = -9;
+    p.visible = false;
+    return p;
+  }
+
+  /** Time of day (0 day, 0.5 dusk, 1 night): darker, bluer sky, stars, the sun becomes the moon. */
+  setNight(k: number): void {
+    const dusk = Math.max(0, 1 - Math.abs(k - 0.5) * 2);
+    const skyMat = this.sky.material as THREE.MeshBasicMaterial;
+    skyMat.color.set('#ffffff').lerp(new THREE.Color('#ffb08a'), dusk * 0.45).lerp(new THREE.Color('#1c2552'), k);
+    const sm = this.stars.material as THREE.PointsMaterial;
+    sm.opacity = Math.max(0, (k - 0.35) / 0.65);
+    this.stars.visible = sm.opacity > 0.01;
+    const glow = this.sunGlow.material as THREE.SpriteMaterial;
+    glow.color.copy(this.sunGlowColor).lerp(new THREE.Color('#ffb070').multiplyScalar(1.6), dusk * 0.6).lerp(new THREE.Color('#dfe8ff').multiplyScalar(1.3), k);
+    this.sunGlow.scale.setScalar((this.theme.id === 'volcano' ? 40 : 55) * (1 - 0.55 * k));
+    this.water.setNight(k);
+    this.moat?.setNight(k);
+    (this.particles.material as THREE.PointsMaterial).opacity = (this.look.particleMode === 'dust' ? 0.55 : 0.85) * (1 - 0.5 * k);
+  }
+
   /** A soft glow where the sun sits in the sky (picked up by the bloom on high quality). */
   private buildSunGlow(): THREE.Sprite {
     const c = document.createElement('canvas');
@@ -220,6 +262,7 @@ export class Scenery {
       map: tex, color: new THREE.Color(volcano ? '#ff9a5a' : this.theme.sun).multiplyScalar(volcano ? 1.2 : 1.6),
       transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
     }));
+    this.sunGlowColor.copy(mat.color);
     const sprite = new THREE.Sprite(mat);
     // Same direction as the scene's directional light, just above the horizon so it is in view.
     const dir = new THREE.Vector3(-6, 3.2, 7).normalize();

@@ -34,7 +34,7 @@ interface MetaState {
   coins: number;
 }
 
-const freshMeta = (): MetaState => ({ towers: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 }, castleHp: 0, warChest: 0, heroPower: 0, lightning: false, coins: 0 });
+const freshMeta = (): MetaState => ({ towers: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0, catapult: 0, gale: 0, mine: 0, beacon: 0 }, castleHp: 0, warChest: 0, heroPower: 0, lightning: false, coins: 0 });
 
 function bonuses(m: MetaState): MetaBonuses {
   return {

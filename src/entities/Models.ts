@@ -307,6 +307,84 @@ function buildTowerBase(id: TowerId, tier: number, branch: number): { geo: THREE
       headY = 0.16 + h + 0.03;
       break;
     }
+    case 'mine': {
+      plinth(b, t, m, 0.44);
+      const h = 0.3 + grow * 0.7;
+      // A mine shaft: timber head-frame over a dark pit, ore cart and gold nuggets.
+      const wall = t === 1 ? WOOD : m.body;
+      b.box(0.7, h, 0.7, wall, { y: 0.14 + h / 2 });
+      b.box(0.74, 0.05, 0.74, t === 1 ? WOOD_D : m.trim, { y: 0.14 + h });
+      b.box(0.36, 0.04, 0.36, '#1a1410', { y: 0.165 + h });
+      const fy = 0.16 + h;
+      for (const sx of [-1, 1]) {
+        b.box(0.06, 0.62, 0.06, t >= 4 ? m.trim : WOOD_D, { x: sx * 0.24, y: fy + 0.28, z: -0.05, rz: sx * 0.12 });
+      }
+      b.box(0.56, 0.06, 0.07, t >= 4 ? m.trim : WOOD_D, { y: fy + 0.56, z: -0.05 });
+      // Ore cart on rails.
+      b.box(0.5, 0.02, 0.05, '#5d6470', { x: 0.05, y: 0.18, z: 0.42 });
+      b.box(0.2, 0.12, 0.16, '#6a4a2e', { x: 0.12, y: 0.25, z: 0.42 });
+      for (let i = 0; i < 3; i++) b.dodec(0.05, glowC('#ffd84a', 1.25), { x: 0.07 + i * 0.05, y: 0.33, z: 0.42 + (i - 1) * 0.03 });
+      for (let i = 0; i < 4; i++) b.dodec(0.045, glowC('#f2c94c', 1.15), { x: -0.32 + (i % 2) * 0.08, y: 0.2, z: 0.3 + Math.floor(i / 2) * 0.08 });
+      if (t > BRANCH_TIER && branch === 0) b.cyl(0.05, 0.05, 0.4, 6, m.trim, { x: -0.3, y: fy + 0.2, z: 0.25 });
+      if (t > BRANCH_TIER && branch === 1) b.box(0.18, 0.24, 0.03, '#f3e6cc', { x: 0.38, y: 0.4, z: -0.2, ry: 0.4 });
+      ornaments(b, t, m, fy + 0.62, 0.36, 0.14 + h);
+      headY = fy + 0.5;
+      break;
+    }
+    case 'catapult': {
+      plinth(b, t, m, 0.48);
+      const h = 0.2 + grow * 0.6;
+      if (t === 1) {
+        for (let i = 0; i < 5; i++) b.box(0.15, 0.06, 0.8, i % 2 ? WOOD : WOOD_D, { x: -0.3 + i * 0.15, y: 0.16 + h * 0.5 });
+      } else {
+        b.cyl(0.46, 0.5, h, 10, m.body, { y: 0.14 + h / 2 });
+        b.cyl(0.48, 0.48, 0.05, 10, m.trim, { y: 0.14 + h });
+      }
+      // A pile of boulders.
+      for (let i = 0; i < 4; i++) b.dodec(0.08, '#8a8378', { x: -0.3 + (i % 2) * 0.12, y: 0.22 + h + Math.floor(i / 2) * 0.08, z: -0.3 });
+      if (t > BRANCH_TIER && branch === 1) for (let i = 0; i < 2; i++) b.cyl(0.07, 0.06, 0.12, 7, '#9a4a2a', { x: 0.3, y: 0.22 + h, z: -0.3 + i * 0.16 });
+      ornaments(b, t, m, 0.35 + h, 0.46, 0.14 + h);
+      headY = 0.16 + h;
+      break;
+    }
+    case 'gale': {
+      plinth(b, t, m, 0.4);
+      const h = 0.55 + grow;
+      // An open shrine: four pillars, a domed roof, prayer flags fluttering in the wind.
+      const wall = t === 1 ? WOOD : m.body;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        b.cyl(0.045, 0.055, h, 6, wall, { x: Math.cos(a) * 0.27, y: 0.16 + h / 2, z: Math.sin(a) * 0.27 });
+      }
+      b.cyl(0.36, 0.36, 0.06, 8, t === 1 ? WOOD_D : m.trim, { y: 0.16 + h });
+      b.ball(0.3, 1, t === 1 ? '#6a9a8a' : m.roof, { y: 0.19 + h, sy: 0.55 });
+      b.cyl(0.32, 0.36, 0.08, 8, t === 1 ? WOOD_D : m.trim, { y: 0.2 });
+      const flags = ['#ef5b4c', '#ffcf3f', '#59e05a', '#5a9fe0', '#f3ead6'];
+      for (let i = 0; i < 5; i++) b.box(0.07, 0.09, 0.01, flags[i], { x: -0.34 + i * 0.17, y: 0.16 + h * 0.85 - Math.abs(i - 2) * 0.03, z: 0.3 });
+      if (t > BRANCH_TIER && branch === 0) b.torus(0.45, 0.03, 4, 16, '#bff3e4', { y: 0.16 + h * 0.5, rx: Math.PI / 2 });
+      ornaments(b, t, m, 0.16 + h + 0.35, 0.3, 0.16 + h);
+      headY = 0.16 + h * 0.45;
+      break;
+    }
+    case 'beacon': {
+      plinth(b, t, m, 0.38);
+      const h = 0.95 + grow * 1.4;
+      // A slender lighthouse spire with a brazier at the top.
+      const wall = t === 1 ? WOOD : m.body;
+      b.cyl(0.17, 0.3, h, 8, wall, { y: 0.16 + h / 2 });
+      for (let i = 1; i <= 3; i++) b.cyl(0.32 - i * 0.04, 0.32 - i * 0.04, 0.04, 8, t === 1 ? WOOD_D : m.trim, { y: 0.16 + (h * i) / 4 });
+      b.cyl(0.28, 0.22, 0.1, 8, t === 1 ? WOOD_D : m.trim, { y: 0.21 + h });
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        b.box(0.03, 0.3, 0.03, t === 1 ? WOOD_D : m.trim, { x: Math.cos(a) * 0.2, y: 0.4 + h, z: Math.sin(a) * 0.2 });
+      }
+      b.cone(0.28, 0.2, 8, t === 1 ? '#8a5a3a' : m.roof, { y: 0.64 + h });
+      if (t > BRANCH_TIER && branch === 0) b.box(0.18, 0.26, 0.015, '#c23a4a', { x: 0.27, y: 0.16 + h * 0.6, z: 0, ry: Math.PI / 2 });
+      if (t > BRANCH_TIER && branch === 1) b.torus(0.3, 0.025, 4, 14, glowC('#ffb347', 1.6), { y: 0.3 + h, rx: Math.PI / 2 });
+      ornaments(b, t, m, 0.74 + h, 0.24, 0.16 + h);
+      headY = 0.32 + h;
+      break;
+    }
   }
   return { geo: b.build(), headY };
 }
@@ -400,6 +478,48 @@ function buildTowerHead(id: TowerId, tier: number, branch: number): THREE.Buffer
       for (let i = 0; i < 3; i++) b.ball(0.035, 0, new THREE.Color('#b8ff8a').multiplyScalar(1.4), { x: Math.cos(i * 2) * 0.09, y: 0.22, z: Math.sin(i * 2) * 0.09 });
       b.box(0.05, 0.05, 0.4, WOOD, { y: 0.28, z: -0.02, rx: -0.6 });
       b.ball(0.06, 0, spec && branch === 1 ? '#c86af0' : '#7fd65a', { y: 0.42, z: 0.15 });
+      break;
+    }
+    case 'mine': {
+      // The winch wheel (turns slowly; jolts when gold comes up).
+      b.torus(0.17, 0.03, 4, 12, t >= 4 ? m.accent : WOOD, {});
+      for (let i = 0; i < 4; i++) b.box(0.32, 0.025, 0.025, t >= 4 ? m.trim : WOOD_D, { rz: (i / 4) * Math.PI });
+      b.cyl(0.04, 0.04, 0.12, 6, '#3a3f49', { rx: Math.PI / 2 });
+      break;
+    }
+    case 'catapult': {
+      // Frame, throwing arm and a loaded sling.
+      const wood = t >= 4 ? m.trim : WOOD;
+      for (const sx of [-1, 1]) {
+        b.box(0.06, 0.06, 0.62, WOOD_D, { x: sx * 0.2, y: 0.06 });
+        b.box(0.06, 0.4, 0.06, wood, { x: sx * 0.16, y: 0.24, z: -0.02, rz: sx * 0.25 });
+        b.cyl(0.07, 0.07, 0.04, 8, WOOD_D, { x: sx * 0.25, y: 0.06, z: 0.22, rz: Math.PI / 2 });
+        b.cyl(0.07, 0.07, 0.04, 8, WOOD_D, { x: sx * 0.25, y: 0.06, z: -0.22, rz: Math.PI / 2 });
+      }
+      b.cyl(0.03, 0.03, 0.4, 6, '#5d6470', { y: 0.4, rz: Math.PI / 2 });
+      const big = spec && branch === 0 ? 1.3 : 1;
+      b.box(0.06, 0.06, 0.62 * big, wood, { y: 0.48, z: -0.12, rx: -0.75 });
+      b.ball(0.08, 0, spec && branch === 1 ? glowC('#ff7a2a', 1.5) : '#8a8378', { y: 0.7 + (big - 1) * 0.15, z: -0.36 * big });
+      b.box(0.14, 0.12, 0.12, '#6a5e50', { y: 0.1, z: 0.22 });
+      break;
+    }
+    case 'gale': {
+      // A spinning pinwheel of wind vanes around a glowing jade core.
+      const n = spec && branch === 1 ? 6 : 4;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        b.box(0.05, 0.03, 0.24, t >= 5 ? m.accent : '#dff8f0', { x: Math.sin(a) * 0.15, z: Math.cos(a) * 0.15, ry: a + 0.5, rx: 0.4 });
+      }
+      b.ball(0.08, 1, glowC('#9fe3d0', 1.5), {});
+      b.torus(0.2, 0.012, 3, 14, '#ffffff', { rx: Math.PI / 2 });
+      break;
+    }
+    case 'beacon': {
+      // The light: a glowing crystal over the brazier, with a halo.
+      const r = 0.1 + t * 0.008;
+      b.octa(r, t >= 7 ? m.accent.clone().multiplyScalar(2.2) : glowC('#ffe08a', 2.2), { y: r * 1.3, sy: 1.5 });
+      b.cone(0.12, 0.16, 6, glowC('#ffb347', 1.8), { y: -0.02 });
+      b.torus(r * 1.9, 0.014, 3, 16, glowC('#fff3b0', 1.6), { y: r * 1.3, rx: Math.PI / 2 });
       break;
     }
   }

@@ -5,6 +5,8 @@ export const MASTERY = {
   maxLevel: 10,
   /** XP per kill. */
   killXp: 1,
+  /** Gold Mines and Beacons earn this per wave they stand through. */
+  supportXpPerWave: 4,
   damagePerLevel: 0.02,
   /** Veteran: a silver banner and +8% range. */
   veteranLevel: 5,

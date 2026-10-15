@@ -5,6 +5,7 @@ import type { HeroId } from '../data/heroes';
 import type { EnemyId } from '../data/enemies';
 import type { BaseSnapshot } from '../game/Run';
 import type { BuildingId } from '../data/kingdom';
+import type { MapId } from '../data/maps';
 
 export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'tkd_save';
@@ -88,6 +89,11 @@ export interface SaveData {
   challenge: { day: string; attempted: boolean; done: boolean; score: number; best: number; history: { day: string; score: number }[] };
   /** When the player was last here (for the "while you were away" summary). */
   lastSeen: number;
+  /**
+   * Realms (maps). `base` and the progress checkpoint/frontier fields always belong to the
+   * current realm; the others wait in `saved` until you switch back. `best` is per realm.
+   */
+  realms: { current: MapId; saved: Partial<Record<MapId, { base: BaseSnapshot | null; checkpointsPaid: number; frontierSeen: number }>>; best: Partial<Record<MapId, number>> };
 }
 
 export function defaultSave(now = Date.now()): SaveData {
@@ -97,7 +103,7 @@ export function defaultSave(now = Date.now()): SaveData {
     shards: 0,
     base: null,
     progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0, frontierSeen: 0 },
-    towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0 },
+    towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0, catapult: 0, gale: 0, mine: 0, beacon: 0 },
     meta: { castleHp: 0, battlements: 0, warChest: 0, heroPower: 0 },
     unlocks: { lightning: false, heroes: ['ranger'] },
     selectedHero: 'ranger',
@@ -119,6 +125,7 @@ export function defaultSave(now = Date.now()): SaveData {
     buildings: [],
     challenge: { day: '', attempted: false, done: false, score: 0, best: 0, history: [] },
     lastSeen: now,
+    realms: { current: 'vale', saved: {}, best: {} },
   };
 }
 

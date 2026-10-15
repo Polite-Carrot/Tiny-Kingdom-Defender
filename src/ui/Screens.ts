@@ -6,6 +6,7 @@ import * as Modals from './Modals';
 import type { Game } from '../game/Game';
 import { UNLOCK_WAVE } from '../data/base';
 import { ageTitle, checkpointOf } from '../game/Siege';
+import { MAP_BY_ID } from '../data/maps';
 
 export class TitleScreen {
   readonly el: HTMLElement;
@@ -32,6 +33,7 @@ export class TitleScreen {
           <button class="side-btn chest">${icon('chest')}Chest<i class="dot"></i><span class="timer"></span></button>
           <button class="side-btn treasury">${icon('castle')}Treasury<i class="dot"></i><span class="timer"></span></button>
           <button class="side-btn town-btn">${icon('town')}Town<i class="dot"></i></button>
+          <button class="side-btn realms-btn">${icon('map')}Realms</button>
           <button class="side-btn trophy-btn">${icon('trophy')}Trophies</button>
           <button class="side-btn bestiary-btn">${icon('skull')}Bestiary</button>
         </div>
@@ -53,6 +55,7 @@ export class TitleScreen {
     q('.treasury').onclick = () => this.gate('treasury', () => Modals.treasury(game));
     q('.trophy-btn').onclick = () => Modals.trophies(game);
     q('.town-btn').onclick = () => this.gate('kingdom', () => Modals.town(game));
+    q('.realms-btn').onclick = () => this.gate('realms', () => Modals.realms(game));
     q('.challenge-btn').onclick = () => this.gate('challenge', () => Modals.challenge(game));
     q('.bestiary-btn').onclick = () => Modals.bestiary(game);
     q('.version').onclick = () => {
@@ -108,13 +111,16 @@ export class TitleScreen {
     lock('.chest', 'chests');
     lock('.treasury', 'treasury');
     lock('.town-btn', 'kingdom');
+    lock('.realms-btn', 'realms');
     lock('.challenge-btn', 'challenge');
     const base = d.base;
     const wave = base ? base.wave : 0;
     const card = $(this.el, '.kingdom-card');
+    const realm = MAP_BY_ID[meta.mapId()];
+    const realmTag = meta.featureUnlocked('realms') ? `${realm.icon} ${realm.name} · ` : '';
     card.innerHTML = base
-      ? `<b>${ageTitle(wave)}</b> · Wave ${wave + 1}<br/><span>⚑ Checkpoint ${base.checkpoint ?? checkpointOf(wave)} · Best ${meta.bestWave()} · ${base.towers.length} towers</span>`
-      : `<b>Found your kingdom</b><br/><span>Build, upgrade and hold out for as long as you can</span>`;
+      ? `<b>${realmTag}${ageTitle(wave)}</b> · Wave ${wave + 1}<br/><span>⚑ Checkpoint ${base.checkpoint ?? checkpointOf(wave)} · Best ${meta.mapBest(meta.mapId())} · ${base.towers.length} towers</span>`
+      : `<b>${realmTag}Found your kingdom</b><br/><span>Build, upgrade and hold out for as long as you can</span>`;
     $(this.el, '.play').innerHTML = `${icon('play')} ${base ? 'Defend' : 'Begin'}`;
     this.tick(true);
   }

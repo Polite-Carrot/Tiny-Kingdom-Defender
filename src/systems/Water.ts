@@ -91,6 +91,7 @@ uniform vec3 uSunDir;
 uniform float uWaterY;
 uniform float uIce;
 uniform float uLava;
+uniform float uNight;
 uniform float uBoardHalf;
 /** Width of the walled moat drawn by Moat.ts (0 = none): the sea doesn't draw there. */
 uniform float uMoatW;
@@ -186,6 +187,8 @@ void main() {
     alpha = max(alpha, foam);
     gl_FragColor = vec4(col, alpha);
   }
+  // Night: moonlit, darker and bluer (lava keeps glowing).
+  if (uLava < 0.5) gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * vec3(0.32, 0.4, 0.62), uNight);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
@@ -241,6 +244,7 @@ export class Water {
     this.material = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         uTime: { value: 0 },
+        uNight: { value: 0 },
         uAmp: { value: look.amp },
         uGroundSize: { value: groundSize },
         uWaterY: { value: waterY },
@@ -271,6 +275,20 @@ export class Water {
 
   update(time: number): void {
     this.material.uniforms.uTime.value = time;
+  }
+
+  private daySky: THREE.Color | null = null;
+  private daySun: THREE.Color | null = null;
+
+  /** Night darkens the reflected sky and turns the sun glint into moonlight. */
+  setNight(k: number): void {
+    const u = this.material.uniforms;
+    u.uNight.value = k;
+    if (!u.uSky || !u.uSunColor) return;
+    this.daySky ??= (u.uSky.value as THREE.Color).clone();
+    this.daySun ??= (u.uSunColor.value as THREE.Color).clone();
+    (u.uSky.value as THREE.Color).copy(this.daySky).lerp(new THREE.Color('#121a38'), k);
+    (u.uSunColor.value as THREE.Color).copy(this.daySun).lerp(new THREE.Color('#8fa6e8'), k).multiplyScalar(1 - 0.5 * k);
   }
 
   dispose(): void {

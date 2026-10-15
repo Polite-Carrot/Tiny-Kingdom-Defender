@@ -8,6 +8,17 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 export type Quality = 'low' | 'high';
 
+const NIGHT = {
+  sky: new THREE.Color('#0d1430'),
+  fog: new THREE.Color('#1a2346'),
+  duskSky: new THREE.Color('#e88a5a'),
+  duskSun: new THREE.Color('#ff9a5a'),
+  moon: new THREE.Color('#a8bcff'),
+  ambient: new THREE.Color('#7f90e0'),
+  duskAmbient: new THREE.Color('#ffb48a'),
+  ground: new THREE.Color('#2a2440'),
+};
+
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -86,11 +97,32 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
+  private base = { sky: new THREE.Color(), fog: new THREE.Color(), sun: new THREE.Color(), ambient: new THREE.Color() };
+  /** 0 = day, 0.5 = dusk, 1 = night. */
+  night = 0;
+
   setTheme(sky: string, fog: string, sun: string, ambient: string): void {
+    this.base.sky.set(sky);
+    this.base.fog.set(fog);
+    this.base.sun.set(sun);
+    this.base.ambient.set(ambient);
     this.scene.background = new THREE.Color(sky);
-    (this.scene.fog as THREE.Fog).color.set(fog);
-    this.sun.color.set(sun);
-    this.hemi.color.set(ambient);
+    this.setNight(this.night);
+  }
+
+  /** Time of day: lights, fog and sky go from the Age's daylight through a warm dusk to moonlight. */
+  setNight(k: number): void {
+    this.night = k;
+    const dusk = Math.max(0, 1 - Math.abs(k - 0.5) * 2);
+    const bg = this.scene.background as THREE.Color;
+    bg.copy(this.base.sky).lerp(NIGHT.sky, k).lerp(NIGHT.duskSky, dusk * 0.35);
+    (this.scene.fog as THREE.Fog).color.copy(this.base.fog).lerp(NIGHT.fog, k).lerp(NIGHT.duskSky, dusk * 0.3);
+    this.sun.color.copy(this.base.sun).lerp(NIGHT.duskSun, dusk * 0.9).lerp(NIGHT.moon, k);
+    this.sun.intensity = 1.65 * (1 - 0.5 * k);
+    this.hemi.color.copy(this.base.ambient).lerp(NIGHT.duskAmbient, dusk * 0.5).lerp(NIGHT.ambient, k);
+    this.hemi.groundColor.set('#6b5a40').lerp(NIGHT.ground, k);
+    this.hemi.intensity = 0.95 * (1 - 0.25 * k);
+    if (this.bloom) this.bloom.strength = 0.32 + 0.3 * k;
   }
 
   render(): void {

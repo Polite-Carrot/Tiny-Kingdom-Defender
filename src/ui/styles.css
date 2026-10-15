@@ -510,3 +510,5 @@ body.landscape .modal.frontier { width: 330px; }
 .mastery.gold { color: #9a6a00; }
 .mastery.gold .mbar i { background: var(--gold); }
 .mastery small { font-weight: 700; opacity: .8; white-space: nowrap; }
+.map-sketch { width: 52px; height: 52px; display: block; }
+.list-item.realm .thumb { padding: 0; background: none; }

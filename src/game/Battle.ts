@@ -6,13 +6,13 @@ import { BattleView } from './BattleView';
 import { Tutorial } from './Tutorial';
 import type { Services } from './Services';
 import type { Hud } from '../ui/Hud';
-import { TOWERS, TOWER_ORDER, MAX_TIER, type TowerId, type TargetMode } from '../data/towers';
-import { ROADS, SIEGE, TOWER_UNLOCK_WAVE, BARRICADE } from '../data/base';
+import { TOWERS, TOWER_ORDER, MAX_TIER, isSupport, type TowerId, type TargetMode } from '../data/towers';
+import { SIEGE, TOWER_UNLOCK_WAVE, BARRICADE } from '../data/base';
 import { worldToTile } from './LevelMap';
 import { ELITE_RULES } from '../data/enemies';
 import { SYNERGY_BY_ID } from '../data/synergies';
 import { HERO_LEVELS, HERO_GEAR, gearTierFor } from '../data/heroes';
-import { ageTitle, themeOf, kingdomMap, hpMultFor } from './Siege';
+import { ageTitle, themeOf, kingdomMap, hpMultFor, nightOf, activeRoads } from './Siege';
 import { towerThumb } from '../ui/Thumbnails';
 import { el } from '../ui/dom';
 import { MASTERY, masteryTitle } from '../data/mastery';
@@ -59,12 +59,14 @@ export class Battle {
   challengeScore = 0;
   /** Kill counts already turned into mastery XP, by tower id. */
   private masteryKills = new Map<number, number>();
+  /** Waves cleared since mastery was last paid out. */
+  private wavesServed = 0;
 
   constructor(private s: Services, private hud: Hud, opts: { demo?: boolean; challenge?: ChallengeDef } = {}) {
     const meta = s.meta;
     this.challenge = opts.challenge ?? null;
     const c = this.challenge;
-    const snapshot: BaseSnapshot = c ? challengeSnapshot(c, kingdomMap().buildSpots.length) : s.save.data.base ?? newKingdom();
+    const snapshot: BaseSnapshot = c ? challengeSnapshot(c, kingdomMap().classicSpots) : s.save.data.base ?? newKingdom();
     this.run = new Run({
       snapshot,
       meta: meta.metaBonuses(),
@@ -109,7 +111,7 @@ export class Battle {
     const { ui, meta, audio, rig } = this.s;
     if (meta.d.progress.frontierSeen >= wave) {
       // Seen before (e.g. replaying after a fall): just a quick reminder.
-      if (newAge) ui.banner(ageTitle(wave), roads.length ? `Enemies also march from the ${ROADS[roads[0]].name}` : 'A new Age begins');
+      if (newAge) ui.banner(ageTitle(wave), roads.length ? `Enemies also march from the ${activeRoads()[roads[0]].name}` : 'A new Age begins');
       this.run.continueFrontier();
       return;
     }
@@ -132,7 +134,7 @@ export class Battle {
       h.layer.classList.add('frontier-layer');
       const lines: string[] = [];
       if (newAge) lines.push(`<p><b>${title}</b> begins. The land changes and new foes join the siege.</p>`);
-      for (const r of roads) lines.push(`<p class="warn">⚠ Enemies will now also march out of the <b>${ROADS[r].name.replace(' Road', '')} tunnel</b>. Guard the new road!</p>`);
+      for (const r of roads) lines.push(`<p class="warn">⚠ Enemies will now also march out of the <b>${activeRoads()[r].name.replace(' Road', '')} tunnel</b>. Guard the new road!</p>`);
       if (newAge) lines.push(`<p class="muted">Checkpoint: if the castle falls, you regroup at the start of this Age.</p>`);
       m.innerHTML = `
         <div class="ribbon ${roads.length ? 'lose' : 'purple'}">${roads.length && newAge ? `${title}` : title}</div>
@@ -193,7 +195,14 @@ export class Battle {
   flushMastery(): void {
     const { meta, ui, audio } = this.s;
     const gained = new Map<TowerId, number>();
+    // Support towers (mines, beacons) never kill: they earn mastery for each wave they serve.
+    const served = this.wavesServed;
+    this.wavesServed = 0;
     for (const t of this.run.towers) {
+      if (isSupport(t.def.id)) {
+        if (served > 0) gained.set(t.def.id, (gained.get(t.def.id) ?? 0) + served * MASTERY.supportXpPerWave);
+        continue;
+      }
       const before = this.masteryKills.get(t.id) ?? t.kills;
       const d = t.kills - before;
       this.masteryKills.set(t.id, t.kills);
@@ -222,7 +231,15 @@ export class Battle {
     // Towers already standing when the battle opens don't re-earn their old kills.
     for (const t of this.run.towers) this.masteryKills.set(t.id, t.kills);
     ev.on('towerBuilt', (t) => this.masteryKills.set(t.id, 0));
-    ev.on('waveCleared', () => this.flushMastery());
+    ev.on('waveStart', ({ index }) => {
+      const now = nightOf(index), before = nightOf(index - 1);
+      if (now >= 1 && before < 1) setTimeout(() => ui.banner('Night falls', `Enemies drop ${Math.round(SIEGE.nightGold * 100)}% more gold in the dark`), 900);
+      else if (now === 0 && before >= 1) setTimeout(() => ui.banner('Dawn breaks', 'A new day over the kingdom'), 900);
+    });
+    ev.on('waveCleared', () => {
+      this.wavesServed++;
+      this.flushMastery();
+    });
     ev.on('heroKill', (e) => {
       const xp = e.def.boss ? HERO_LEVELS.bossXp : e.elite ? HERO_LEVELS.eliteXp : Math.max(1, e.def.cost * HERO_LEVELS.xpPerCost);
       this.giveHeroXp(xp);

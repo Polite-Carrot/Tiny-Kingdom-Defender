@@ -38,6 +38,9 @@ export const LAND = {
   /** Gold cost to clear land for one more pad: base × growth^padsCleared. */
   clearBase: 90,
   clearGrowth: 1.3,
+  /** After this many clearings the price only rises gently (+8% per extra square), so every square stays within reach. */
+  clearSoftCap: 18,
+  clearAfterCap: 0.08,
 };
 
 export const SIEGE = {
@@ -77,6 +80,10 @@ export const SIEGE = {
   /** Gold Rush rewarded ad: kill gold multiplier and how many waves it lasts. */
   goldRushMult: 2,
   goldRushWaves: 3,
+  /** Within each 10 waves, night falls from this wave on (dusk the wave before). */
+  nightFrom: 7,
+  /** Enemies defeated at night drop this much more gold. */
+  nightGold: 0.15,
 };
 
 /** Coins (meta currency) earned in the siege. */
@@ -92,8 +99,13 @@ export const SIEGE_COINS = {
 };
 
 /** Best wave reached (0-based count of waves cleared) needed to unlock things. */
-export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist' | 'challenge' | 'kingdom', number> = {
+export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist' | 'challenge' | 'kingdom' | 'realms' | 'mine' | 'catapult' | 'gale' | 'beacon', number> = {
+  mine: 18,
+  catapult: 25,
+  gale: 30,
+  beacon: 35,
   challenge: 10,
+  realms: 20,
   kingdom: 5,
   cannon: 2,
   frost: 5,
@@ -120,6 +132,10 @@ export const TOWER_UNLOCK_WAVE: Record<TowerId, number> = {
   ballista: UNLOCK_WAVE.ballista,
   flame: UNLOCK_WAVE.flame,
   alchemist: UNLOCK_WAVE.alchemist,
+  mine: UNLOCK_WAVE.mine,
+  catapult: UNLOCK_WAVE.catapult,
+  gale: UNLOCK_WAVE.gale,
+  beacon: UNLOCK_WAVE.beacon,
 };
 
 /** Enemy introduction: earliest wave index each enemy type may appear. */

@@ -14,12 +14,12 @@ import { Scenery } from '../systems/Scenery';
 import { Grass, type BladeSpot } from '../systems/Grass';
 import type { AudioSystem } from '../systems/Audio';
 import { ENEMIES, ELITES, ELITE_RULES, type EnemyId } from '../data/enemies';
-import { GRID_SIZE, ROADS } from '../data/base';
+import { GRID_SIZE } from '../data/base';
 import type { Theme } from '../data/themes';
 import { materialFor } from '../data/towers';
-import { tileToWorld } from './LevelMap';
+import { tileToWorld, worldToTile } from './LevelMap';
 import { SYNERGY_BY_ID } from '../data/synergies';
-import { themeOf } from './Siege';
+import { themeOf, nightOf, activeRoads } from './Siege';
 import type { Run, Tower, Enemy, ProjectileKind } from './Run';
 
 export interface ViewHooks {
@@ -58,7 +58,7 @@ const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
 /** Glowing projectile tints (values above 1 bloom). */
 const PROJ_COLORS: Partial<Record<ProjectileKind, number[]>> = {
-  frost: [0.7, 0.95, 1.4], heroBolt: [1.3, 0.6, 1.5], arcane: [1.2, 0.75, 1.8], fire: [1.9, 0.9, 0.25], poison: [0.6, 1.6, 0.35],
+  frost: [0.7, 0.95, 1.4], heroBolt: [1.3, 0.6, 1.5], arcane: [1.2, 0.75, 1.8], fire: [1.9, 0.9, 0.25], poison: [0.6, 1.6, 0.35], gust: [0.85, 1.7, 1.5],
 };
 const _s = new THREE.Vector3();
 const _v = new THREE.Vector3();
@@ -159,7 +159,7 @@ export class BattleView {
   /** Tile key -> lowest road index that uses it (includes the off-board spawn tiles). */
   private static rasterizeRoads(): Map<number, number> {
     const cells = new Map<number, number>();
-    ROADS.forEach((road, ri) => {
+    activeRoads().forEach((road, ri) => {
       const pts = road.points;
       for (let i = 1; i < pts.length; i++) {
         let [c, r] = pts[i - 1];
@@ -198,7 +198,10 @@ export class BattleView {
     this.grass = null;
     this.boardDisposables = [];
     this.board.clear();
+    this.overgrowth?.geometry.dispose();
     this.overgrowth = null;
+    this.propsMesh?.geometry.dispose();
+    this.propsMesh = null;
     const t = this.theme;
     this.renderer.setTheme(t.sky, t.fog, t.sun, t.ambient);
     const map = this.run.map;
@@ -216,7 +219,8 @@ export class BattleView {
     const tmp = new THREE.Color();
     // Swaying grass blades on open ground (not on pads), thick in the meadows, sparse elsewhere.
     const blades: BladeSpot[] = [];
-    const padTiles = new Set(map.buildSpots.map((sp) => sp.row * 64 + sp.col));
+    // Grass blades stay off pads (the classic pads, and any open field already cleared).
+    const padTiles = new Set(map.buildSpots.filter((sp) => map.isClassic(sp.index) || this.run.isSpotUnlocked(sp.index)).map((sp) => sp.row * 64 + sp.col));
     const bladesPerTile = this.renderer.quality === 'high' ? ({ meadow: 22, desert: 5, snow: 4, volcano: 3 } as const)[t.id] : 0;
     const bladeBase = new THREE.Color(t.id === 'desert' ? '#c9b26a' : t.id === 'snow' ? '#a9c2a0' : t.id === 'volcano' ? '#8a7a5a' : t.grass);
     for (let r = -1; r <= GRID_SIZE; r++) {
@@ -228,9 +232,9 @@ export class BattleView {
         const i = (r + 2) * 37 + c;
         const isOpenRoad = (cc: number, rr: number) => {
           const rd = this.roadCells.get((rr + 1) * 64 + (cc + 1));
-          return rd !== undefined && ROADS[rd].openWave <= wave;
+          return rd !== undefined && activeRoads()[rd].openWave <= wave;
         };
-        if (road !== undefined && ROADS[road].openWave <= wave) {
+        if (road !== undefined && activeRoads()[road].openWave <= wave) {
           tmp.copy(pathCol).multiplyScalar(0.96 + rnd(i) * 0.08);
           b.box(1, 0.12, 1, tmp.getStyle(), { x, y: -0.1, z });
           if (t.id === 'desert') {
@@ -314,8 +318,89 @@ export class BattleView {
     this.root.add(this.scenery.group);
 
     // Props merged into one draw call; the Age decides which prop each slot shows.
+    this.buildProps();
+
+    // Build pads (instanced so they can be highlighted individually).
+    this.pads = new THREE.InstancedMesh(padModel(), this.material, Math.max(1, map.buildSpots.length));
+    this.boardDisposables.push({ dispose: () => this.pads.dispose() });
+    this.padColor.set(t.pad);
+    this.refreshPads();
+    this.pads.receiveShadow = true;
+    this.board.add(this.pads);
+    this.buildOvergrowth();
+    this.buildCastleAndCaves();
+    this.buildLanterns();
+    this.applyNight(true);
+  }
+
+  // --- Day and night --------------------------------------------------------------
+
+  private night = 0;
+  private lanternGlow: THREE.Mesh | null = null;
+
+  /** Lantern posts along the roads; their flames light up as night falls. */
+  private buildLanterns(): void {
+    const map = this.run.map;
+    const posts = new ModelBuilder();
+    const flames = new ModelBuilder();
+    let n = 0;
+    for (const k of map.pathCells) {
+      const c = k % 64, r = Math.floor(k / 64);
+      if ((c * 7 + r * 3) % 4 !== 0 || n >= 44) continue;
+      if (Math.max(Math.abs(c - map.castle.col), Math.abs(r - map.castle.row)) <= 1) continue;
+      // Stand on the kerb, on a side that isn't road.
+      const side = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).find(([dc, dr]) => !map.isPath(c + dc, r + dr) && c + dc >= 0 && r + dr >= 0 && c + dc < GRID_SIZE && r + dr < GRID_SIZE);
+      if (!side) continue;
+      const x = tileToWorld(c) + side[0] * 0.5, z = tileToWorld(r) + side[1] * 0.5;
+      posts.cyl(0.022, 0.03, 0.62, 5, '#3a3036', { x, y: 0.31, z });
+      posts.box(0.11, 0.025, 0.11, '#2a2228', { x, y: 0.64, z });
+      posts.cone(0.085, 0.07, 4, '#2a2228', { x, y: 0.79, z, ry: Math.PI / 4 });
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) posts.box(0.012, 0.12, 0.012, '#2a2228', { x: x + dx * 0.045, y: 0.7, z: z + dz * 0.045 });
+      flames.ball(0.04, 0, '#ffffff', { x, y: 0.7, z, sy: 1.3 });
+      n++;
+    }
+    if (!n) return;
+    const postMesh = new THREE.Mesh(this.boardTrack(posts.build()), this.material);
+    postMesh.castShadow = true;
+    this.board.add(postMesh);
+    const mat = this.boardTrack(new THREE.MeshBasicMaterial({ color: '#ffcf6a' }));
+    this.lanternGlow = new THREE.Mesh(this.boardTrack(flames.build()), mat);
+    this.board.add(this.lanternGlow);
+  }
+
+  /** Eases the light towards the time of day of the wave being fought. */
+  private applyNight(snap = false, dt = 0): void {
+    const run = this.run;
+    const wave = run.state === 'prep' ? run.waveIndex : run.currentWave;
+    const target = nightOf(wave);
+    const before = this.night;
+    this.night = snap ? target : this.night + Math.sign(target - this.night) * Math.min(Math.abs(target - this.night), dt * 0.25);
+    if (!snap && before === this.night) return;
+    const k = this.night;
+    this.renderer.setNight(k);
+    this.scenery?.setNight(k);
+    if (this.lanternGlow) {
+      const m = this.lanternGlow.material as THREE.MeshBasicMaterial;
+      m.color.set('#ffcf6a').multiplyScalar(0.35 + 2.3 * k);
+    }
+  }
+
+  private propsMesh: THREE.Mesh | null = null;
+
+  /** Trees and rocks on the board, merged into one draw call (none on cleared ground). */
+  private buildProps(): void {
+    if (this.propsMesh) {
+      this.board.remove(this.propsMesh);
+      this.propsMesh.geometry.dispose();
+      this.propsMesh = null;
+    }
+    const t = this.theme;
+    const map = this.run.map;
+    const half = GRID_SIZE / 2;
+    const cleared = new Set(map.buildSpots.filter((sp) => this.run.isSpotUnlocked(sp.index)).map((sp) => sp.row * 64 + sp.col));
+    const onCleared = (x: number, z: number) => cleared.has(worldToTile(z) * 64 + worldToTile(x));
     const pick = (v: number) => t.props[Math.min(t.props.length - 1, Math.floor(v * t.props.length))];
-    const items = map.props.map((p) => ({ geo: propModel(pick(p.variant)), x: p.x, y: 0, z: p.z, ry: p.rot, s: p.scale }));
+    const items = map.props.filter((p) => !onCleared(p.x, p.z)).map((p) => ({ geo: propModel(pick(p.variant)), x: p.x, y: 0, z: p.z, ry: p.rot, s: p.scale }));
     for (let i = 0; i < 30; i++) {
       const side = i % 4;
       const k = (i * 0.37) % 1;
@@ -323,29 +408,19 @@ export class BattleView {
       const pz = side === 2 ? -half + 0.45 : side === 3 ? half - 0.45 : (k - 0.5) * (half * 2 - 1);
       const c = Math.round(px + (GRID_SIZE - 1) / 2);
       const r = Math.round(pz + (GRID_SIZE - 1) / 2);
-      if (this.roadCells.has((r + 1) * 64 + (c + 1))) continue;
+      if (this.roadCells.has((r + 1) * 64 + (c + 1)) || onCleared(px, pz)) continue;
       items.push({ geo: propModel(t.props[i % t.props.length]), x: px, y: 0, z: pz, ry: i * 1.3, s: 0.9 });
     }
-    if (items.length) {
-      const propsMesh = new THREE.Mesh(this.boardTrack(mergeTransformed(items)), this.material);
-      propsMesh.castShadow = true;
-      propsMesh.receiveShadow = true;
-      this.board.add(propsMesh);
-    }
+    if (!items.length) return;
+    this.propsMesh = new THREE.Mesh(mergeTransformed(items), this.material);
+    this.propsMesh.castShadow = true;
+    this.propsMesh.receiveShadow = true;
+    this.board.add(this.propsMesh);
+  }
 
-    // Build pads (instanced so they can be highlighted individually).
-    this.pads = new THREE.InstancedMesh(padModel(), this.material, Math.max(1, map.buildSpots.length));
-    this.boardDisposables.push({ dispose: () => this.pads.dispose() });
-    this.padColor.set(t.pad);
-    map.buildSpots.forEach((sp, i) => {
-      _m.makeTranslation(sp.x, 0, sp.z);
-      this.pads.setMatrixAt(i, _m);
-    });
-    this.refreshPads();
-    this.pads.receiveShadow = true;
-    this.board.add(this.pads);
-    this.buildOvergrowth();
-
+  private buildCastleAndCaves(): void {
+    const t = this.theme;
+    const map = this.run.map;
     // Castle, facing its first road.
     const cp = map.paths[0];
     const n = cp.xs.length;
@@ -366,10 +441,22 @@ export class BattleView {
     this.padHighlight = -1;
   }
 
-  /** Pad colours: unlocked pads use the Age's stone colour, locked land is darker. */
+  /**
+   * Pad colours: unlocked pads use the Age's stone colour, locked classic pads are darker, and
+   * open fields have no pad at all until they are cleared.
+   */
   private refreshPads(): void {
     const locked = new THREE.Color(this.theme.cliffDark).lerp(new THREE.Color(this.theme.grass), 0.35);
-    this.run.map.buildSpots.forEach((sp, i) => this.pads.setColorAt(i, this.run.isSpotUnlocked(sp.index) ? this.padColor : locked));
+    const map = this.run.map;
+    map.buildSpots.forEach((sp, i) => {
+      const open = this.run.isSpotUnlocked(sp.index);
+      const shown = open || map.isClassic(sp.index);
+      _m.makeTranslation(sp.x, shown ? 0 : -5, sp.z);
+      if (!shown) _m.scale(_s.setScalar(0.001));
+      this.pads.setMatrixAt(i, _m);
+      this.pads.setColorAt(i, open ? this.padColor : locked);
+    });
+    this.pads.instanceMatrix.needsUpdate = true;
     if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
   }
 
@@ -384,7 +471,7 @@ export class BattleView {
     const bushType = t.id === 'desert' ? 'cactus' : t.id === 'snow' ? 'pine' : t.id === 'volcano' ? 'lavarock' : 'bush';
     const items: { geo: THREE.BufferGeometry; x: number; y: number; z: number; ry: number; s: number }[] = [];
     for (const sp of this.run.map.buildSpots) {
-      if (this.run.isSpotUnlocked(sp.index)) continue;
+      if (this.run.isSpotUnlocked(sp.index) || !this.run.map.isClassic(sp.index)) continue;
       const k = sp.index * 1.7;
       items.push({ geo: propModel(bushType), x: sp.x - 0.12, y: 0.06, z: sp.z + 0.05, ry: k, s: 0.75 });
       items.push({ geo: propModel('rock'), x: sp.x + 0.18, y: 0.05, z: sp.z - 0.12, ry: k * 2, s: 0.8 });
@@ -535,6 +622,15 @@ export class BattleView {
           this.particles.burst(tower.x + Math.sin(a) * 0.45, hy, tower.z + Math.cos(a) * 0.45, '#ff8a2a', 4, { speed: 1.2, up: 0.6, size: 0.1, gravity: -0.6, life: 0.35 });
         }
       } else if (id === 'alchemist') this.audio.play('poison');
+      else if (id === 'catapult') this.audio.play('ballista', 0.8);
+      else if (id === 'gale') this.audio.play('frost', 0.7);
+    });
+    on('mineGold', ({ tower, gold }) => {
+      const v = this.towerViews.get(tower.id);
+      if (v) v.recoil = 1;
+      this.particles.burst(tower.x, 0.8, tower.z, '#ffd84a', 12, { speed: 1.2, up: 2.4, size: 0.08, gravity: -2, life: 0.8 });
+      const s = this.project(tower.x, 1.2, tower.z);
+      this.hooks.floatText(s.x, s.y, `+${gold}`, 'gold');
     });
     on('lightning', ({ points }) => {
       this.bolts.spawn(points, '#c8a6ff');
@@ -563,6 +659,21 @@ export class BattleView {
         if (p.splash > 0) this.rings.spawn(x, z, p.splash, '#b48cf0', 0.35);
       } else if (p.kind === 'bolt') {
         this.particles.burst(x, 0.35, z, '#c9a66b', 4, { speed: 1.6, up: 1.2, size: 0.05, life: 0.3 });
+      } else if (p.kind === 'boulder') {
+        // A boulder lands: dust, rock chips and a thump.
+        this.particles.burst(x, 0.15, z, '#a8987e', 16, { speed: 2.2, up: 1.6, size: 0.17, gravity: -0.4, life: 0.9 });
+        this.particles.burst(x, 0.15, z, '#6a5e50', 10, { speed: 3, up: 3, size: 0.07, life: 0.5 });
+        if (p.dot > 0) this.particles.burst(x, 0.2, z, '#ff8a2a', 12, { speed: 2, up: 2, size: 0.1, gravity: -0.8, life: 0.5 });
+        this.rings.spawn(x, z, p.splash, '#d9c8a0', 0.45);
+        this.rig.shake(0.18);
+        this.audio.play('cannon', 0.5);
+      } else if (p.kind === 'gust') {
+        // Swirling wind.
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          this.particles.burst(x + Math.cos(a) * 0.2, 0.3, z + Math.sin(a) * 0.2, i % 2 ? '#dff8f0' : '#9fe3d0', 1, { speed: 1.8, up: 0.6, size: 0.07, gravity: 0, life: 0.4, spread: 0.2 });
+        }
+        if (p.splash > 0) this.rings.spawn(x, z, p.splash, '#bff3e4', 0.3);
       } else if (p.kind === 'champion') {
         this.particles.burst(x, 0.4, z, '#ffd84a', 8, { speed: 2, up: 2, size: 0.07, life: 0.4 });
         this.rings.spawn(x, z, p.splash, '#ffd84a', 0.3);
@@ -773,6 +884,7 @@ export class BattleView {
       const sp = this.run.map.buildSpots[spot];
       this.refreshPads();
       this.buildOvergrowth();
+      if (!this.run.map.isClassic(spot)) this.buildProps();
       this.particles.burst(sp.x, 0.2, sp.z, '#8fbf5a', 16, { speed: 2.2, up: 2.5, size: 0.1 });
       this.particles.burst(sp.x, 0.2, sp.z, '#bfb29a', 10, { speed: 1.6, up: 1.5, size: 0.14 });
       this.rings.spawn(sp.x, sp.z, 0.9, '#ffffff', 0.4);
@@ -922,6 +1034,11 @@ export class BattleView {
         const b = this.run.towers.find((o) => o.id === t.partners[i]);
         if (b && t.id < b.id) pairs.push({ a: t, b, color: SYNERGY_BY_ID[id].color });
       });
+      // Beacon light reaching the towers it empowers.
+      if (t.buffedBy >= 0) {
+        const b = this.run.towers.find((o) => o.id === t.buffedBy);
+        if (b) pairs.push({ a: b, b: t, color: '#ffe08a' });
+      }
     }
     const key = pairs.map((p) => `${p.a.id}-${p.b.id}`).join();
     if (key !== this.synergyKey) {
@@ -1141,6 +1258,7 @@ export class BattleView {
   }
 
   update(dt: number, simSpeed: number): void {
+    this.applyNight(false, dt);
     this.updateFrontier(dt);
     this.updateWalls(dt);
     this.updateSynergyLinks(dt);
@@ -1369,9 +1487,13 @@ export class BattleView {
         const col = kind === 'heroArrow' ? [0.6, 1, 0.5] : kind === 'bolt' ? [0.75, 0.6, 0.45] : [1, 0.95, 0.8];
         ca[na * 3] = col[0]; ca[na * 3 + 1] = col[1]; ca[na * 3 + 2] = col[2];
         na++;
-      } else if (kind === 'cannon') {
+      } else if (kind === 'cannon' || kind === 'boulder') {
         if (nb >= 48) continue;
-        _m.compose(_p, _q.identity(), _s.setScalar(1));
+        if (kind === 'boulder') {
+          _e.set(this.time * 5, this.time * 3, 0);
+          _q.setFromEuler(_e);
+          _m.compose(_p, _q, _s.setScalar(1.9 + p.splash * 0.3));
+        } else _m.compose(_p, _q.identity(), _s.setScalar(1));
         this.projBall.setMatrixAt(nb++, _m);
       } else {
         if (ng >= 96) continue;
@@ -1384,6 +1506,7 @@ export class BattleView {
         if (kind === 'fire' && Math.random() < 0.7) this.particles.burst(p.x, p.y, p.z, Math.random() < 0.5 ? '#ff7a1a' : '#ffb347', 1, { speed: 0.2, up: 0.5, size: 0.08, gravity: -0.5, life: 0.25, spread: 0 });
         else if (kind === 'poison' && Math.random() < 0.4) this.particles.burst(p.x, p.y, p.z, '#8be05a', 1, { speed: 0.1, up: 0.2, size: 0.05, gravity: 0.5, life: 0.3, spread: 0 });
         else if (kind === 'arcane' && Math.random() < 0.5) this.particles.burst(p.x, p.y, p.z, '#c8a6ff', 1, { speed: 0.1, up: 0.1, size: 0.05, gravity: 0, life: 0.3, spread: 0 });
+        else if (kind === 'gust' && Math.random() < 0.8) this.particles.burst(p.x, p.y, p.z, '#dff8f0', 1, { speed: 0.6, up: 0.2, size: 0.07, gravity: 0, life: 0.35, spread: 0.1 });
         cg[ng * 3] = col[0]; cg[ng * 3 + 1] = col[1]; cg[ng * 3 + 2] = col[2];
         ng++;
       }
@@ -1429,6 +1552,18 @@ export class BattleView {
         v.head.rotation.y += dt * 2;
         const pulse = 1 + v.recoil * 0.3;
         v.head.scale.setScalar(pulse);
+      } else if (t.def.id === 'mine') {
+        // The winch turns; it jolts when gold comes up.
+        v.head.rotation.z += dt * 1.5;
+        v.head.scale.setScalar(1 + v.recoil * 0.15);
+      } else if (t.def.id === 'beacon') {
+        v.head.rotation.y += dt * 0.9;
+        v.head.position.y = v.headY + Math.sin(this.time * 1.8 + t.id) * 0.05;
+        v.head.scale.setScalar(1 + Math.sin(this.time * 3 + t.id) * 0.05);
+        if (Math.random() < dt * 3) this.particles.burst(t.x, v.headY + 0.3, t.z, '#ffe08a', 1, { speed: 0.4, up: 0.8, size: 0.06, gravity: -0.3, life: 0.9 });
+      } else if (t.def.id === 'gale') {
+        // Vanes spin, faster just after a gust.
+        v.head.rotation.y += dt * (2 + v.recoil * 10);
       } else {
         v.head.rotation.y = v.aim;
         const rec = v.recoil * 0.06;
@@ -1461,6 +1596,7 @@ export class BattleView {
     this.scenery?.dispose();
     this.grass?.dispose();
     this.overgrowth?.geometry.dispose();
+    this.propsMesh?.geometry.dispose();
     for (const m of this.enemyMeshes.values()) m.dispose();
     this.particles.dispose();
     this.rings.dispose();

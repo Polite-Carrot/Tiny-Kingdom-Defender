@@ -5,6 +5,7 @@ export type AnalyticsEventName =
   | 'level_start'
   | 'achievement_unlocked'
   | 'welcome_back_shown'
+  | 'map_selected'
   | 'level_end'
   | 'wave_complete'
   | 'tower_built'

@@ -18,6 +18,7 @@ import type { MetaBonuses } from './Run';
 import { MASTERY, masteryLevelFor, masteryXpFor } from '../data/mastery';
 import { BUILDINGS, BUILDING_BY_ID, KINGDOM_BONUS, type BuildingId } from '../data/kingdom';
 import { CHALLENGE, TWISTS, TWIST_CLASH, type ChallengeDef, type TwistId } from '../data/challenge';
+import { MAP_BY_ID, type MapId } from '../data/maps';
 
 export function dayKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -100,6 +101,46 @@ export class Meta {
       towerDamage: has('blacksmith') ? KINGDOM_BONUS.blacksmithDamage : 0,
       barricadeHp: has('barracks') ? 1 + KINGDOM_BONUS.barracksHp : 1,
     };
+  }
+
+  // --- Realms (maps) ---------------------------------------------------------------
+
+  mapId(): MapId {
+    return this.d.realms.current;
+  }
+
+  mapUnlocked(id: MapId): boolean {
+    return this.bestWave() >= MAP_BY_ID[id].unlockWave;
+  }
+
+  /** Best wave reached in a realm. */
+  mapBest(id: MapId): number {
+    // Saves from before realms existed: Kingdom Vale's best is the overall best.
+    return this.d.realms.best[id] ?? (id === 'vale' ? this.bestWave() : 0);
+  }
+
+  /** The saved siege of a realm (null if never founded). */
+  mapBase(id: MapId): SaveData['base'] {
+    return id === this.mapId() ? this.d.base : this.d.realms.saved[id]?.base ?? null;
+  }
+
+  /** Moves to another realm: the current one's siege is set aside, the other's comes back. */
+  switchMap(id: MapId): boolean {
+    if (!MAP_BY_ID[id] || !this.mapUnlocked(id)) return false;
+    const r = this.d.realms;
+    if (r.current === id) return true;
+    r.best.vale ??= this.bestWave();
+    const p = this.d.progress;
+    r.saved[r.current] = { base: this.d.base, checkpointsPaid: p.checkpointsPaid, frontierSeen: p.frontierSeen };
+    const next = r.saved[id] ?? { base: null, checkpointsPaid: 0, frontierSeen: 0 };
+    delete r.saved[id];
+    this.d.base = next.base;
+    p.checkpointsPaid = next.checkpointsPaid;
+    p.frontierSeen = next.frontierSeen;
+    r.current = id;
+    this.analytics.track('map_selected', { map: id });
+    this.commit();
+    return true;
   }
 
   // --- Tower mastery --------------------------------------------------------------
@@ -333,6 +374,8 @@ export class Meta {
     const cleared = waveIndex + 1;
     this.d.stats.wavesCleared++;
     if (cleared > this.d.progress.bestWave) this.d.progress.bestWave = cleared;
+    const r = this.d.realms;
+    r.best[r.current] = Math.max(r.best[r.current] ?? 0, cleared);
     const coins = Math.round(waveCoins(waveIndex) * (this.hasBuilding('windmill') ? 1 + KINGDOM_BONUS.windmillCoins : 1));
     this.d.coins += coins;
     this.d.stats.coinsEarned += coins;

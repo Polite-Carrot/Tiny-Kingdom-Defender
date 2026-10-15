@@ -5,7 +5,7 @@ import { icon, ICONS } from './icons';
 import { towerThumb, heroThumb, thumb, enemyThumb } from './Thumbnails';
 import type { Game } from '../game/Game';
 import type { Battle } from '../game/Battle';
-import { TOWERS, TOWER_ORDER, type TowerId } from '../data/towers';
+import { TOWERS, TOWER_ORDER, isSupport, type TowerId } from '../data/towers';
 import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, xpForLevel, gearTierFor, type AbilityKind } from '../data/heroes';
 
 const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
@@ -21,6 +21,8 @@ import { TWISTS, CHALLENGE } from '../data/challenge';
 import { BUILDINGS, BUILDING_BY_ID, type BuildingId } from '../data/kingdom';
 import { MASTERY, masteryTitle } from '../data/mastery';
 import { ageTitle } from '../game/Siege';
+import { MAPS, MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
+import { GRID_SIZE } from '../data/base';
 
 // --- Helpers --------------------------------------------------------------------------
 
@@ -230,7 +232,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
           const [have, need] = meta.masteryProgress(t);
           const mastery = locked ? '' : `<div class="mastery ${ml >= MASTERY.masterLevel ? 'gold' : ml >= MASTERY.veteranLevel ? 'silver' : ''}" title="Mastery: earned by this tower type's kills">
               <span>★ ${masteryTitle(ml)} ${ml}</span><div class="mbar"><i style="width:${ml >= MASTERY.maxLevel ? 100 : Math.round((have / need) * 100)}%"></i></div>
-              <small>${ml >= MASTERY.maxLevel ? 'Mastered' : `${need - have} kills to ${ml + 1}`}</small></div>`;
+              <small>${ml >= MASTERY.maxLevel ? 'Mastered' : `${need - have} ${isSupport(t) ? 'XP' : 'kills'} to ${ml + 1}`}</small></div>`;
           return `<div class="list-item"><div class="thumb"><img src="${towerThumb(t, Math.min(10, 1 + Math.floor(lvl / 2)))}" alt=""/></div>
             <div class="body"><div class="name">${def.name} ${locked ? icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px;display:inline-block"') : `<span class="muted">Lv ${lvl}</span>`}</div>
             <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : `+${Math.round(lvl * TOWER_META.damagePerLevel * 100)}% damage · +${Math.round(lvl * TOWER_META.rangePerLevel * 100)}% range${ml ? ` · mastery +${Math.round(ml * MASTERY.damagePerLevel * 100)}% damage` : ''}`}</div>
@@ -936,4 +938,41 @@ export function welcomeBack(game: Game, info: NonNullable<ReturnType<Game['s']['
       }, 250);
     }));
   }, { closable: false, onClose: () => refreshCoins(game) });
+}
+
+// --- Realms (maps) ------------------------------------------------------------------------------
+
+/** A tiny top-down sketch of a realm's roads and castle. */
+function mapSketch(def: MapDef): string {
+  const N = GRID_SIZE + 2;
+  const s = (v: number) => ((v + 1) / N) * 100;
+  const lines = def.roads.map((r, i) => `<polyline points="${r.points.map(([c, rr]) => `${s(c) + 3.3},${s(rr) + 3.3}`).join(' ')}" fill="none" stroke="${i === 0 ? '#c9a66b' : '#8f8070'}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" ${i ? 'stroke-dasharray="4 4"' : ''}/>`).join('');
+  const [cc, cr] = def.roads[0].points[def.roads[0].points.length - 1];
+  return `<svg viewBox="0 0 100 100" class="map-sketch"><rect x="3" y="3" width="94" height="94" rx="10" fill="#7bbf5a"/>${lines}<rect x="${s(cc) - 1.5}" y="${s(cr) - 1.5}" width="10" height="10" rx="2" fill="#e8e0d0" stroke="#5a4a3a" stroke-width="2"/></svg>`;
+}
+
+export function realms(game: Game): void {
+  const { meta } = game.s;
+  game.s.ui.modal((m, h) => {
+    const cur = meta.mapId();
+    const rows = MAPS.map((def) => {
+      const open = meta.mapUnlocked(def.id);
+      const here = def.id === cur;
+      const base = meta.mapBase(def.id);
+      const status = here ? 'Current realm' : base ? `Wave ${base.wave + 1} · best ${meta.mapBest(def.id)}` : open ? 'Not yet founded' : `Reach wave ${def.unlockWave} anywhere`;
+      const btn = here ? `<button class="btn small gold disabled" disabled>Here</button>`
+        : !open ? `<button class="btn small disabled" disabled>${icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px"')} W${def.unlockWave}</button>`
+        : `<button class="btn small" data-map="${def.id}">${base ? 'Go' : 'Found'}</button>`;
+      return `<div class="list-item realm ${here ? 'built' : ''} ${open ? '' : 'locked-row'}"><div class="thumb">${mapSketch(def)}</div>
+        <div class="body"><div class="name">${def.icon} ${def.name}</div><div class="desc">${def.description}</div><div class="desc" style="font-weight:900">${status}</div></div>${btn}</div>`;
+    }).join('');
+    m.innerHTML = `<div class="ribbon">${icon('map')} Realms</div>
+      <div class="muted" style="text-align:center;margin:-4px 0 8px">Each realm is its own kingdom with its own roads, towers and best wave. Your upgrades, heroes, mastery and town come with you.</div>
+      <div class="list">${rows}</div>`;
+    m.querySelectorAll<HTMLButtonElement>('[data-map]').forEach((b) => (b.onclick = () => {
+      h.close();
+      game.switchMap(b.dataset.map as MapId);
+      game.s.ui.toast(`Welcome to ${MAP_BY_ID[b.dataset.map as MapId].name}!`);
+    }));
+  });
 }

@@ -3,17 +3,17 @@
 
 import { ENEMIES, ENEMY_RULES, ELITES, ELITE_RULES, type EnemyDef, type EnemyId, type EliteTrait } from '../data/enemies';
 import {
-  TOWERS, TOWER_RULES, MAX_LEVEL, BRANCH_TIER, towerStats, totalInvested, upgradeCost,
+  TOWERS, TOWER_RULES, MAX_LEVEL, BRANCH_TIER, towerStats, totalInvested, upgradeCost, isSupport,
   type TowerDef, type TowerId, type TowerStats, type TargetMode, type DamageType,
 } from '../data/towers';
 import { HEROES, REINFORCEMENT, HERO_LEVELS, type HeroDef, type HeroId } from '../data/heroes';
 import { TOWER_META, AD_REWARDS, BATTLEMENTS } from '../data/economy';
-import { SIEGE, ROADS, BARRICADE } from '../data/base';
+import { SIEGE, BARRICADE } from '../data/base';
 import { Emitter } from '../core/Emitter';
 import { Random } from '../core/Random';
 import { tileToWorld, type LevelMap, type PathPoint } from './LevelMap';
 import { SYNERGIES, SYNERGY_RANGE, type SynergyId } from '../data/synergies';
-import { kingdomMap, siegeWave, clearLandCost, checkpointOf, ageOf, initialSpots, hpMultFor, goldScaleAt, openRoads } from './Siege';
+import { kingdomMap, siegeWave, clearLandCost, checkpointOf, ageOf, initialSpots, hpMultFor, goldScaleAt, openRoads, nightOf, activeRoads } from './Siege';
 import type { WaveDef } from './WaveComposer';
 import { MASTERY } from '../data/mastery';
 import type { ChallengeMods } from '../data/challenge';
@@ -170,16 +170,18 @@ export interface Tower {
   /** Active synergies and the towers they link to. */
   synergies: SynergyId[];
   partners: number[];
+  /** The Beacon lighting this tower up (-1 = none). */
+  buffedBy: number;
 }
 
 const DOT_TICK = 0.5;
 const BOLT_HIT_RADIUS = 0.38;
 /** Projectile each tower type fires. */
 const PROJECTILE_OF: Partial<Record<TowerId, ProjectileKind>> = {
-  cannon: 'cannon', frost: 'frost', mage: 'arcane', ballista: 'bolt', flame: 'fire', alchemist: 'poison',
+  cannon: 'cannon', frost: 'frost', mage: 'arcane', ballista: 'bolt', flame: 'fire', alchemist: 'poison', catapult: 'boulder', gale: 'gust',
 };
 
-export type ProjectileKind = 'arrow' | 'cannon' | 'frost' | 'arcane' | 'bolt' | 'fire' | 'poison' | 'heroArrow' | 'heroBolt' | 'champion';
+export type ProjectileKind = 'arrow' | 'cannon' | 'frost' | 'arcane' | 'bolt' | 'fire' | 'poison' | 'boulder' | 'gust' | 'heroArrow' | 'heroBolt' | 'champion';
 
 export interface Projectile {
   id: number;
@@ -209,6 +211,7 @@ export interface Projectile {
   pierced: number[];
   dot: number;
   dotDuration: number;
+  knockback: number;
 }
 
 export interface Hero {
@@ -299,6 +302,8 @@ export type RunEvents = {
   landCleared: { spot: number; cost: number };
   goldRush: { waves: number };
   earlyCall: { gold: number };
+  /** A Gold Mine paid out at the end of a wave. */
+  mineGold: { tower: Tower; gold: number };
 };
 
 interface SpawnEntry {
@@ -380,7 +385,7 @@ export class Run {
       this.unlockedSpots.add(st.spot);
       this.towers.push({
         id: this.nextId++, def, spot: st.spot, x: s.x, z: s.z, tier, branch, stats: this.computeStats(def, tier, branch),
-        cooldown: 0.2, targetMode: st.mode ?? TOWER_RULES.defaultTargetMode, invested: totalInvested(def, tier), kills: st.kills ?? 0, aim: 0, lastFire: -10, frozen: 0, synergies: [], partners: [],
+        cooldown: 0.2, targetMode: st.mode ?? TOWER_RULES.defaultTargetMode, invested: totalInvested(def, tier), kills: st.kills ?? 0, aim: 0, lastFire: -10, frozen: 0, synergies: [], partners: [], buffedBy: -1,
       });
     }
     this.refreshSynergies(true);
@@ -524,6 +529,7 @@ export class Run {
     return {
       ...base,
       damage: base.damage * dmg,
+      income: base.income * (1 + lvl * TOWER_META.damagePerLevel) * (1 + mastery * MASTERY.damagePerLevel),
       range: base.range * (1 + lvl * TOWER_META.rangePerLevel) * (mastery >= MASTERY.veteranLevel ? 1 + MASTERY.veteranRange : 1),
       cooldown: base.cooldown * (mastery >= MASTERY.masterLevel ? MASTERY.masterCooldown : 1),
     };
@@ -552,7 +558,7 @@ export class Run {
     this.addGold(-def.cost);
     const t: Tower = {
       id: this.nextId++, def, spot, x: s.x, z: s.z, tier: 1, branch: -1, stats: this.computeStats(def, 1, -1),
-      cooldown: 0.2, targetMode: TOWER_RULES.defaultTargetMode, invested: def.cost, kills: 0, aim: 0, lastFire: -10, frozen: 0, synergies: [], partners: [],
+      cooldown: 0.2, targetMode: TOWER_RULES.defaultTargetMode, invested: def.cost, kills: 0, aim: 0, lastFire: -10, frozen: 0, synergies: [], partners: [], buffedBy: -1,
     };
     this.towers.push(t);
     this.stats.towersBuilt++;
@@ -624,9 +630,32 @@ export class Run {
           else st.splash += 0.3;
         } else if (id === 'arcaneStorm') {
           st.damage *= 1.2;
+        } else if (id === 'rockslide') {
+          if (t.def.id === 'catapult') st.splash += 0.35;
+          else st.knockback *= 1.3;
+        } else if (id === 'firestorm') {
+          if (t.def.id === 'flame') st.range += 0.6;
+          else if (st.dot === 0) {
+            st.dot = 0.5;
+            st.dotDuration = 2;
+          }
         }
       }
       t.stats = st;
+    }
+    // Beacons light up every attacking tower in range (the strongest beacon counts).
+    for (const t of this.towers) {
+      t.buffedBy = -1;
+      if (isSupport(t.def.id)) continue;
+      let best: Tower | null = null;
+      for (const b of this.towers) {
+        if (b.def.id !== 'beacon' || (b.x - t.x) ** 2 + (b.z - t.z) ** 2 > b.stats.range * b.stats.range) continue;
+        if (!best || b.stats.buff > best.stats.buff) best = b;
+      }
+      if (!best) continue;
+      t.buffedBy = best.id;
+      t.stats.damage *= 1 + best.stats.buff;
+      if (best.stats.haste > 0) t.stats.cooldown *= 1 - best.stats.haste;
     }
   }
 
@@ -947,7 +976,7 @@ export class Run {
     if (!wave) return;
     if (this.holdingFor >= 0) return;
     const newAge = n > 0 && n % SIEGE.ageEvery === 0;
-    const roads = ROADS.map((r, i) => (r.openWave === n && n > 0 ? i : -1)).filter((i) => i >= 0);
+    const roads = activeRoads().map((r, i) => (r.openWave === n && n > 0 ? i : -1)).filter((i) => i >= 0);
     if (newAge && this.announcedWave !== n) {
       // The new Age arrives before its first wave, so the world changes while the player gets ready.
       this.announcedWave = n;
@@ -1240,6 +1269,12 @@ export class Run {
         this.waveRemaining.delete(w);
         const gold = Math.round((SIEGE.waveClearBase + SIEGE.waveClearPerWave * w) * goldScaleAt(w));
         this.addGold(gold);
+        for (const t of this.towers) {
+          if (t.stats.income <= 0) continue;
+          const g = Math.round(t.stats.income * goldScaleAt(w));
+          this.addGold(g);
+          this.events.emit('mineGold', { tower: t, gold: g });
+        }
         this.events.emit('waveCleared', { index: w, gold });
         if ((w + 1) % SIEGE.checkpointEvery === 0 && w + 1 > this.lastCheckpoint) {
           this.lastCheckpoint = w + 1;
@@ -1308,7 +1343,14 @@ export class Run {
     }
     e.flash = 0.6; // death animation timer (counts down to -1 before reuse)
     const rush = this.goldRushWaves > 0 ? SIEGE.goldRushMult : 1;
-    const bounty = reward ? Math.round(e.def.bounty * e.bountyMult * rush * goldScaleAt(e.wave) * (1 + this.config.meta.goldBonus)) : 0;
+    let prospect = 0;
+    if (reward) {
+      for (const t of this.towers) {
+        if (t.stats.goldAura > 0 && (t.x - e.x) ** 2 + (t.z - e.z) ** 2 <= t.stats.range * t.stats.range) prospect = Math.max(prospect, t.stats.goldAura);
+      }
+    }
+    const night = nightOf(e.wave) >= 1 ? 1 + SIEGE.nightGold : 1;
+    const bounty = reward ? Math.round(e.def.bounty * e.bountyMult * rush * night * goldScaleAt(e.wave) * (1 + this.config.meta.goldBonus) * (1 + prospect)) : 0;
     if (reward) {
       this.stats.kills++;
       if (e.def.flying) this.stats.flyingKills++;
@@ -1348,6 +1390,7 @@ export class Run {
         t.frozen -= dt;
         continue;
       }
+      if (isSupport(t.def.id)) continue;
       t.cooldown -= dt;
       if (t.cooldown > 0) continue;
       const st = t.stats;
@@ -1428,7 +1471,7 @@ export class Run {
     const y = t.def.id === 'ballista' ? 0.8 + t.tier * 0.05 : t.def.id === 'flame' ? 0.9 + t.tier * 0.06 : 1.25 + t.tier * 0.12;
     this.launch(kind, t.x, y, t.z, target, st.projectileSpeed, st.damage, t.def.damageType, st.splash, t.id, {
       slowFactor: st.slowFactor, slowDuration: st.slowDuration, stun: st.stun, freezeChance: st.freezeChance, shred: st.shred,
-      hitsAir: t.def.hitsAir, hitsGround: t.def.hitsGround, pierce: st.pierce, dot: st.dot, dotDuration: st.dotDuration,
+      hitsAir: t.def.hitsAir, hitsGround: t.def.hitsGround, pierce: st.pierce, dot: st.dot, dotDuration: st.dotDuration, knockback: st.knockback,
     });
     if (st.pierce > 0) {
       // Bolts fly in a straight line through the target and on to the edge of the range.
@@ -1447,7 +1490,7 @@ export class Run {
   ): void {
     const p = this.allocProjectile();
     this.lastLaunched = this.projectiles.indexOf(p);
-    const arc = kind === 'cannon' || kind === 'poison';
+    const arc = kind === 'cannon' || kind === 'poison' || kind === 'boulder';
     // Lead the target for arcing shots.
     let tx = target.x;
     let tz = target.z;
@@ -1463,7 +1506,7 @@ export class Run {
     Object.assign(p, {
       id: this.nextId++, active: true, kind, x, y, z, sx: x, sy: y, sz: z, tx, tz, targetId: target.id, speed, t: 0, duration,
       damage, damageType: type, splash, slowFactor: 1, slowDuration: 0, stun: 0, freezeChance: 0, shred: 0, hitsAir: true, hitsGround: true,
-      towerId, arc, pierce: 0, pierced: [], dot: 0, dotDuration: 0, ...extra,
+      towerId, arc, pierce: 0, pierced: [], dot: 0, dotDuration: 0, knockback: 0, ...extra,
     } satisfies Partial<Projectile>);
   }
 
@@ -1518,6 +1561,7 @@ export class Run {
       // Shatter: frozen or slowed enemies take extra cannon damage.
       if (tower?.synergies.includes('shatter') && tower.def.id === 'cannon' && (e.slowFactor < 1 || e.stunTimer > 0)) dmg *= 1.4;
       this.damage(e, dmg, p.damageType);
+      if (p.knockback > 0 && e.alive) this.knockBack(e, p.knockback);
       if (wasAlive && !e.alive && tower) tower.kills++;
       if (wasAlive && !e.alive && p.towerId === -1 && (p.kind === 'heroArrow' || p.kind === 'heroBolt')) this.events.emit('heroKill', e);
     };
@@ -1566,6 +1610,14 @@ export class Run {
       if (--p.pierce <= 0) break;
     }
     if (p.pierce <= 0 || d <= step + 1e-4) p.active = false;
+  }
+
+  /** Blows an enemy back along its road (bosses barely budge; unstoppable elites not at all). */
+  private knockBack(e: Enemy, tiles: number): void {
+    if (e.elite === 'unstoppable') return;
+    const k = tiles * (e.def.boss ? 0.25 : 1);
+    e.dist = Math.max(0, e.dist - k);
+    this.placeEnemy(e);
   }
 
   private applyDot(e: Enemy, dps: number, duration: number, type: DamageType, kind: 'burn' | 'poison', towerId: number): void {

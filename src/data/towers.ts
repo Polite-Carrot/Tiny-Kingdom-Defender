@@ -1,7 +1,7 @@
 // Tower balance data. Towers have 10 tiers; each tier is a new building material.
 // Distances are in tiles (1 tile = 1 world unit). Times are in seconds.
 
-export type TowerId = 'archer' | 'cannon' | 'frost' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist';
+export type TowerId = 'archer' | 'cannon' | 'frost' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist' | 'catapult' | 'gale' | 'mine' | 'beacon';
 export type DamageType = 'physical' | 'magic';
 export type TargetMode = 'first' | 'strongest' | 'closest';
 
@@ -35,6 +35,16 @@ export interface TowerStats {
   /** Damage over time: per second, as a fraction of the hit damage, for dotDuration seconds. */
   dot: number;
   dotDuration: number;
+  /** Tiles each hit pushes an enemy back along its road (Storm Shrine). */
+  knockback: number;
+  /** Gold paid at the end of every wave (Gold Mine). */
+  income: number;
+  /** Extra gold from enemies that die within range (Prospector mine). */
+  goldAura: number;
+  /** Damage bonus given to every tower in range (Beacon). */
+  buff: number;
+  /** Faster firing given to towers in range (Haste beacon), 0.15 = 15%. */
+  haste: number;
 }
 
 /** How stats grow with each tier above 1. */
@@ -116,7 +126,8 @@ export const TIER_MATERIALS: TierMaterial[] = [
 
 const base = (o: Partial<TowerStats>): TowerStats => ({
   damage: 0, range: 0, cooldown: 1, splash: 0, projectileSpeed: 0, slowFactor: 1, slowDuration: 0,
-  chains: 0, chainRange: 0, multishot: 1, stun: 0, freezeChance: 0, shred: 0, aura: false, pierce: 0, dot: 0, dotDuration: 0, ...o,
+  chains: 0, chainRange: 0, multishot: 1, stun: 0, freezeChance: 0, shred: 0, aura: false, pierce: 0, dot: 0, dotDuration: 0,
+  knockback: 0, income: 0, goldAura: 0, buff: 0, haste: 0, ...o,
 });
 
 export const TOWERS: Record<TowerId, TowerDef> = {
@@ -208,9 +219,57 @@ export const TOWERS: Record<TowerId, TowerDef> = {
       { id: 'corrosive', name: 'Corrosive', description: 'Strips armor and slows.', damageMult: 1.3, set: { shred: 0.45, slowFactor: 0.75, slowDuration: 2 } },
     ],
   },
+  mine: {
+    id: 'mine', name: 'Gold Mine', role: 'No attack. Digs up gold at the end of every wave.', cost: 150,
+    damageType: 'physical', hitsAir: false, hitsGround: false, color: '#f2c94c',
+    base: base({ range: 2.2, income: 14 }),
+    growth: { damage: 1, range: 0.06, rangeMax: 0.6, cooldown: 1, splash: 0, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 110,
+    branches: [
+      { id: 'deepshaft', name: 'Deep Shaft', description: 'Digs far deeper: 60% more gold every wave.', damageMult: 1 },
+      { id: 'prospector', name: 'Prospector', description: 'Enemies that fall nearby drop 30% more gold.', damageMult: 1, rangeAdd: 0.4, set: { goldAura: 0.3 } },
+    ],
+  },
+  catapult: {
+    id: 'catapult', name: 'Catapult', role: 'Very long range. Hurls boulders that crush crowds. Ground only.', cost: 160,
+    damageType: 'physical', hitsAir: false, hitsGround: true, color: '#a08a6a',
+    base: base({ damage: 38, range: 3.9, cooldown: 3.1, splash: 1.25, projectileSpeed: 5 }),
+    growth: { damage: 1.42, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0.06, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 120,
+    branches: [
+      { id: 'trebuchet', name: 'Trebuchet', description: 'Hurls from across the map. Huge boulders.', damageMult: 2.3, rangeAdd: 1.4, cooldownMult: 1.25, splashAdd: 0.3 },
+      { id: 'firepot', name: 'Firepots', description: 'Flaming pots set whole crowds burning.', damageMult: 1.3, splashAdd: 0.4, set: { dot: 0.5, dotDuration: 3 } },
+    ],
+  },
+  gale: {
+    id: 'gale', name: 'Storm Shrine', role: 'Gusts of wind blow enemies back down the road.', cost: 135,
+    damageType: 'magic', hitsAir: true, hitsGround: true, color: '#9fe3d0',
+    base: base({ damage: 6, range: 2.6, cooldown: 1.7, splash: 0.55, projectileSpeed: 13, knockback: 0.7 }),
+    growth: { damage: 1.4, range: 0.1, rangeMax: 1.0, cooldown: 0.97, splash: 0.03, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 100,
+    branches: [
+      { id: 'tempest', name: 'Tempest', description: 'Wider gusts that hurl enemies much further back.', damageMult: 1.4, splashAdd: 0.4 },
+      { id: 'cyclone', name: 'Cyclone', description: 'Three whirlwinds at once.', damageMult: 0.9, cooldownMult: 0.85, set: { multishot: 3 } },
+    ],
+  },
+  beacon: {
+    id: 'beacon', name: 'Beacon', role: 'No attack. Its light makes nearby towers hit harder.', cost: 175,
+    damageType: 'magic', hitsAir: false, hitsGround: false, color: '#ffe08a',
+    base: base({ range: 2.2, buff: 0.15 }),
+    growth: { damage: 1, range: 0.08, rangeMax: 0.8, cooldown: 1, splash: 0, slow: 0, slowMin: 1, chainsEvery: 0 },
+    firstUpgrade: 130,
+    branches: [
+      { id: 'rally', name: 'War Banner', description: 'Its bonus to nearby towers is half again as big.', damageMult: 1 },
+      { id: 'haste', name: 'Sunfire', description: 'Nearby towers also fire 15% faster.', damageMult: 1, set: { haste: 0.15 } },
+    ],
+  },
 };
 
-export const TOWER_ORDER: TowerId[] = ['archer', 'cannon', 'frost', 'mage', 'ballista', 'lightning', 'flame', 'alchemist'];
+/** Towers that never attack (economy and support). */
+export const SUPPORT_TOWERS: TowerId[] = ['mine', 'beacon'];
+export const isSupport = (id: TowerId) => SUPPORT_TOWERS.includes(id);
+
+export const TOWER_ORDER: TowerId[] = ['archer', 'cannon', 'frost', 'mage', 'ballista', 'lightning', 'mine', 'flame', 'catapult', 'gale', 'beacon', 'alchemist'];
 
 export const TOWER_RULES = {
   sellRefund: 0.7,
@@ -237,6 +296,9 @@ export function towerStats(def: TowerDef, tier: number, branch: number): TowerSt
   if (s.splash > 0) s.splash += g.splash * k;
   if (s.slowFactor < 1) s.slowFactor = Math.max(g.slowMin, def.base.slowFactor - g.slow * k);
   if (g.chainsEvery > 0) s.chains += Math.floor(k / g.chainsEvery);
+  if (s.knockback > 0) s.knockback += 0.05 * k;
+  if (s.income > 0) s.income = def.base.income * Math.pow(1.38, k) * Math.pow(STAR_DAMAGE, starsOf(tier));
+  if (s.buff > 0) s.buff += 0.02 * k + 0.01 * starsOf(tier);
   if (tier > BRANCH_TIER && branch >= 0) {
     const b = def.branches[branch];
     s.damage *= b.damageMult;
@@ -245,6 +307,9 @@ export function towerStats(def: TowerDef, tier: number, branch: number): TowerSt
     s.splash += b.splashAdd ?? 0;
     if (b.id === 'storm') s.chains += 4;
     if (b.id === 'tesla') s.chains = 2;
+    if (b.id === 'tempest') s.knockback *= 1.8;
+    if (b.id === 'deepshaft') s.income *= 1.6;
+    if (b.id === 'rally') s.buff *= 1.5;
     Object.assign(s, b.set ?? {});
   }
   return s;

@@ -1,19 +1,38 @@
 // The endless siege on your persistent kingdom: map, Ages, roads, waves, checkpoints, land.
 
-import { ROADS, LAND, SIEGE, SIEGE_COINS, WAVE_COMPOSER } from '../data/base';
+import { LAND, SIEGE, SIEGE_COINS, WAVE_COMPOSER, type Road } from '../data/base';
+import { MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
 import { THEMES, ageName, type Theme } from '../data/themes';
 import { BOSS_BY_CHAPTER } from '../data/enemies';
 import { Random, hashString } from '../core/Random';
 import { LevelMap } from './LevelMap';
 import { composeWave, type WaveDef } from './WaveComposer';
 
-const MAP_SEED = hashString('tiny-kingdom');
+let active: MapDef = MAP_BY_ID.vale;
+const mapCache = new Map<MapId, LevelMap>();
 
-let mapCache: LevelMap | null = null;
-/** The single kingdom map (deterministic). */
-export function kingdomMap(): LevelMap {
-  if (!mapCache) mapCache = new LevelMap(ROADS.map((r) => r.points), LAND.totalSpots, MAP_SEED);
-  return mapCache;
+/** Chooses the realm the siege functions below work on. */
+export function setActiveMap(id: MapId): void {
+  active = MAP_BY_ID[id] ?? MAP_BY_ID.vale;
+}
+
+export function activeMap(): MapDef {
+  return active;
+}
+
+export function activeRoads(): Road[] {
+  return active.roads;
+}
+
+/** The active realm's map (deterministic). Kingdom Vale keeps its original seed. */
+export function kingdomMap(id: MapId = active.id): LevelMap {
+  let m = mapCache.get(id);
+  if (!m) {
+    const def = MAP_BY_ID[id];
+    m = new LevelMap(def.roads.map((r) => r.points), LAND.totalSpots, hashString(id === 'vale' ? 'tiny-kingdom' : `tiny-kingdom-${id}`));
+    mapCache.set(id, m);
+  }
+  return m;
 }
 
 export const ageOf = (wave: number) => Math.floor(wave / SIEGE.ageEvery);
@@ -23,7 +42,16 @@ export const checkpointOf = (wave: number) => Math.floor(wave / SIEGE.checkpoint
 
 /** Roads open to enemies at a wave. */
 export function openRoads(wave: number): number[] {
-  return ROADS.map((r, i) => (r.openWave <= wave ? i : -1)).filter((i) => i >= 0);
+  return active.roads.map((r, i) => (r.openWave <= wave ? i : -1)).filter((i) => i >= 0);
+}
+
+/**
+ * Time of day for a wave: each 10-wave stretch starts at dawn, dusk falls on its 7th wave and
+ * its last three waves (boss included) are fought at night. 0 = day, 0.5 = dusk, 1 = night.
+ */
+export function nightOf(wave: number): number {
+  const m = ((wave % SIEGE.checkpointEvery) + SIEGE.checkpointEvery) % SIEGE.checkpointEvery;
+  return m >= SIEGE.nightFrom ? 1 : m === SIEGE.nightFrom - 1 ? 0.5 : 0;
 }
 
 export function isBossWave(wave: number): boolean {
@@ -40,12 +68,13 @@ export function hpMultFor(wave: number): number {
   return (1 + SIEGE.hpLinear * wave) * Math.pow(SIEGE.hpExp, wave);
 }
 
-const waveCache = new Map<number, WaveDef>();
+const waveCache = new Map<string, WaveDef>();
 /** Wave n (0-based). Deterministic, so a replayed wave is the same wave. */
 export function siegeWave(n: number): WaveDef {
-  const cached = waveCache.get(n);
+  const key = `${active.id}-${n}`;
+  const cached = waveCache.get(key);
   if (cached) return cached;
-  const rng = new Random(hashString(`wave-${n}`));
+  const rng = new Random(hashString(active.id === 'vale' ? `wave-${n}` : `wave-${active.id}-${n}`));
   const roads = openRoads(n);
   const hp = hpMultFor(n);
   const boss = isBossWave(n) ? BOSS_BY_CHAPTER[Math.floor(n / SIEGE.bossEvery) % BOSS_BY_CHAPTER.length] : undefined;
@@ -72,18 +101,21 @@ export function siegeWave(n: number): WaveDef {
     if (wave.bossHp) wave.bossHp /= f; // the boss itself was not multiplied
   }
   if (waveCache.size > 400) waveCache.clear();
-  waveCache.set(n, wave);
+  waveCache.set(key, wave);
   return wave;
 }
 
 /** Gold to clear land for one more build pad. */
 export function clearLandCost(padsCleared: number): number {
-  return Math.round((LAND.clearBase * Math.pow(LAND.clearGrowth, padsCleared)) / 5) * 5;
+  const steep = Math.min(padsCleared, LAND.clearSoftCap);
+  const gentle = 1 + LAND.clearAfterCap * Math.max(0, padsCleared - LAND.clearSoftCap);
+  return Math.round((LAND.clearBase * Math.pow(LAND.clearGrowth, steep) * gentle) / 5) * 5;
 }
 
 /** Pads usable when a new kingdom is founded: the best-covering pads of the first road. */
 export function initialSpots(map = kingdomMap()): number[] {
   return map.buildSpots
+    .filter((s) => map.isClassic(s.index))
     .map((s) => ({ i: s.index, v: map.spotCoverage(s, 0) }))
     .sort((a, b) => b.v - a.v)
     .slice(0, LAND.initialSpots)
