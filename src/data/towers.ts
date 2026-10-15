@@ -255,7 +255,7 @@ export const TOWERS: Record<TowerId, TowerDef> = {
   beacon: {
     id: 'beacon', name: 'Beacon', role: 'No attack. Its light makes nearby towers hit harder.', cost: 175,
     damageType: 'magic', hitsAir: false, hitsGround: false, color: '#ffe08a',
-    base: base({ range: 2.2, buff: 0.15 }),
+    base: base({ range: 2.2, buff: 0.12 }),
     growth: { damage: 1, range: 0.08, rangeMax: 0.8, cooldown: 1, splash: 0, slow: 0, slowMin: 1, chainsEvery: 0 },
     firstUpgrade: 130,
     branches: [
@@ -297,7 +297,7 @@ export function towerStats(def: TowerDef, tier: number, branch: number): TowerSt
   if (s.slowFactor < 1) s.slowFactor = Math.max(g.slowMin, def.base.slowFactor - g.slow * k);
   if (g.chainsEvery > 0) s.chains += Math.floor(k / g.chainsEvery);
   if (s.knockback > 0) s.knockback += 0.05 * k;
-  if (s.income > 0) s.income = def.base.income * Math.pow(1.38, k) * Math.pow(STAR_DAMAGE, starsOf(tier));
+  if (s.income > 0) s.income = def.base.income * Math.pow(1.32, k) * Math.pow(STAR_DAMAGE, starsOf(tier));
   if (s.buff > 0) s.buff += 0.02 * k + 0.01 * starsOf(tier);
   if (tier > BRANCH_TIER && branch >= 0) {
     const b = def.branches[branch];
