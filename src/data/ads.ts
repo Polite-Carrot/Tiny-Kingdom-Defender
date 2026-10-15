@@ -5,7 +5,8 @@ export type RewardedPlacement =
   | 'revive'
   | 'treasury_double'
   | 'chest_skip'
-  | 'shop_bundle';
+  | 'shop_bundle'
+  | 'welcome_triple';
 
 export const REWARDED_PLACEMENTS: Record<RewardedPlacement, { label: string }> = {
   checkpoint_double: { label: 'Double checkpoint coins' },
@@ -13,6 +14,7 @@ export const REWARDED_PLACEMENTS: Record<RewardedPlacement, { label: string }> =
   treasury_double: { label: 'Double treasury' },
   chest_skip: { label: 'Open chest now' },
   shop_bundle: { label: 'Free coin bundle' },
+  welcome_triple: { label: 'Triple treasury (welcome back)' },
 };
 
 export const INTERSTITIAL_RULES = {

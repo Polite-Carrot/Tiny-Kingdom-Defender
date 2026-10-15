@@ -1264,3 +1264,173 @@ export function propModel(type: PropType): THREE.BufferGeometry {
     return b.build();
   });
 }
+
+/**
+ * Tower mastery marks, standing on the tower's plinth: rank 1 (Veteran) a silver pennant on a
+ * pole, rank 2 (Master) a gold banner, a gold ring round the plinth and a little crown.
+ */
+export function masteryModel(rank: number): THREE.BufferGeometry {
+  return cached(`mastery-${rank}`, () => {
+    const b = new ModelBuilder();
+    const metal = rank >= 2 ? '#f2cf5b' : '#dfe5ec';
+    const cloth = rank >= 2 ? '#c23a4a' : '#3f6fd1';
+    // Pole at the back-left of the plinth with a swallow-tailed pennant.
+    const px = -0.36, pz = -0.3;
+    b.cyl(0.018, 0.022, 0.95, 5, '#5a3a22', { x: px, y: 0.5, z: pz });
+    b.octa(0.04, metal, { x: px, y: 1.0, z: pz, sy: 1.4 });
+    b.box(0.26, 0.15, 0.015, cloth, { x: px + 0.14, y: 0.86, z: pz });
+    b.box(0.26, 0.022, 0.018, metal, { x: px + 0.14, y: 0.79, z: pz });
+    b.cone(0.06, 0.1, 3, cloth, { x: px + 0.28, y: 0.86, z: pz, rz: -Math.PI / 2, sx: 0.15 });
+    if (rank >= 2) {
+      b.torus(0.47, 0.022, 4, 20, metal, { y: 0.17, rx: Math.PI / 2 });
+      // A small crown resting on the pennant pole's tip.
+      b.cyl(0.07, 0.065, 0.05, 8, metal, { x: px, y: 1.1, z: pz });
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        b.cone(0.022, 0.06, 4, metal, { x: px + Math.cos(a) * 0.06, y: 1.15, z: pz + Math.sin(a) * 0.06 });
+      }
+      b.octa(0.022, '#ff5a6a', { x: px, y: 1.12, z: pz + 0.07 });
+    }
+    return b.build();
+  });
+}
+
+// --- Kingdom buildings (on the land beyond the moat) ---------------------------------------
+
+/** A 45° gable roof along X over walls `w` deep, ridge at y = top + w/2. */
+function gable(b: ModelBuilder, len: number, w: number, top: number, color: THREE.ColorRepresentation, o: { x?: number; z?: number; ry?: number } = {}) {
+  const a = (w / 2 + 0.07) * Math.SQRT2;
+  b.box(len + 0.12, a, a, color, { x: o.x ?? 0, y: top, z: o.z ?? 0, rx: Math.PI / 4, ry: o.ry ?? 0 });
+}
+
+/** Mullioned window, facing +Z on a wall at z. */
+function windowAt(b: ModelBuilder, x: number, y: number, z: number, glow = false) {
+  b.box(0.13, 0.17, 0.02, glow ? glowC('#ffcf6a', 1.4) : '#2b2f3a', { x, y, z });
+  b.box(0.16, 0.025, 0.035, '#e8dcc0', { x, y: y - 0.1, z });
+}
+
+/**
+ * Building `id` for the kingdom around the castle. Footprint about 1.6 × 1.6, front faces +Z,
+ * sitting on a stone foundation that runs down into the ground. `snow` adds snow on the roofs.
+ * The windmill's sails are separate (windmillSails) so they can turn.
+ */
+export function buildingModel(id: string, snow = false): THREE.BufferGeometry {
+  return cached(`bld-${id}-${snow}`, () => {
+    const b = new ModelBuilder();
+    const roofC = (c: string) => (snow ? new THREE.Color(c).lerp(new THREE.Color('#f4f8fb'), 0.7) : c);
+    const found = (w: number, d: number) => b.box(w, 0.5, d, '#aaa496', { y: -0.2 });
+    if (id === 'farm') {
+      found(1.6, 1.3);
+      b.box(1.1, 0.55, 0.8, '#c8553a', { x: -0.2, y: 0.33 });
+      b.box(0.36, 0.42, 0.03, '#f3ead6', { x: -0.2, y: 0.27, z: 0.41 });
+      b.box(0.03, 0.42, 0.03, '#f3ead6', { x: -0.2, y: 0.27, z: 0.42, rz: 0.75 });
+      b.box(0.03, 0.42, 0.03, '#f3ead6', { x: -0.2, y: 0.27, z: 0.42, rz: -0.75 });
+      gable(b, 1.1, 0.8, 0.6, roofC('#8a5a3a'), { x: -0.2 });
+      b.box(0.12, 0.1, 0.03, '#f3ead6', { x: -0.2, y: 0.82, z: 0.41 });
+      // Silo and hay.
+      b.cyl(0.2, 0.2, 0.9, 10, '#c8c0b0', { x: 0.55, y: 0.45, z: -0.15 });
+      b.ball(0.2, 1, roofC('#7a5a3a'), { x: 0.55, y: 0.9, z: -0.15, sy: 0.7 });
+      for (const [hx, hz] of [[0.5, 0.42], [0.72, 0.38], [0.6, 0.55]]) b.cyl(0.11, 0.11, 0.16, 8, snow ? '#e8e4d0' : '#e2c35a', { x: hx, y: 0.14, z: hz, rx: Math.PI / 2 });
+      // Fence and a crop patch.
+      for (let i = 0; i < 6; i++) b.box(0.03, 0.18, 0.03, WOOD, { x: -0.8 + i * 0.16, y: 0.09, z: 0.62 });
+      b.box(0.85, 0.025, 0.025, WOOD, { x: -0.4, y: 0.14, z: 0.62 });
+      for (let r = 0; r < 3; r++) b.box(0.6, 0.06, 0.08, snow ? '#e8eef2' : '#6a9a3a', { x: -0.35, y: 0.04, z: -0.5 + (r - 1) * 0.12 });
+    } else if (id === 'blacksmith') {
+      found(1.2, 1.25);
+      b.box(1.0, 0.55, 0.85, '#bdb5a5', { y: 0.33 });
+      gable(b, 1.0, 0.85, 0.6, roofC('#6f7d92'));
+      // Chimney with a glowing forge mouth and an open lean-to with the anvil.
+      b.box(0.24, 0.85, 0.24, '#7a756c', { x: 0.36, y: 0.75, z: -0.2 });
+      b.box(0.28, 0.06, 0.28, '#5d5850', { x: 0.36, y: 1.19, z: -0.2 });
+      b.box(0.22, 0.16, 0.02, glowC('#ff8a3d', 2.2), { x: 0.2, y: 0.2, z: 0.43 });
+      b.box(0.3, 0.3, 0.03, '#5a3a22', { x: -0.22, y: 0.2, z: 0.43 });
+      windowAt(b, -0.22, 0.45, 0.43, true);
+      b.box(0.6, 0.03, 0.4, WOOD_D, { x: 0, y: 0.62, z: 0.62, rx: 0.3 });
+      for (const sx of [-0.27, 0.27]) b.cyl(0.025, 0.025, 0.6, 5, WOOD_D, { x: sx, y: 0.3, z: 0.8 });
+      b.box(0.1, 0.12, 0.08, '#3a3a40', { x: 0.05, y: 0.06, z: 0.62 });
+      b.box(0.2, 0.06, 0.09, '#4a4a52', { x: 0.05, y: 0.15, z: 0.62 });
+      b.cyl(0.08, 0.08, 0.12, 8, WOOD, { x: -0.18, y: 0.06, z: 0.66 });
+    } else if (id === 'market') {
+      found(1.75, 0.8);
+      // Three stalls with striped awnings, crates of produce.
+      const stripes = [['#d9573f', '#f3ead6'], ['#3f8fd1', '#f3ead6'], ['#e8b13f', '#f3ead6']];
+      for (let i = 0; i < 3; i++) {
+        const x = -0.55 + i * 0.55;
+        b.box(0.45, 0.22, 0.32, WOOD, { x, y: 0.11 });
+        for (const sx of [-0.2, 0.2]) b.cyl(0.018, 0.018, 0.5, 4, WOOD_D, { x: x + sx, y: 0.25, z: 0.14 });
+        for (let k = 0; k < 4; k++) b.box(0.12, 0.025, 0.42, roofC(stripes[i][k % 2]), { x: x - 0.18 + k * 0.12, y: 0.52, z: 0.04, rx: -0.35 });
+        const goods = ['#e84a3f', '#f2a63f', '#7ac84a'][i];
+        for (let k = 0; k < 4; k++) b.ball(0.035, 0, goods, { x: x - 0.12 + k * 0.08, y: 0.25, z: 0.06 });
+      }
+      for (const [cx, cz] of [[0.75, -0.35], [0.62, -0.42], [-0.75, -0.38]]) b.box(0.15, 0.13, 0.15, WOOD, { x: cx, y: 0.065, z: cz, ry: cx * 2 });
+      b.cyl(0.12, 0.14, 0.18, 8, '#6a4a2a', { x: 0, y: 0.09, z: -0.42 });
+    } else if (id === 'chapel') {
+      found(0.95, 1.45);
+      b.box(0.75, 0.6, 1.1, '#efe8da', { y: 0.36, z: 0.05 });
+      gable(b, 1.1, 0.75, 0.66, roofC('#5a7fd1'), { ry: Math.PI / 2, z: 0.05 });
+      // Steeple with a bell and a golden spire.
+      b.box(0.36, 0.7, 0.36, '#efe8da', { y: 0.8, z: 0.5 });
+      b.box(0.22, 0.2, 0.38, '#3a3a48', { y: 1.0, z: 0.5 });
+      b.cyl(0.06, 0.08, 0.1, 8, GOLD, { y: 0.98, z: 0.5 });
+      b.cone(0.28, 0.6, 4, roofC('#5a7fd1'), { y: 1.45, z: 0.5, ry: Math.PI / 4 });
+      b.box(0.02, 0.2, 0.02, GOLD, { y: 1.85, z: 0.5 });
+      b.box(0.12, 0.02, 0.02, GOLD, { y: 1.88, z: 0.5 });
+      b.box(0.24, 0.36, 0.03, '#6a4428', { y: 0.24, z: 0.69 });
+      b.cyl(0.12, 0.12, 0.03, 12, glowC('#9fd0ff', 1.2), { y: 0.65, z: 0.69, rx: Math.PI / 2 });
+      for (const sz of [-0.25, 0.15]) for (const sx of [-0.38, 0.38]) b.box(0.02, 0.24, 0.12, glowC('#ffd27a', 1.2), { x: sx, y: 0.42, z: sz });
+    } else if (id === 'wizard') {
+      found(1.1, 1.1);
+      b.cyl(0.36, 0.44, 1.5, 9, '#b4aed0', { y: 0.75 });
+      b.cyl(0.42, 0.38, 0.12, 9, '#6a6488', { y: 1.52 });
+      b.cone(0.5, 0.9, 9, roofC('#7a52c8'), { y: 2.03 });
+      b.octa(0.11, glowC('#c08cff', 2.4), { y: 2.65, sy: 1.4 });
+      for (let i = 0; i < 6; i++) b.ball(0.025, 0, glowC('#ffe08a', 2), { x: Math.cos(i) * 0.4, y: 1.95 + (i % 2) * 0.12, z: Math.sin(i) * 0.4 });
+      for (const y of [0.55, 1.05]) windowAt(b, 0, y, 0.4, true);
+      b.box(0.24, 0.34, 0.03, '#3a2a4a', { y: 0.17, z: 0.43 });
+      b.torus(0.4, 0.02, 4, 18, '#d9c27a', { y: 1.3, rx: Math.PI / 2 });
+    } else if (id === 'windmill') {
+      found(1.1, 1.1);
+      b.cyl(0.3, 0.45, 1.35, 8, '#e8dcc0', { y: 0.67 });
+      b.cone(0.42, 0.5, 8, roofC('#7a4a2a'), { y: 1.6 });
+      b.box(0.2, 0.32, 0.03, '#6a4428', { y: 0.16, z: 0.42 });
+      windowAt(b, 0, 0.75, 0.37);
+      b.cyl(0.05, 0.05, 0.2, 6, WOOD_D, { y: 1.3, z: 0.4, rx: Math.PI / 2 });
+      for (let i = 0; i < 3; i++) b.box(0.12 + i * 0.03, 0.1, 0.1, '#d9c27a', { x: 0.4 + i * 0.12, y: 0.05, z: 0.3 });
+    } else if (id === 'barracks') {
+      found(1.5, 1.35);
+      b.box(1.3, 0.5, 0.75, '#a8865e', { y: 0.3, z: -0.15 });
+      for (let i = 0; i < 9; i++) b.box(0.03, 0.5, 0.02, '#6a4a2a', { x: -0.6 + i * 0.15, y: 0.3, z: 0.235 });
+      gable(b, 1.3, 0.75, 0.55, roofC('#b0473a'), { z: -0.15 });
+      b.box(0.26, 0.34, 0.03, '#4a3020', { y: 0.2, z: 0.24 });
+      for (const sx of [-0.4, 0.4]) windowAt(b, sx, 0.36, 0.24);
+      // Flags and a training yard with straw dummies.
+      for (const sx of [-0.68, 0.68]) {
+        b.cyl(0.015, 0.015, 0.9, 4, WOOD_D, { x: sx, y: 0.45, z: 0.32 });
+        b.box(0.2, 0.13, 0.01, '#c23a4a', { x: sx + 0.1 * Math.sign(sx), y: 0.82, z: 0.32 });
+      }
+      for (const dx of [-0.3, 0.3]) {
+        b.cyl(0.02, 0.02, 0.36, 4, WOOD_D, { x: dx, y: 0.18, z: 0.55 });
+        b.box(0.26, 0.03, 0.03, WOOD_D, { x: dx, y: 0.3, z: 0.55 });
+        b.capsule(0.07, 0.1, snow ? '#e8e4d0' : '#d9b85a', { x: dx, y: 0.32, z: 0.55 });
+        b.ball(0.055, 0, '#d9b85a', { x: dx, y: 0.46, z: 0.55 });
+      }
+      b.box(0.08, 0.32, 0.02, '#8a8a92', { x: 0.62, y: 0.16, z: 0.56, rz: 0.2 });
+    }
+    return b.build();
+  });
+}
+
+/** Windmill sails, centred on their hub (turn them about Z). */
+export function windmillSails(): THREE.BufferGeometry {
+  return cached('windmill-sails', () => {
+    const b = new ModelBuilder();
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const c = Math.cos(a), s = Math.sin(a);
+      b.box(0.04, 0.62, 0.03, WOOD_D, { x: -s * 0.33, y: c * 0.33, rz: a });
+      b.box(0.15, 0.48, 0.015, '#f3ead6', { x: -s * 0.38 + c * 0.09, y: c * 0.38 + s * 0.09, rz: a });
+    }
+    b.cyl(0.07, 0.07, 0.08, 8, WOOD, { rx: Math.PI / 2 });
+    return b.build();
+  });
+}

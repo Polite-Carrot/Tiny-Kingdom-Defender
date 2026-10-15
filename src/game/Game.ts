@@ -18,6 +18,7 @@ import { GRID_SIZE } from '../data/base';
 import { themeOf } from './Siege';
 import { TitleScreen } from '../ui/Screens';
 import * as Modals from '../ui/Modals';
+import { TWISTS } from '../data/challenge';
 
 export type Orientation = 'portrait' | 'landscape';
 
@@ -98,7 +99,10 @@ export class Game {
     window.addEventListener('pagehide', () => save.flush());
     window.addEventListener('pointerdown', () => audio.unlock(), { once: false, passive: true });
     setInterval(() => {
+      if (document.hidden) return;
       save.data.stats.playTime += 10;
+      meta.markSeen();
+      save.markDirty();
       save.flush();
     }, 10000);
   }
@@ -113,10 +117,16 @@ export class Game {
     if (save.recovered !== 'none') this.s.ui.toast(save.recovered === 'backup' ? 'Save was damaged — restored from backup.' : 'Save was damaged and had to be reset.', 4000);
     void ads.init();
     this.onResize();
-    // First launch goes straight into founding the kingdom, with guided hints.
+    // What happened while away is worked out before "last seen" moves on.
+    const away = meta.welcomeBack();
+    meta.markSeen();
+    const abandoned = meta.settleAbandonedChallenge();
+    meta.commit();
     // Always open on the main menu; Play / Begin takes you into the kingdom.
     this.goTitle();
     requestAnimationFrame(this.frame);
+    if (abandoned) this.s.ui.toast(`Your unfinished Daily Challenge was scored: +${abandoned.coins} coins`, 3000);
+    if (away) setTimeout(() => this.showWelcomeBack(away), 350);
   }
 
   // --- Loop --------------------------------------------------------------------------
@@ -202,6 +212,13 @@ export class Game {
   private leaveBattle(): void {
     if (this.battle) {
       this.flushRunStats();
+      this.battle.flushMastery();
+      if (this.battle.challenge) {
+        // Leaving a challenge ends today's attempt with the waves survived so far.
+        const res = this.s.meta.finishChallenge(this.battle.challengeScore);
+        if (res.coins > 0 || res.newBest) this.s.ui.toast(`Challenge ended: ${this.battle.challengeScore} waves · +${res.coins} coins${res.newBest ? ' · new best!' : ''}`, 3200);
+        if (res.chest) setTimeout(() => Modals.chestReveal(this, res.chest!), 600);
+      }
       this.battle.persist();
       this.battle.dispose();
       this.battle = null;
@@ -221,7 +238,7 @@ export class Game {
     this.battle = battle;
     this.lastStats = { ...battle.run.stats };
     battle.onCheckpoint = (wave, coins, firstTime) => this.onCheckpoint(wave, coins, firstTime);
-    battle.onFallen = (from, to) => Modals.fallen(this, from, to);
+    battle.onFallen = (from, to) => Modals.fallen(this, from, to, battle.run.nearMiss());
     battle.onReviveOffer = () => Modals.revive(this, battle);
     battle.onAgeChange = () => this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
     battle.run.events.on('waveCleared', () => this.flushRunStats());
@@ -293,13 +310,66 @@ export class Game {
   }
 
   private onVisibility(): void {
+    const { meta } = this.s;
     if (document.hidden) {
       this.autoPause();
       this.s.audio.suspend();
-      this.s.save.flush();
-    } else if (!this.s.ads.showing) {
-      this.s.audio.resume();
+      meta.markSeen();
+      this.s.save.save();
+    } else {
+      if (!this.s.ads.showing) this.s.audio.resume();
+      const away = meta.welcomeBack();
+      meta.markSeen();
+      if (away && this.s.ui.currentScreen === 'title' && !this.s.ui.modalOpen) this.showWelcomeBack(away);
     }
+  }
+
+  private showWelcomeBack(info: NonNullable<ReturnType<Meta['welcomeBack']>>): void {
+    if (this.s.ui.currentScreen !== 'title' || this.s.ui.modalOpen) return;
+    this.s.analytics.track('welcome_back_shown', { hours: Math.round(info.awayMs / 360000) / 10, treasury: info.treasury });
+    Modals.welcomeBack(this, info);
+  }
+
+  /** Buildings changed: show them around the castle and apply their bonuses. */
+  refreshKingdomView(): void {
+    const ids = this.s.meta.d.buildings;
+    this.demo?.view.setBuildings(ids);
+    if (this.battle) {
+      this.battle.view.setBuildings(ids);
+      this.battle.applyMeta();
+    }
+  }
+
+  /** Starts today's Daily Challenge (one attempt). */
+  enterChallenge(): void {
+    const { meta } = this.s;
+    const st = meta.challengeState();
+    if (st.attempted) {
+      this.s.ui.toast('You have already played today\'s challenge');
+      return;
+    }
+    const def = meta.challengeFor();
+    meta.startChallenge();
+    this.s.ui.closeModals();
+    this.leaveBattle();
+    this.demo?.dispose();
+    this.demo = null;
+    const battle = new Battle(this.s, this.hud, { challenge: def });
+    this.battle = battle;
+    this.lastStats = null;
+    battle.onChallengeEnd = (score) => {
+      const res = meta.finishChallenge(score);
+      Modals.challengeResult(this, score, res, battle.run.nearMiss(), battle.lossTip());
+    };
+    battle.onAgeChange = () => this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
+    this.s.rig.resetView();
+    this.s.rig.pan.set(0, 0);
+    this.onResize();
+    this.s.ui.show('battle');
+    this.input.enabled = true;
+    this.s.rig.orbit = false;
+    this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
+    this.s.ui.banner('Daily Challenge', `${def.twists.map((t) => TWISTS[t].name).join(' · ')}`);
   }
 
   private onAdOpen(): void {

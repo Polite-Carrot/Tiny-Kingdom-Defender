@@ -4,6 +4,7 @@ import type { TowerId } from '../data/towers';
 import type { HeroId } from '../data/heroes';
 import type { EnemyId } from '../data/enemies';
 import type { BaseSnapshot } from '../game/Run';
+import type { BuildingId } from '../data/kingdom';
 
 export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'tkd_save';
@@ -79,6 +80,14 @@ export interface SaveData {
   bestiary: Partial<Record<EnemyId, { seen: number; killed: number }>>;
   tutorial: { done: boolean; hintsSeen: string[] };
   firstLaunch: number;
+  /** Tower mastery XP by tower type. */
+  mastery: Partial<Record<TowerId, number>>;
+  /** Kingdom buildings built beyond the moat. */
+  buildings: BuildingId[];
+  /** Daily Challenge: today's attempt and the all-time best. */
+  challenge: { day: string; attempted: boolean; done: boolean; score: number; best: number; history: { day: string; score: number }[] };
+  /** When the player was last here (for the "while you were away" summary). */
+  lastSeen: number;
 }
 
 export function defaultSave(now = Date.now()): SaveData {
@@ -106,6 +115,10 @@ export function defaultSave(now = Date.now()): SaveData {
     bestiary: {},
     tutorial: { done: false, hintsSeen: [] },
     firstLaunch: now,
+    mastery: {},
+    buildings: [],
+    challenge: { day: '', attempted: false, done: false, score: 0, best: 0, history: [] },
+    lastSeen: now,
   };
 }
 

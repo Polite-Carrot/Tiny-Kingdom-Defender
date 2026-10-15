@@ -40,7 +40,12 @@ The editable source page is `game.html` (`npm run dev` opens it). After changing
 | Meta | Coins come from every wave cleared and every checkpoint. They buy permanent upgrades (tower damage and range, castle HP, **Battlements** (archers on the castle walls that shoot nearby enemies), War Chest +gold%, hero power; cost = `base × 1.35^level`). Castle upgrades show: an outer wall, then watchtowers and banners, then gold trim, glowing windows and a royal standard, the Lightning unlock, heroes and cosmetics (castle skins and projectile trails, bought with coins or shards). You can open the Shop mid-siege from the HUD. |
 | Trophies & Bestiary | A Trophy Room with 32 achievements (kills, bosses, elites, Ages, perfect checkpoints, synergies, hero levels, collecting) that pay coins and gems, announced with a slide-in card. A Bestiary lists every enemy you've met with stats, kill counts and how to counter it; undiscovered ones are silhouettes. |
 | Retention | Treasury (idle income, capped at 8 h, grows with your best wave), a free chest every 4 h, a milestone chest at each new checkpoint, a 7-day login cycle, 3 daily missions, red-dot indicators. |
-| Ads | `AdManager` plus a mock provider, 7 rewarded placements, interstitial rules, and a "Remove ads" flag. |
+| Daily Challenge | From wave 10, a **Daily Challenge** button under Play. Everyone gets the same siege each day, picked from the date (`Meta.challengeFor`): a start Age (wave 6, 26, 46 or 66), starting gold, every pad cleared, and two **twists** from Swift Foes, Iron Hide, Gold Rush, Limited Arsenal (three tower types), Heroes Away, Glass Castle (8 HP), Elite Horde and Lean Times. Enemies start as tough as early waves and grow 7% tougher each wave, so attempts last about 10–30 waves. One scored attempt per day, with no revive. The score is waves survived; each pays 15 coins, and beating your best pays a chest. Leaving or closing the game mid-attempt scores it as it stands. Nothing in the challenge touches your kingdom. |
+| Tower mastery | Every tower type earns mastery from its kills, forever, in the kingdom and the challenge (`data/mastery.ts`). Each of 10 levels gives +2% damage to that type. **Veteran** (5) adds +8% range and a silver pennant on its towers; **Master** (10) adds 12% faster firing, a gold ring and a crown. Progress shows in Shop → Towers, and a banner announces each level. |
+| Town | The land beyond the moat fills with buildings, bought once each from the **Town** menu once your best wave unlocks them (`data/kingdom.ts`). Farmstead (+25% treasury), Blacksmith (+5% tower damage), Market (+8% kill gold), Chapel (+3 castle HP), Wizard Tower (+10% hero), Windmill (+20% wave coins, its sails turn) and Barracks (+30% barricade HP). Each stands on a levelled plot around the castle. |
+| Welcome back | After 30+ minutes away, the menu opens on a **Welcome back** card: how long you were gone, what the treasury earned (with a rewarded ad to **triple** it), what's waiting (daily reward, chest, new challenge, affordable building or upgrades, each one tap away), and one concrete next goal. |
+| Near misses | When the castle falls, the game says how close it was ("just 3 enemies stood between you and clearing wave 27", or the boss's remaining HP) and gives one practical tip: an affordable upgrade, a free barricade slot, an empty pad, the weakest tower to upgrade. |
+| Ads | `AdManager` plus a mock provider, 8 rewarded placements, interstitial rules, and a "Remove ads" flag. |
 | Analytics | `Analytics` interface with a console/local implementation, plus a hidden debug screen. |
 
 ### Controls
@@ -95,6 +100,9 @@ Every gameplay number lives in `src/data/`. The gameplay code has no magic numbe
 | `data/heroes.ts` | Hero stats and abilities |
 | `data/ads.ts` | Rewarded placements, interstitial rules, mock ad duration |
 | `data/missions.ts` | Mission pool |
+| `data/challenge.ts` | Daily Challenge twists, start waves and gold, HP ramp, coins per wave |
+| `data/mastery.ts` | Mastery XP curve, damage per level, Veteran and Master perks |
+| `data/kingdom.ts` | Town buildings: unlock waves, costs, bonuses, plot positions |
 
 **How waves are built.** Wave *n* has a point budget of `(budgetBase + budgetPerWave · n^budgetExp) × (1 + roadBudgetBonus · (openRoads − 1))`, ×1.5 on boss waves. It's spent on enemies by the current Age's weights and each enemy's first wave, in groups spread across the open roads. Waves are deterministic per index, so a replayed wave is the same wave.
 * **Enemy HP:** `(1 + 0.05n) × 1.022^n`.
@@ -190,6 +198,7 @@ The full output is saved in `docs/balance-report.txt`.
 | `treasury_double` | Double the idle coins |
 | `chest_skip` | Open the free chest now |
 | `shop_bundle` | +60 coins, 3 times per day |
+| `welcome_triple` | Triple the treasury on the Welcome back card |
 
 No ad is ever offered while a wave is being fought. Rewarded ads appear only at natural breaks: checkpoints, a fallen castle, the Treasury, the chest and the shop.
 

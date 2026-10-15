@@ -17,6 +17,10 @@ import type { ModalHandle } from './UI';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { ENEMIES, BOSS_BY_CHAPTER, type EnemyDef, type EnemyId } from '../data/enemies';
 import { newKingdom } from '../game/Run';
+import { TWISTS, CHALLENGE } from '../data/challenge';
+import { BUILDINGS, BUILDING_BY_ID, type BuildingId } from '../data/kingdom';
+import { MASTERY, masteryTitle } from '../data/mastery';
+import { ageTitle } from '../game/Siege';
 
 // --- Helpers --------------------------------------------------------------------------
 
@@ -113,7 +117,7 @@ export function checkpoint(game: Game, wave: number, coins: number, firstTime: b
 
 // --- Castle fallen ------------------------------------------------------------------------------
 
-export function fallen(game: Game, fromWave: number, toWave: number): void {
+export function fallen(game: Game, fromWave: number, toWave: number, near: NearMiss | null = null): void {
   const b = game.battle;
   if (!b) return;
   const { meta, ui } = game.s;
@@ -121,9 +125,10 @@ export function fallen(game: Game, fromWave: number, toWave: number): void {
     m.innerHTML = `
       <div class="ribbon lose">The castle has fallen</div>
       <div class="reward-row">${icon('castle')} Wave ${fromWave + 1}</div>
+      ${nearMissHtml(near)}
       <div style="text-align:center;font-weight:800">Your army regroups at the last checkpoint: <b>wave ${toWave + 1}</b>.</div>
       <div class="muted" style="text-align:center;margin-top:6px">Every tower, upgrade and piece of gold is kept. Rebuild, upgrade, and push further!</div>
-      ${meta.hasAffordableUpgrade() ? `<div class="muted" style="text-align:center;margin-top:6px">Tip: you can afford a permanent upgrade in the Shop.</div>` : ''}
+      <div class="tip">💡 ${b.lossTip()}</div>
       <div class="actions">
         ${meta.featureUnlocked('shop') ? `<button class="btn gold shopbtn">${icon('shop')} Shop</button>` : ''}
         <button class="btn big regroup">Regroup</button>
@@ -170,7 +175,7 @@ export function pause(game: Game, onClose: () => void): void {
   game.s.ui.modal((m, h) => {
     m.innerHTML = `
       <div class="ribbon">Paused</div>
-      <div class="muted" style="text-align:center;margin-bottom:10px">Wave ${Math.max(1, b.run.waveIndex)} · progress is saved at the start of every wave</div>
+      <div class="muted" style="text-align:center;margin-bottom:10px">${b.challenge ? `Daily Challenge · ${b.challengeScore} waves survived. Leaving ends today's attempt.` : `Wave ${Math.max(1, b.run.waveIndex)} · progress is saved at the start of every wave`}</div>
       <div class="stack">
         <button class="btn big resume">${icon('play')} Resume</button>
         <div class="setting"><label>Music</label><input type="range" min="0" max="1" step="0.05" class="music"/></div>
@@ -221,10 +226,15 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
             btn = can ? `<button class="btn small gold" data-unlock="lightning">Unlock ${costHtml(UNLOCKS.lightning.cost)}</button>` : `<button class="btn small disabled" disabled>Wave ${UNLOCKS.lightning.requiresWave}</button>`;
           } else if (cost === null) btn = `<button class="btn small gold disabled" disabled>MAX</button>`;
           else btn = `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-tower="${t}">${costHtml(cost)}</button>`;
+          const ml = meta.masteryLevel(t);
+          const [have, need] = meta.masteryProgress(t);
+          const mastery = locked ? '' : `<div class="mastery ${ml >= MASTERY.masterLevel ? 'gold' : ml >= MASTERY.veteranLevel ? 'silver' : ''}" title="Mastery: earned by this tower type's kills">
+              <span>★ ${masteryTitle(ml)} ${ml}</span><div class="mbar"><i style="width:${ml >= MASTERY.maxLevel ? 100 : Math.round((have / need) * 100)}%"></i></div>
+              <small>${ml >= MASTERY.maxLevel ? 'Mastered' : `${need - have} kills to ${ml + 1}`}</small></div>`;
           return `<div class="list-item"><div class="thumb"><img src="${towerThumb(t, Math.min(10, 1 + Math.floor(lvl / 2)))}" alt=""/></div>
             <div class="body"><div class="name">${def.name} ${locked ? icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px;display:inline-block"') : `<span class="muted">Lv ${lvl}</span>`}</div>
-            <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : `+${Math.round(lvl * TOWER_META.damagePerLevel * 100)}% damage · +${Math.round(lvl * TOWER_META.rangePerLevel * 100)}% range`}</div>
-            <div class="levelpips">${Array.from({ length: TOWER_META.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div></div>${btn}</div>`;
+            <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : `+${Math.round(lvl * TOWER_META.damagePerLevel * 100)}% damage · +${Math.round(lvl * TOWER_META.rangePerLevel * 100)}% range${ml ? ` · mastery +${Math.round(ml * MASTERY.damagePerLevel * 100)}% damage` : ''}`}</div>
+            <div class="levelpips">${Array.from({ length: TOWER_META.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>${mastery}</div>${btn}</div>`;
         }).join('');
       } else if (current === 'kingdom') {
         body = (Object.keys(META_UPGRADES) as MetaUpgradeKey[]).map((k) => {
@@ -747,4 +757,183 @@ export function bestiary(game: Game): void {
       <div class="trophy-summary"><b>${found}</b> of ${ids.length} discovered<i class="tbar"><b style="width:${Math.round((found / ids.length) * 100)}%"></b></i></div>
       <div class="beasts">${cards}</div>`;
   }, { wide: true });
+}
+
+// --- Daily Challenge -------------------------------------------------------------------------------
+
+function untilMidnight(): number {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1).getTime() - n.getTime();
+}
+
+export function challenge(game: Game): void {
+  const { meta } = game.s;
+  const c = meta.challengeFor();
+  const st = meta.challengeState();
+  game.s.ui.modal((m, h) => {
+    const twists = c.twists.map((t) => `<div class="twist"><span class="tw-ico">${TWISTS[t].icon}</span><div><b>${TWISTS[t].name}</b><small>${TWISTS[t].description}</small></div></div>`).join('');
+    const arsenal = c.towers ? `<div class="ch-towers">${c.towers.map((t) => `<img src="${towerThumb(t)}" alt="${TOWERS[t].name}" title="${TOWERS[t].name}"/>`).join('')}</div>` : '';
+    const hist = st.history.slice(-7).map((x) => `<div class="hbar" title="${x.day}"><i style="height:${Math.max(6, (x.score / Math.max(1, st.best)) * 100)}%"></i><small>${x.score}</small></div>`).join('');
+    const played = st.attempted;
+    m.innerHTML = `<div class="ribbon purple">${icon('swords')} Daily Challenge</div>
+      <div class="muted" style="text-align:center;margin-bottom:8px">Everyone gets the same siege today. Survive as many waves as you can: <b>one attempt</b> per day.</div>
+      <div class="ch-card">
+        <div class="ch-row"><span>${ageTitle(c.startWave)}</span><span>Starts at wave ${c.startWave + 1}</span></div>
+        <div class="ch-row"><span>${icon('coin')} ${c.gold} gold</span><span>Every pad cleared</span></div>
+        ${twists}
+        ${arsenal}
+      </div>
+      <div class="stat-grid">
+        <div>${played ? st.score : '–'}<small>TODAY</small></div>
+        <div>${st.best}<small>YOUR BEST</small></div>
+        <div>${CHALLENGE.coinsPerWave}${icon('coin')}<small>PER WAVE</small></div>
+      </div>
+      ${hist ? `<div class="hist">${hist}</div>` : ''}
+      <div class="muted" style="text-align:center">Beat your best for a ${icon('chest')} chest. Your towers' permanent upgrades and mastery count.</div>
+      <div class="actions">${played
+        ? `<div class="muted">Today's attempt: <b>${st.score} waves</b>. A new challenge in ${fmtTime(untilMidnight())}.</div>`
+        : `<button class="btn big go">${icon('swords')} Begin the challenge</button>`}</div>`;
+    m.querySelector<HTMLButtonElement>('.go')?.addEventListener('click', () => {
+      h.close();
+      game.enterChallenge();
+    });
+  });
+}
+
+/** The Daily Challenge ended: score, reward, and how close the next wave came. */
+export function challengeResult(game: Game, score: number, res: { coins: number; newBest: boolean; prevBest: number; chest: ChestReward | null }, near: NearMiss | null, tip: string): void {
+  const { ui, audio } = game.s;
+  audio.play(res.newBest ? 'victory' : 'defeat');
+  ui.modal((m, h) => {
+    m.innerHTML = `<div class="ribbon ${res.newBest ? 'win' : 'purple'}">${res.newBest ? 'New personal best!' : 'Challenge over'}</div>
+      <div class="reward-row">${icon('swords')} ${score} wave${score === 1 ? '' : 's'}</div>
+      ${res.newBest && res.prevBest > 0 ? `<div style="text-align:center;font-weight:800">Beat your old best of ${res.prevBest}!</div>` : !res.newBest ? `<div class="muted" style="text-align:center">Your best is ${res.prevBest} waves.</div>` : ''}
+      ${nearMissHtml(near)}
+      <div class="reward-row coins-row">${icon('coin')}<span class="amt">+${res.coins}</span></div>
+      ${res.chest ? `<div style="text-align:center;font-weight:900">${icon('chest')} Personal best chest!</div>` : ''}
+      <div class="tip">💡 ${tip}</div>
+      <div class="muted" style="text-align:center">A new challenge arrives in ${fmtTime(untilMidnight())}.</div>
+      <div class="actions"><button class="btn big ok">${icon('home')} Main menu</button></div>`;
+    $(m, '.ok').onclick = () => {
+      h.close();
+      game.goTitle();
+      if (res.chest) setTimeout(() => chestReveal(game, res.chest!), 400);
+    };
+  }, { closable: false });
+}
+
+export interface NearMiss {
+  wave: number;
+  enemiesLeft: number;
+  boss: { name: string; hpFrac: number } | null;
+}
+
+/** "So close!" line for a loss (empty when it wasn't close). */
+function nearMissHtml(n: NearMiss | null): string {
+  if (!n) return '';
+  if (n.boss && n.boss.hpFrac <= 0.35) {
+    return `<div class="near">So close! The <b>${n.boss.name}</b> had only <b>${Math.max(1, Math.round(n.boss.hpFrac * 100))}%</b> HP left.</div>`;
+  }
+  if (n.enemiesLeft > 0 && n.enemiesLeft <= 8) {
+    return `<div class="near">So close! Just <b>${n.enemiesLeft} enem${n.enemiesLeft === 1 ? 'y' : 'ies'}</b> stood between you and clearing wave ${n.wave + 1}.</div>`;
+  }
+  return '';
+}
+
+// --- Kingdom (town buildings) -------------------------------------------------------------------------
+
+export function town(game: Game): void {
+  const { meta } = game.s;
+  game.s.ui.modal((m) => {
+    const render = () => {
+      const d = meta.d;
+      const rows = BUILDINGS.map((b) => {
+        const built = meta.hasBuilding(b.id);
+        const open = meta.buildingUnlocked(b.id);
+        const btn = built ? `<button class="btn small gold disabled" disabled>Built ✓</button>`
+          : !open ? `<button class="btn small disabled" disabled>Wave ${b.unlockWave}</button>`
+          : `<button class="btn small ${d.coins < b.cost ? 'disabled' : ''}" data-b="${b.id}">${costHtml(b.cost)}</button>`;
+        return `<div class="list-item ${built ? 'built' : ''} ${open ? '' : 'locked-row'}"><div class="thumb bld">${b.icon}</div>
+          <div class="body"><div class="name">${b.name}</div><div class="desc">${b.description}</div></div>${btn}</div>`;
+      }).join('');
+      const n = d.buildings.length;
+      m.innerHTML = `<div class="ribbon">${icon('town')} Your Kingdom</div>${currencyBar(game)}
+        <div class="muted" style="text-align:center;margin:-4px 0 8px">Build on the land beyond the moat. Each building gives a lasting bonus and appears around your castle. ${n}/${BUILDINGS.length} built.</div>
+        <div class="list">${rows}</div>`;
+      m.querySelectorAll<HTMLButtonElement>('[data-b]').forEach((btn) => (btn.onclick = () => {
+        const id = btn.dataset.b as BuildingId;
+        if (meta.buyBuilding(id)) {
+          game.s.audio.play('upgrade');
+          game.s.ui.toast(`${BUILDING_BY_ID[id].name} built!`);
+          game.refreshKingdomView();
+        } else {
+          game.s.audio.play('error');
+          game.s.ui.toast('Not enough coins');
+        }
+        render();
+        refreshCoins(game);
+      }));
+    };
+    render();
+  });
+}
+
+// --- Welcome back --------------------------------------------------------------------------------------
+
+function awayText(ms: number): string {
+  const h = Math.floor(ms / 3600000);
+  if (h >= 48) return `${Math.floor(h / 24)} days`;
+  if (h >= 1) return `${h} hour${h > 1 ? 's' : ''}`;
+  return `${Math.max(1, Math.round(ms / 60000))} minutes`;
+}
+
+export function welcomeBack(game: Game, info: NonNullable<ReturnType<Game['s']['meta']['welcomeBack']>>): void {
+  const { meta } = game.s;
+  game.s.ui.modal((m, h) => {
+    const ready: string[] = [];
+    if (info.daily) ready.push(`<button class="ready-item" data-go="daily">${icon('calendar')}<span>Daily reward</span></button>`);
+    if (info.chestReady) ready.push(`<button class="ready-item" data-go="chest">${icon('chest')}<span>Chest ready</span></button>`);
+    if (info.challenge) ready.push(`<button class="ready-item" data-go="challenge">${icon('swords')}<span>New challenge</span></button>`);
+    if (info.building) ready.push(`<button class="ready-item" data-go="town">${icon('town')}<span>You can build the ${info.building}</span></button>`);
+    if (info.towerUpgrades) ready.push(`<button class="ready-item" data-go="shop">${icon('shop')}<span>${info.towerUpgrades} tower upgrade${info.towerUpgrades > 1 ? 's' : ''} affordable</span></button>`);
+    m.innerHTML = `<div class="ribbon win">Welcome back!</div>
+      <div class="muted" style="text-align:center">You were away for <b>${awayText(info.awayMs)}</b>. Your kingdom kept working:</div>
+      <div class="reward-row coins-row">${icon('coin')}<span class="amt">${info.treasury}</span></div>
+      <div class="muted" style="text-align:center;margin-top:-6px">in the Royal Treasury</div>
+      <div class="stack slot" style="margin-top:10px"></div>
+      ${ready.length ? `<div class="ready-list">${ready.join('')}</div>` : ''}
+      <div class="goal">🎯 <b>Next goal:</b> ${info.goal}</div>
+      <div class="actions"><button class="btn collect">${info.treasury > 0 ? `Collect ${info.treasury}` : 'Continue'}</button></div>`;
+    let collected = false;
+    const collect = (mult: number, from: HTMLElement) => {
+      if (collected) return;
+      collected = true;
+      const got = meta.collectTreasury(mult);
+      if (got > 0) flyCoins(game, from, got);
+    };
+    if (info.treasury >= TREASURY.minCollect) {
+      $(m, '.slot').append(adButton(game, 'welcome_triple', 'Triple it!', `+${info.treasury * 3} coins instead of ${info.treasury}`, (b) => {
+        collect(3, b);
+        $(m, '.coins-row .amt').textContent = `${info.treasury * 3}`;
+        markUsed(b, `Tripled! +${info.treasury * 3}`);
+        ($(m, '.collect') as HTMLElement).textContent = 'Continue';
+      }));
+    }
+    $(m, '.collect').onclick = (e) => {
+      if (info.treasury > 0) collect(1, e.currentTarget as HTMLElement);
+      h.close();
+    };
+    m.querySelectorAll<HTMLButtonElement>('[data-go]').forEach((b) => (b.onclick = () => {
+      if (info.treasury > 0) collect(1, b);
+      h.close();
+      const go = b.dataset.go;
+      setTimeout(() => {
+        if (go === 'daily') daily(game);
+        else if (go === 'chest') chest(game);
+        else if (go === 'challenge') challenge(game);
+        else if (go === 'town') town(game);
+        else if (go === 'shop') shop(game);
+      }, 250);
+    }));
+  }, { closable: false, onClose: () => refreshCoins(game) });
 }

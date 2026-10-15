@@ -4,7 +4,9 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel, barricadeModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel, barricadeModel, masteryModel } from '../entities/Models';
+import { MASTERY } from '../data/mastery';
+import type { BuildingId } from '../data/kingdom';
 import { HeroAnimator } from './HeroAnimator';
 import { HERO_GEAR } from '../data/heroes';
 import { Particles, Rings, Bolts } from '../systems/Effects';
@@ -45,6 +47,8 @@ interface TowerView {
   headY: number;
   /** Ice block shown while an Ice Golem has the tower frozen. */
   ice?: THREE.Mesh;
+  /** Mastery pennant / crown (Veteran and Master tower types). */
+  badge?: THREE.Mesh;
 }
 
 const _m = new THREE.Matrix4();
@@ -113,6 +117,7 @@ export class BattleView {
   private scenery: Scenery | null = null;
   private grass: Grass | null = null;
   private castleColor: string;
+  private buildings: BuildingId[] = [];
   private roadCells: Map<number, number>;
   private padColor = new THREE.Color();
   private padHighlight = -1;
@@ -126,7 +131,7 @@ export class BattleView {
     readonly run: Run,
     private audio: AudioSystem,
     private hooks: ViewHooks,
-    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; castleTier?: number; archers?: boolean },
+    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; castleTier?: number; archers?: boolean; buildings?: BuildingId[] },
   ) {
     this.theme = themeOf(run.waveIndex);
     this.trailColor = cosmetics.trailColor ? new THREE.Color(cosmetics.trailColor) : null;
@@ -134,6 +139,7 @@ export class BattleView {
     this.heroGear = cosmetics.heroGear ?? 0;
     this.castleTier = cosmetics.castleTier ?? 0;
     this.castleArchers = cosmetics.archers ?? false;
+    this.buildings = cosmetics.buildings ?? [];
     this.roadCells = BattleView.rasterizeRoads();
     this.particles = new Particles(renderer.quality === 'high' ? 900 : 400);
     this.root.add(this.particles.mesh, this.rings.group, this.bolts.group, this.board);
@@ -304,7 +310,7 @@ export class BattleView {
     // The world around the board: island, sea, mountains, sky, clouds, particles.
     this.scenery?.dispose();
     if (this.scenery) this.root.remove(this.scenery.group);
-    this.scenery = new Scenery(t, this.renderer.quality === 'high');
+    this.scenery = new Scenery(t, this.renderer.quality === 'high', this.buildings);
     this.root.add(this.scenery.group);
 
     // Props merged into one draw call; the Age decides which prop each slot shows.
@@ -815,10 +821,32 @@ export class BattleView {
     }
     v.base.geometry = model.base;
     v.head.geometry = model.head;
+    const m = this.run.config.meta.mastery?.[t.def.id] ?? 0;
+    const rank = m >= MASTERY.masterLevel ? 2 : m >= MASTERY.veteranLevel ? 1 : 0;
+    if (rank && !v.badge) {
+      v.badge = new THREE.Mesh(masteryModel(rank), this.material);
+      v.badge.castShadow = true;
+      v.group.add(v.badge);
+    }
+    if (v.badge) {
+      v.badge.visible = rank > 0;
+      if (rank) v.badge.geometry = masteryModel(rank);
+    }
     v.head.position.y = model.headY;
     v.headY = model.headY;
     v.tier = t.tier;
     v.branch = t.branch;
+  }
+
+  /** Kingdom buildings beyond the moat changed. */
+  setBuildings(ids: BuildingId[]): void {
+    this.buildings = [...ids];
+    this.scenery?.setBuildings(this.buildings);
+  }
+
+  /** Mastery changed: refresh every tower's look. */
+  refreshTowers(): void {
+    for (const t of this.run.towers) this.ensureTower(t);
   }
 
   // --- Selection helpers -------------------------------------------------------

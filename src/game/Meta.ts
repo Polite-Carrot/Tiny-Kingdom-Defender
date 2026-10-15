@@ -15,6 +15,9 @@ import { TOWER_ORDER, type TowerId } from '../data/towers';
 import { Random, hashString } from '../core/Random';
 import { checkpointCoins, waveCoins } from './Siege';
 import type { MetaBonuses } from './Run';
+import { MASTERY, masteryLevelFor, masteryXpFor } from '../data/mastery';
+import { BUILDINGS, BUILDING_BY_ID, KINGDOM_BONUS, type BuildingId } from '../data/kingdom';
+import { CHALLENGE, TWISTS, TWIST_CLASH, type ChallengeDef, type TwistId } from '../data/challenge';
 
 export function dayKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -82,15 +85,201 @@ export class Meta {
   }
 
   metaBonuses(): MetaBonuses {
+    const has = (b: BuildingId) => this.hasBuilding(b);
+    const mastery: Partial<Record<TowerId, number>> = {};
+    for (const t of TOWER_ORDER) mastery[t] = this.masteryLevel(t);
     return {
       towerLevels: { ...this.d.towerLevels },
-      castleHpBonus: this.d.meta.castleHp * META_UPGRADES.castleHp.perLevel,
-      goldBonus: this.d.meta.warChest * META_UPGRADES.warChest.perLevel,
-      heroPower: this.d.meta.heroPower * META_UPGRADES.heroPower.perLevel,
+      castleHpBonus: this.d.meta.castleHp * META_UPGRADES.castleHp.perLevel + (has('chapel') ? KINGDOM_BONUS.chapelHp : 0),
+      goldBonus: this.d.meta.warChest * META_UPGRADES.warChest.perLevel + (has('market') ? KINGDOM_BONUS.marketGold : 0),
+      heroPower: this.d.meta.heroPower * META_UPGRADES.heroPower.perLevel + (has('wizard') ? KINGDOM_BONUS.wizardHero : 0),
       battlements: this.d.meta.battlements ?? 0,
       heroId: this.d.selectedHero,
       heroLevel: this.heroLevel(this.d.selectedHero),
+      mastery,
+      towerDamage: has('blacksmith') ? KINGDOM_BONUS.blacksmithDamage : 0,
+      barricadeHp: has('barracks') ? 1 + KINGDOM_BONUS.barracksHp : 1,
     };
+  }
+
+  // --- Tower mastery --------------------------------------------------------------
+
+  masteryXp(t: TowerId): number {
+    return this.d.mastery[t] ?? 0;
+  }
+
+  masteryLevel(t: TowerId): number {
+    return masteryLevelFor(this.masteryXp(t));
+  }
+
+  /** Progress towards the next mastery level: [xp into this level, xp the level needs]. */
+  masteryProgress(t: TowerId): [number, number] {
+    const l = this.masteryLevel(t);
+    if (l >= MASTERY.maxLevel) return [1, 1];
+    const a = masteryXpFor(l), b = masteryXpFor(l + 1);
+    return [this.masteryXp(t) - a, b - a];
+  }
+
+  /** Adds mastery XP; returns the new level if it went up. */
+  addMasteryXp(t: TowerId, xp: number): number | null {
+    if (xp <= 0) return null;
+    const before = this.masteryLevel(t);
+    this.d.mastery[t] = this.masteryXp(t) + xp;
+    const after = this.masteryLevel(t);
+    return after > before ? after : null;
+  }
+
+  // --- Kingdom buildings -----------------------------------------------------------
+
+  hasBuilding(id: BuildingId): boolean {
+    return this.d.buildings.includes(id);
+  }
+
+  buildingUnlocked(id: BuildingId): boolean {
+    return this.bestWave() >= BUILDING_BY_ID[id].unlockWave;
+  }
+
+  buyBuilding(id: BuildingId): boolean {
+    const def = BUILDING_BY_ID[id];
+    if (!def || this.hasBuilding(id) || !this.buildingUnlocked(id) || !this.spend(def.cost, `building_${id}`)) return false;
+    this.d.buildings.push(id);
+    this.analytics.track('upgrade_purchased', { upgrade: `building_${id}`, level: 1, cost: def.cost });
+    this.commit();
+    return true;
+  }
+
+  /** A building that can be bought right now. */
+  affordableBuilding(): BuildingId | null {
+    return BUILDINGS.find((b) => !this.hasBuilding(b.id) && this.buildingUnlocked(b.id) && this.d.coins >= b.cost)?.id ?? null;
+  }
+
+  // --- Daily Challenge -------------------------------------------------------------
+
+  /** Today's challenge: the same for everyone, picked from the date. */
+  challengeFor(now = new Date()): ChallengeDef {
+    const day = dayKey(now);
+    const seed = hashString(`challenge-${day}`);
+    const rng = new Random(seed);
+    const startWave = rng.pick(CHALLENGE.startWaves);
+    const ids = Object.keys(TWISTS) as TwistId[];
+    const twists: TwistId[] = [];
+    for (let guard = 0; twists.length < CHALLENGE.twistsPerDay && guard < 50; guard++) {
+      const t = rng.pick(ids);
+      if (twists.includes(t)) continue;
+      if (TWIST_CLASH.some(([a, b]) => (a === t && twists.includes(b)) || (b === t && twists.includes(a)))) continue;
+      twists.push(t);
+    }
+    let towers: TowerId[] | null = null;
+    if (twists.includes('arsenal')) {
+      const pool = [...CHALLENGE.arsenalPool];
+      towers = [];
+      while (towers.length < 3) towers.push(pool.splice(Math.floor(rng.next() * pool.length), 1)[0]);
+      towers.sort((a, b) => TOWER_ORDER.indexOf(a) - TOWER_ORDER.indexOf(b));
+    }
+    let gold = CHALLENGE.gold[startWave] ?? 2000;
+    if (twists.includes('thrifty')) gold *= 0.65;
+    return { day, seed, startWave, gold: Math.round(gold / 10) * 10, twists, towers };
+  }
+
+  /** Today's challenge state (resets each day). */
+  challengeState(now = new Date()): SaveData['challenge'] {
+    const day = dayKey(now);
+    if (this.d.challenge.day !== day) this.d.challenge = { ...this.d.challenge, day, attempted: false, done: false, score: 0 };
+    return this.d.challenge;
+  }
+
+  startChallenge(): void {
+    const st = this.challengeState();
+    st.attempted = true;
+    st.done = false;
+    st.score = 0;
+    this.analytics.track('level_start', { level: 'daily_challenge', wave: this.challengeFor().startWave + 1 });
+    this.commit();
+  }
+
+  /** Waves survived so far in today's attempt (saved as it goes, in case the game is closed). */
+  challengeProgress(score: number): void {
+    const st = this.challengeState();
+    st.score = Math.max(st.score, score);
+    this.commit();
+  }
+
+  /** Ends today's attempt: pays coins, and a chest for a new personal best. */
+  finishChallenge(score: number): { coins: number; newBest: boolean; prevBest: number; chest: ChestReward | null } {
+    return this.settleChallenge(this.challengeState(), score);
+  }
+
+  private settleChallenge(st: SaveData['challenge'], score: number): { coins: number; newBest: boolean; prevBest: number; chest: ChestReward | null } {
+    if (st.done) return { coins: 0, newBest: false, prevBest: st.best, chest: null };
+    st.done = true;
+    st.score = Math.max(st.score, score);
+    const prevBest = st.best;
+    const newBest = st.score > prevBest;
+    if (newBest) st.best = st.score;
+    st.history = [...st.history.filter((h) => h.day !== st.day), { day: st.day, score: st.score }].slice(-14);
+    const coins = st.score * CHALLENGE.coinsPerWave;
+    this.earn(coins, 'daily_challenge');
+    const chest = newBest && st.score > 0 ? this.grantChest(this.rollChest('daily')) : null;
+    this.analytics.track('level_end', { level: 'daily_challenge', result: 'end', wave_reached: st.score, duration: 0, castle_hp: 0, new_best: newBest });
+    this.commit();
+    return { coins, newBest, prevBest, chest };
+  }
+
+  /** The attempt was started but never finished (the game was closed mid-challenge). */
+  settleAbandonedChallenge(): ReturnType<Meta['finishChallenge']> | null {
+    // Read the stored state directly: it may be from an earlier day.
+    const st = this.d.challenge;
+    if (!st.attempted || st.done) return null;
+    return this.settleChallenge(st, st.score);
+  }
+
+  // --- Welcome back ----------------------------------------------------------------
+
+  /** What happened while the player was away, and what to do next (null if barely away). */
+  welcomeBack(now = Date.now()): { awayMs: number; treasury: number; chestReady: boolean; daily: boolean; challenge: boolean; towerUpgrades: number; building: string | null; goal: string } | null {
+    const awayMs = now - (this.d.lastSeen || now);
+    if (awayMs < 30 * 60000 || !this.d.base || !this.featureUnlocked('treasury')) return null;
+    const towerUpgrades = this.towersAvailable().filter((t) => {
+      const c = this.towerUpgradeCost(t);
+      return c !== null && c <= this.d.coins;
+    }).length;
+    const b = this.featureUnlocked('kingdom') ? this.affordableBuilding() : null;
+    return {
+      awayMs,
+      treasury: this.treasuryAmount(now),
+      chestReady: this.featureUnlocked('chests') && (this.freeChestReady(now) || this.d.chest.pendingMilestone > 0),
+      daily: this.featureUnlocked('dailyLogin') && this.dailyStatus().available,
+      challenge: this.featureUnlocked('challenge') && !this.challengeState().attempted,
+      towerUpgrades,
+      building: b ? BUILDING_BY_ID[b].name : null,
+      goal: this.nextGoal(),
+    };
+  }
+
+  /** One concrete thing to aim for next. */
+  nextGoal(): string {
+    const best = this.bestWave();
+    const nextCp = (Math.floor(best / 10) + 1) * 10;
+    const nextBuilding = BUILDINGS.find((b) => !this.hasBuilding(b.id));
+    if (nextBuilding && !this.buildingUnlocked(nextBuilding.id)) return `Reach wave ${nextBuilding.unlockWave} to build the ${nextBuilding.name} (${nextBuilding.description.toLowerCase()})`;
+    if (nextBuilding && this.d.coins < nextBuilding.cost) return `Save ${nextBuilding.cost - this.d.coins} more coins to build the ${nextBuilding.name}`;
+    // The tower type closest to its next mastery level.
+    let bestT: TowerId | null = null;
+    let bestLeft = Infinity;
+    for (const t of this.towersAvailable()) {
+      if (this.masteryLevel(t) >= MASTERY.maxLevel) continue;
+      const [have, need] = this.masteryProgress(t);
+      if (need - have < bestLeft) {
+        bestLeft = need - have;
+        bestT = t;
+      }
+    }
+    if (bestT && bestLeft < 150) return `${bestLeft} more kills with ${bestT[0].toUpperCase() + bestT.slice(1)} towers for mastery ${this.masteryLevel(bestT) + 1}`;
+    return `Reach checkpoint wave ${nextCp} for a milestone chest`;
+  }
+
+  markSeen(now = Date.now()): void {
+    this.d.lastSeen = now;
   }
 
   /** Unlocks and pays every achievement whose target is now met. Returns the new ones. */
@@ -144,7 +333,7 @@ export class Meta {
     const cleared = waveIndex + 1;
     this.d.stats.wavesCleared++;
     if (cleared > this.d.progress.bestWave) this.d.progress.bestWave = cleared;
-    const coins = waveCoins(waveIndex);
+    const coins = Math.round(waveCoins(waveIndex) * (this.hasBuilding('windmill') ? 1 + KINGDOM_BONUS.windmillCoins : 1));
     this.d.coins += coins;
     this.d.stats.coinsEarned += coins;
     // Batched analytics: one coins_earned event per wave keeps the log readable.
@@ -276,7 +465,7 @@ export class Meta {
   // --- Treasury -------------------------------------------------------------------
 
   treasuryRate(): number {
-    return TREASURY.coinsPerHour + TREASURY.coinsPerHourPerWave * this.bestWave();
+    return (TREASURY.coinsPerHour + TREASURY.coinsPerHourPerWave * this.bestWave()) * (this.hasBuilding('farm') ? 1 + KINGDOM_BONUS.farmTreasury : 1);
   }
 
   treasuryAmount(now = Date.now()): number {
@@ -288,10 +477,12 @@ export class Meta {
     return (now - this.d.treasury.lastCollect) / 3600000 >= TREASURY.capHours;
   }
 
-  collectTreasury(doubled: boolean): number {
-    const amt = this.treasuryAmount() * (doubled ? 2 : 1);
+  /** Collects the treasury; `mult` 2 or 3 from a rewarded ad. */
+  collectTreasury(mult: boolean | number): number {
+    const m = typeof mult === 'number' ? mult : mult ? 2 : 1;
+    const amt = this.treasuryAmount() * m;
     this.d.treasury.lastCollect = Date.now();
-    this.earn(amt, doubled ? 'treasury_doubled' : 'treasury');
+    this.earn(amt, m > 1 ? `treasury_x${m}` : 'treasury');
     return amt;
   }
 
@@ -305,13 +496,13 @@ export class Meta {
     return Math.max(0, this.d.chest.nextFree - now);
   }
 
-  private rollChest(kind: ChestReward['kind']): ChestReward {
+  rollChest(kind: ChestReward['kind']): ChestReward {
     const c = CHESTS[kind];
     const rng = new Random(Date.now() & 0xffffffff);
     return { kind, coins: rng.int(c.coinsMin, c.coinsMax), shards: rng.int(c.shardsMin, c.shardsMax) };
   }
 
-  private grantChest(r: ChestReward): ChestReward {
+  grantChest(r: ChestReward): ChestReward {
     this.d.shards += r.shards;
     this.earn(r.coins, `chest_${r.kind}`);
     return r;
@@ -435,12 +626,14 @@ export class Meta {
 
   // --- Notifications (red dots) --------------------------------------------------------
 
-  notifications(): { treasury: boolean; chest: boolean; missions: boolean; upgrades: boolean; daily: boolean } {
+  notifications(): { treasury: boolean; chest: boolean; missions: boolean; upgrades: boolean; daily: boolean; town: boolean; challenge: boolean } {
     return {
       treasury: this.featureUnlocked('treasury') && this.treasuryAmount() >= TREASURY.minCollect,
       chest: this.featureUnlocked('chests') && (this.freeChestReady() || this.d.chest.pendingMilestone > 0),
       missions: this.featureUnlocked('missions') && this.missions().some((m) => m.done && !m.claimed),
       upgrades: this.featureUnlocked('shop') && this.hasAffordableUpgrade(),
+      town: this.featureUnlocked('kingdom') && !!this.affordableBuilding(),
+      challenge: this.featureUnlocked('challenge') && !this.challengeState().attempted,
       daily: this.featureUnlocked('dailyLogin') && this.dailyStatus().available,
     };
   }

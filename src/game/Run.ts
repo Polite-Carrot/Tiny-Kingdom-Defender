@@ -15,6 +15,8 @@ import { tileToWorld, type LevelMap, type PathPoint } from './LevelMap';
 import { SYNERGIES, SYNERGY_RANGE, type SynergyId } from '../data/synergies';
 import { kingdomMap, siegeWave, clearLandCost, checkpointOf, ageOf, initialSpots, hpMultFor, goldScaleAt, openRoads } from './Siege';
 import type { WaveDef } from './WaveComposer';
+import { MASTERY } from '../data/mastery';
+import type { ChallengeMods } from '../data/challenge';
 
 export interface MetaBonuses {
   towerLevels: Record<TowerId, number>;
@@ -27,6 +29,12 @@ export interface MetaBonuses {
   heroLevel?: number;
   /** Castle battlements level (archers on the walls). */
   battlements?: number;
+  /** Mastery level of each tower type. */
+  mastery?: Partial<Record<TowerId, number>>;
+  /** Extra tower damage from the kingdom (0.05 = +5%). */
+  towerDamage?: number;
+  /** Barricade HP multiplier. */
+  barricadeHp?: number;
 }
 
 /** Persisted state of the kingdom (saved at wave starts and whenever the field is quiet). */
@@ -88,6 +96,8 @@ export interface RunConfig {
   /** Hold before a wave that starts a new Age or opens a road until `continueFrontier()` (UI only). */
   announceFrontiers?: boolean;
   seed?: number;
+  /** Daily Challenge twists. */
+  mods?: ChallengeMods;
 }
 
 export interface Enemy {
@@ -375,7 +385,7 @@ export class Run {
     }
     this.refreshSynergies(true);
 
-    const heroId = config.meta.heroId;
+    const heroId = config.mods?.noHero ? null : config.meta.heroId;
     if (heroId) {
       const def = HEROES[heroId];
       const p = this.defaultHeroPosition();
@@ -390,6 +400,7 @@ export class Run {
   }
 
   private maxHpFor(meta: MetaBonuses): number {
+    if (this.config.mods?.castleHp) return this.config.mods.castleHp;
     return Math.max(1, Math.round(SIEGE.castleHp + meta.castleHpBonus));
   }
 
@@ -446,6 +457,19 @@ export class Run {
     };
   }
 
+  /** How close the last wave came to being cleared (for the "so close!" message on a loss). */
+  nearMiss(): { wave: number; enemiesLeft: number; boss: { name: string; hpFrac: number } | null } {
+    const wave = this.currentWave;
+    let left = this.spawnQueue.filter((s) => s.wave === wave).length;
+    let boss: { name: string; hpFrac: number } | null = null;
+    for (const e of this.enemies) {
+      if (!e.alive || e.wave !== wave) continue;
+      left++;
+      if (e.def.boss && (!boss || e.hp / e.maxHp > boss.hpFrac)) boss = { name: e.def.name, hpFrac: e.hp / e.maxHp };
+    }
+    return { wave, enemiesLeft: left, boss };
+  }
+
   /** No enemies on the field or waiting to spawn. */
   isQuiet(): boolean {
     return this.spawnQueue.length === 0 && this.aliveCount() === 0;
@@ -493,11 +517,15 @@ export class Run {
 
   computeStats(def: TowerDef, tier: number, branch: number): TowerStats {
     const base = towerStats(def, tier, branch);
-    const lvl = this.config.meta.towerLevels[def.id] ?? 0;
+    const meta = this.config.meta;
+    const lvl = meta.towerLevels[def.id] ?? 0;
+    const mastery = meta.mastery?.[def.id] ?? 0;
+    const dmg = (1 + lvl * TOWER_META.damagePerLevel) * (1 + mastery * MASTERY.damagePerLevel) * (1 + (meta.towerDamage ?? 0)) * (this.config.mods?.towerDamage ?? 1);
     return {
       ...base,
-      damage: base.damage * (1 + lvl * TOWER_META.damagePerLevel),
-      range: base.range * (1 + lvl * TOWER_META.rangePerLevel),
+      damage: base.damage * dmg,
+      range: base.range * (1 + lvl * TOWER_META.rangePerLevel) * (mastery >= MASTERY.veteranLevel ? 1 + MASTERY.veteranRange : 1),
+      cooldown: base.cooldown * (mastery >= MASTERY.masterLevel ? MASTERY.masterCooldown : 1),
     };
   }
 
@@ -665,7 +693,7 @@ export class Run {
   }
 
   barricadeMaxHp(): number {
-    return Math.round(BARRICADE.baseHp * Math.pow(hpMultFor(this.waveIndex), BARRICADE.hpExponent));
+    return Math.round(BARRICADE.baseHp * Math.pow(hpMultFor(this.waveIndex), BARRICADE.hpExponent) * (this.config.meta.barricadeHp ?? 1));
   }
 
   /** How many may stand at once (one more per Age reached). */
@@ -978,14 +1006,16 @@ export class Run {
     if (this.nextWaveTimer <= 0) this.startWave();
   }
 
-  spawnEnemy(id: EnemyId, path: number, dist: number, wave: number, hpMult: number, goldMult = 1): Enemy {
+  /** `inherited`: hp and gold already include the challenge modifiers (summons and splits). */
+  spawnEnemy(id: EnemyId, path: number, dist: number, wave: number, hpMult: number, goldMult = 1, inherited = false): Enemy {
     const def = ENEMIES[id];
     let e = this.enemies.find((o) => !o.alive && o.flash <= -1);
     if (!e) {
       e = {} as Enemy;
       this.enemies.push(e);
     }
-    const hp = def.hp * hpMult;
+    const mods = this.config.mods;
+    const hp = def.hp * hpMult * (inherited || !mods ? 1 : mods.enemyHp * Math.pow(1 + mods.hpRamp, Math.max(0, wave - mods.rampFrom)));
     Object.assign(e, {
       id: this.nextId++, def, alive: true, hp, maxHp: hp, path, dist, lane: this.rng.range(-0.22, 0.22),
       x: 0, y: def.flying ? ENEMY_RULES.flyHeight : 0, z: 0, dirX: 1, dirZ: 0,
@@ -996,7 +1026,7 @@ export class Run {
       abilityTimer: def.heal ? def.heal.interval * this.rng.range(0.5, 1) : 0,
       summonTimer: def.boss?.summonInterval ?? 0,
       chargeTimer: def.boss?.chargeInterval ?? 0,
-      immuneTimer: 0, immuneIdx: 0, wave, bountyMult: goldMult, armorBonus: 0, speedMult: 1, frozen: false,
+      immuneTimer: 0, immuneIdx: 0, wave, bountyMult: goldMult * (inherited ? 1 : mods?.killGold ?? 1), armorBonus: 0, speedMult: mods?.enemySpeed ?? 1, frozen: false,
       phase: this.rng.next() * Math.PI * 2,
     } satisfies Partial<Enemy>);
     this.placeEnemy(e);
@@ -1007,7 +1037,7 @@ export class Run {
   /** Rarely promotes a fresh regular enemy to an elite with a random trait. */
   private maybeElite(e: Enemy): void {
     if (e.def.boss || e.def.id === 'minion' || e.wave < ELITE_RULES.firstWave) return;
-    const chance = Math.min(ELITE_RULES.chanceMax, ELITE_RULES.chanceBase + ELITE_RULES.chancePerWave * e.wave);
+    const chance = Math.min(ELITE_RULES.chanceMax, ELITE_RULES.chanceBase + ELITE_RULES.chancePerWave * e.wave) * (this.config.mods?.eliteMult ?? 1);
     if (this.rng.next() >= chance) return;
     this.makeElite(e, this.rng.pick(Object.keys(ELITES) as EliteTrait[]));
   }
@@ -1127,7 +1157,7 @@ export class Run {
           if (e.summonTimer <= 0) {
             e.summonTimer = b.summonInterval ?? 8;
             for (let i = 0; i < (b.summonCount ?? 2); i++) {
-              const m = this.spawnEnemy(b.summonId, e.path, Math.max(0, e.dist - 0.4 - i * 0.35), e.wave, e.maxHp / def.hp * 0.25 + 0.5, e.bountyMult);
+              const m = this.spawnEnemy(b.summonId, e.path, Math.max(0, e.dist - 0.4 - i * 0.35), e.wave, e.maxHp / def.hp * 0.25 + 0.5, e.bountyMult, true);
               this.waveRemaining.set(e.wave, (this.waveRemaining.get(e.wave) ?? 0) + 1);
               m.lane = this.rng.range(-0.3, 0.3);
             }
@@ -1260,7 +1290,7 @@ export class Run {
     e.hidden = false;
     if (reward && e.elite === 'splitter') {
       for (let i = 0; i < 2; i++) {
-        const m = this.spawnEnemy(e.def.id, e.path, Math.max(0, e.dist - i * 0.3), e.wave, (e.maxHp / ELITE_RULES.hpMult / e.def.hp) * 0.5, e.bountyMult / ELITE_RULES.bountyMult);
+        const m = this.spawnEnemy(e.def.id, e.path, Math.max(0, e.dist - i * 0.3), e.wave, (e.maxHp / ELITE_RULES.hpMult / e.def.hp) * 0.5, e.bountyMult / ELITE_RULES.bountyMult, true);
         m.lane = e.lane + (i - 0.5) * 0.3;
         this.placeEnemy(m);
         this.waveRemaining.set(e.wave, (this.waveRemaining.get(e.wave) ?? 0) + 1);
@@ -1270,7 +1300,7 @@ export class Run {
     if (reward && e.def.split) {
       // Lava Slug: bursts into smaller slugs where it died.
       for (let i = 0; i < e.def.split.count; i++) {
-        const m = this.spawnEnemy(e.def.split.id, e.path, Math.max(0, e.dist - i * 0.25), e.wave, e.maxHp / e.def.hp, e.bountyMult);
+        const m = this.spawnEnemy(e.def.split.id, e.path, Math.max(0, e.dist - i * 0.25), e.wave, e.maxHp / e.def.hp, e.bountyMult, true);
         m.lane = e.lane + (i - (e.def.split.count - 1) / 2) * 0.25;
         this.placeEnemy(m);
         this.waveRemaining.set(e.wave, (this.waveRemaining.get(e.wave) ?? 0) + 1);

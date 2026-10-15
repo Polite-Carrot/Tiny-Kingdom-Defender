@@ -12,9 +12,19 @@ import { worldToTile } from './LevelMap';
 import { ELITE_RULES } from '../data/enemies';
 import { SYNERGY_BY_ID } from '../data/synergies';
 import { HERO_LEVELS, HERO_GEAR, gearTierFor } from '../data/heroes';
-import { ageTitle, themeOf } from './Siege';
+import { ageTitle, themeOf, kingdomMap, hpMultFor } from './Siege';
 import { towerThumb } from '../ui/Thumbnails';
 import { el } from '../ui/dom';
+import { MASTERY, masteryTitle } from '../data/mastery';
+import { challengeMods, CHALLENGE, type ChallengeDef } from '../data/challenge';
+
+/** A fresh siege for the Daily Challenge: every pad cleared, no towers, the day's gold. */
+function challengeSnapshot(c: ChallengeDef, pads: number): BaseSnapshot {
+  return {
+    wave: c.startWave, checkpoint: c.startWave, gold: c.gold, castleHp: -1, towers: [], spots: Array.from({ length: pads }, (_, i) => i), padsCleared: 0,
+    reviveUsed: true, reinforcementsUsed: true, goldRushUsed: true, goldRushWaves: 0,
+  };
+}
 
 const STEP = 1 / 60;
 const MAX_STEPS = 8;
@@ -41,16 +51,28 @@ export class Battle {
   onFallen: (fromWave: number, toWave: number) => void = () => {};
   onReviveOffer: () => void = () => {};
   onAgeChange: () => void = () => {};
+  /** The Daily Challenge ended (the castle fell): waves survived. */
+  onChallengeEnd: (score: number) => void = () => {};
+  /** Today's Daily Challenge, when this battle is one (nothing is saved to the kingdom). */
+  readonly challenge: ChallengeDef | null;
+  /** Waves survived in this challenge attempt. */
+  challengeScore = 0;
+  /** Kill counts already turned into mastery XP, by tower id. */
+  private masteryKills = new Map<number, number>();
 
-  constructor(private s: Services, private hud: Hud, opts: { demo?: boolean } = {}) {
+  constructor(private s: Services, private hud: Hud, opts: { demo?: boolean; challenge?: ChallengeDef } = {}) {
     const meta = s.meta;
-    const snapshot: BaseSnapshot = s.save.data.base ?? newKingdom();
+    this.challenge = opts.challenge ?? null;
+    const c = this.challenge;
+    const snapshot: BaseSnapshot = c ? challengeSnapshot(c, kingdomMap().buildSpots.length) : s.save.data.base ?? newKingdom();
     this.run = new Run({
       snapshot,
       meta: meta.metaBonuses(),
-      availableTowers: meta.towersAvailable(),
-      reviveAvailable: !opts.demo,
-      announceFrontiers: !opts.demo,
+      availableTowers: c ? [...(c.towers ?? TOWER_ORDER)] : meta.towersAvailable(),
+      reviveAvailable: !opts.demo && !c,
+      announceFrontiers: !opts.demo && !c,
+      seed: c?.seed,
+      mods: c ? challengeMods(c.twists, c.startWave, hpMultFor(CHALLENGE.hpLikeWave) / hpMultFor(c.startWave)) : undefined,
     });
     const silent = { play() {} } as unknown as typeof s.audio;
     this.view = new BattleView(s.renderer, s.rig, this.run, opts.demo ? silent : s.audio, {
@@ -60,13 +82,18 @@ export class Battle {
         s.audio.play('coin');
       }),
       castleHit: () => !opts.demo && this.hud.castleHit(),
-    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0 });
+    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings] });
     if (opts.demo) return;
 
-    if (!s.save.data.base) this.persist(true);
+    if (!s.save.data.base && !c) this.persist(true);
     this.hud.bind(this.run);
-    this.bindRunEvents();
-    this.tutorial = new Tutorial(s, this, hud);
+    this.hud.setChallenge(c ? 'Daily Challenge' : null, c?.startWave ?? 0);
+    this.bindCommonEvents();
+    if (c) this.bindChallengeEvents();
+    else {
+      this.bindRunEvents();
+      this.tutorial = new Tutorial(s, this, hud);
+    }
     s.analytics.track('level_start', { level: 'siege', wave: this.run.waveIndex + 1, towers: this.run.towers.length, gold: this.run.gold, hero: this.run.hero?.def.id ?? 'none' });
   }
 
@@ -156,9 +183,117 @@ export class Battle {
 
   /** Saves the kingdom. Only saves mid-wave when given the wave to resume from. */
   persist(force = false, wave?: number): void {
+    if (this.challenge) return;
     if (!force && !this.run.isQuiet()) return;
     this.s.save.data.base = this.run.snapshot(wave);
     this.s.save.save();
+  }
+
+  /** Turns the kills each tower made since the last call into mastery XP for its type. */
+  flushMastery(): void {
+    const { meta, ui, audio } = this.s;
+    const gained = new Map<TowerId, number>();
+    for (const t of this.run.towers) {
+      const before = this.masteryKills.get(t.id) ?? t.kills;
+      const d = t.kills - before;
+      this.masteryKills.set(t.id, t.kills);
+      if (d > 0) gained.set(t.def.id, (gained.get(t.def.id) ?? 0) + d * MASTERY.killXp);
+    }
+    let changed = false;
+    for (const [type, xp] of gained) {
+      const lvl = meta.addMasteryXp(type, xp);
+      if (lvl === null) continue;
+      changed = true;
+      const perk = lvl === MASTERY.veteranLevel ? 'Veteran: +8% range and a silver banner' : lvl === MASTERY.masterLevel ? 'Master: 12% faster firing and a golden crown' : `+${Math.round(lvl * MASTERY.damagePerLevel * 100)}% damage for every ${TOWERS[type].name}`;
+      ui.banner(`${TOWERS[type].name} mastery ${lvl}${lvl >= MASTERY.veteranLevel ? ` · ${masteryTitle(lvl)}` : ''}`, perk);
+      audio.play('upgrade');
+    }
+    if (changed) {
+      this.run.applyMeta(meta.metaBonuses());
+      this.view.refreshTowers();
+    }
+    meta.commit();
+  }
+
+  /** Bookkeeping shared by the kingdom and the Daily Challenge. */
+  private bindCommonEvents(): void {
+    const ev = this.run.events;
+    const { ui, meta } = this.s;
+    // Towers already standing when the battle opens don't re-earn their old kills.
+    for (const t of this.run.towers) this.masteryKills.set(t.id, t.kills);
+    ev.on('towerBuilt', (t) => this.masteryKills.set(t.id, 0));
+    ev.on('waveCleared', () => this.flushMastery());
+    ev.on('heroKill', (e) => {
+      const xp = e.def.boss ? HERO_LEVELS.bossXp : e.elite ? HERO_LEVELS.eliteXp : Math.max(1, e.def.cost * HERO_LEVELS.xpPerCost);
+      this.giveHeroXp(xp);
+    });
+    ev.on('synergy', ({ synergy }) => {
+      const def = SYNERGY_BY_ID[synergy];
+      ui.banner(`Synergy: ${def.name}`, def.description);
+    });
+    ev.on('eliteKill', () => {
+      meta.d.shards += ELITE_RULES.gems;
+      meta.d.life.eliteKills++;
+      meta.commit();
+    });
+    ev.on('enemyDeath', ({ enemy, bounty }) => {
+      if (bounty <= 0 && !enemy.def.boss) return;
+      meta.killedEnemy(enemy.def.id);
+      if (enemy.def.boss) meta.d.life.bossKills++;
+      if (enemy.def.flying) meta.d.life.flyingKills++;
+    });
+    ev.on('towerBuilt', () => meta.d.life.towersBuilt++);
+    ev.on('towerUpgraded', (t) => {
+      if (t.tier === MAX_TIER) meta.d.life.celestialTowers++;
+    });
+    ev.on('barricadeBuilt', () => meta.d.life.barricades++);
+    ev.on('synergy', ({ synergy }) => {
+      meta.d.life.synergies++;
+      if (!meta.d.life.synergyTypes.includes(synergy)) meta.d.life.synergyTypes.push(synergy);
+    });
+    ev.on('heroAbility', () => meta.d.life.abilityUses++);
+    ev.on('enemySpawn', (e) => {
+      if (meta.sawEnemy(e.def.id) && this.run.waveIndex > 1 && !e.def.boss) {
+        setTimeout(() => ui.toast(`New enemy discovered: ${e.def.name}! Check the Bestiary.`, 2800), 400);
+      }
+      if (e.def.boss) this.bossEntrance(e);
+    });
+  }
+
+  /** Daily Challenge: count waves survived; the attempt ends when the castle falls. */
+  private bindChallengeEvents(): void {
+    const ev = this.run.events;
+    const { ui, meta, audio } = this.s;
+    ev.on('waveStart', ({ index }) => {
+      const w = this.run.waveDef(index);
+      if (!w?.boss) ui.banner(`Challenge wave ${index - this.challenge!.startWave + 1}`, ageTitle(index));
+    });
+    ev.on('waveCleared', () => {
+      this.challengeScore++;
+      meta.challengeProgress(this.challengeScore);
+    });
+    ev.on('defeat', () => {
+      this.deselect();
+      audio.play('defeat');
+      this.flushMastery();
+      setTimeout(() => this.onChallengeEnd(this.challengeScore), 1200);
+    });
+  }
+
+  /** Something useful to try after a loss. */
+  lossTip(): string {
+    const { meta } = this.s;
+    const run = this.run;
+    if (!this.challenge && meta.featureUnlocked('shop') && meta.hasAffordableUpgrade()) return 'You can afford a permanent upgrade in the Shop: every tower gets stronger.';
+    if (meta.bestWave() >= BARRICADE.unlockWave && run.barricades.length < run.barricadeLimit()) {
+      return `Try another barricade on the road (${run.barricades.length}/${run.barricadeLimit()} placed): it holds enemies in your towers' range.`;
+    }
+    const free = [...run.unlockedSpots].filter((s) => !run.towerAt(s)).length;
+    if (free > 0) return `${free} cleared pad${free > 1 ? 's are' : ' is'} still empty: one more tower could have made the difference.`;
+    const low = run.towers.reduce((a, t) => (!a || t.tier < a.tier ? t : a), null as null | (typeof run.towers)[number]);
+    if (low && low.tier < MAX_TIER) return `Upgrade your weakest tower (the ${low.def.name}, tier ${low.tier}).`;
+    if (run.hero) return 'Move your hero to where enemies bunch up and use the ability on the boss.';
+    return 'Mix tower types: frost slows enemies so cannons and mages land every hit.';
   }
 
   private bindRunEvents(): void {
@@ -193,43 +328,8 @@ export class Battle {
     });
     ev.on('ageChange', () => this.onAgeChange());
     ev.on('frontier', (f) => this.announceFrontier(f.wave, f.newAge, f.roads));
-    ev.on('heroKill', (e) => {
-      const xp = e.def.boss ? HERO_LEVELS.bossXp : e.elite ? HERO_LEVELS.eliteXp : Math.max(1, e.def.cost * HERO_LEVELS.xpPerCost);
-      this.giveHeroXp(xp);
-    });
-    ev.on('synergy', ({ synergy }) => {
-      const def = SYNERGY_BY_ID[synergy];
-      ui.banner(`Synergy: ${def.name}`, def.description);
-    });
-    ev.on('eliteKill', () => {
-      meta.d.shards += ELITE_RULES.gems;
-      meta.d.life.eliteKills++;
-      meta.commit();
-    });
-    ev.on('enemyDeath', ({ enemy, bounty }) => {
-      if (bounty <= 0 && !enemy.def.boss) return;
-      meta.killedEnemy(enemy.def.id);
-      if (enemy.def.boss) meta.d.life.bossKills++;
-      if (enemy.def.flying) meta.d.life.flyingKills++;
-    });
-    ev.on('towerBuilt', () => meta.d.life.towersBuilt++);
-    ev.on('towerUpgraded', (t) => {
-      if (t.tier === MAX_TIER) meta.d.life.celestialTowers++;
-    });
-    ev.on('barricadeBuilt', () => meta.d.life.barricades++);
-    ev.on('synergy', ({ synergy }) => {
-      meta.d.life.synergies++;
-      if (!meta.d.life.synergyTypes.includes(synergy)) meta.d.life.synergyTypes.push(synergy);
-    });
-    ev.on('heroAbility', () => meta.d.life.abilityUses++);
     ev.on('checkpoint', () => {
       if (this.run.castleHp >= this.run.castleMaxHp) meta.d.life.perfectCheckpoints++;
-    });
-    ev.on('enemySpawn', (e) => {
-      if (meta.sawEnemy(e.def.id) && this.run.waveIndex > 1 && !e.def.boss) {
-        setTimeout(() => ui.toast(`New enemy discovered: ${e.def.name}! Check the Bestiary.`, 2800), 400);
-      }
-      if (e.def.boss) this.bossEntrance(e);
     });
     ev.on('towerBuilt', (t) => analytics.track('tower_built', { level: 'siege', tower: t.def.id, spot: t.spot, wave: this.run.waveIndex }));
     ev.on('towerUpgraded', (t) => analytics.track('tower_upgraded', { level: 'siege', tower: t.def.id, tier: t.tier, branch: t.branch >= 0 ? t.def.branches[t.branch].id : null }));
@@ -528,6 +628,7 @@ export class Battle {
 
   /** Re-applies permanent upgrades bought in the shop mid-siege. */
   applyMeta(): void {
+    if (this.challenge) return;
     this.run.applyMeta(this.s.meta.metaBonuses());
     this.view.setCastleLook(this.s.meta.castleTier(), (this.s.meta.d.meta.battlements ?? 0) > 0);
     this.run.config.availableTowers.splice(0, this.run.config.availableTowers.length, ...this.s.meta.towersAvailable());

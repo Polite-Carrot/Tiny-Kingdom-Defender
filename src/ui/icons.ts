@@ -31,6 +31,8 @@ export const ICONS = {
   infinity: `<svg viewBox="0 0 32 32"><path d="M9 11c-3 0-5 2-5 5s2 5 5 5c5 0 9-10 14-10 3 0 5 2 5 5s-2 5-5 5c-5 0-9-10-14-10z" stroke="#fff" stroke-width="3.5" fill="none"/></svg>`,
   trophy: `<svg viewBox="0 0 32 32"><path d="M9 4h14v7a7 7 0 01-14 0z" fill="#ffcf3f"/><path d="M9 6H4c0 5 3 7 5 7M23 6h5c0 5-3 7-5 7" stroke="#e09a12" stroke-width="2" fill="none"/><rect x="14" y="17" width="4" height="6" fill="#e09a12"/><rect x="9" y="23" width="14" height="5" rx="2" fill="#9a6a3f"/></svg>`,
   restart: `<svg viewBox="0 0 32 32"><path d="M25 16a9 9 0 11-3-6.7" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M24 3v8h-8" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  swords: `<svg viewBox="0 0 32 32"><path d="M5 3l4 0 15 15-4 4L5 7z" fill="#e8ecf2"/><path d="M27 3l-4 0-15 15 4 4 15-15z" fill="#c9d2df"/><path d="M6 20l6 6M20 26l6-6" stroke="#ffcf3f" stroke-width="3" stroke-linecap="round"/><path d="M4 28l4-4M28 28l-4-4" stroke="#9a6a3f" stroke-width="3" stroke-linecap="round"/></svg>`,
+  town: `<svg viewBox="0 0 32 32"><rect x="3" y="15" width="12" height="13" fill="#e8dcc0"/><path d="M1.5 16L9 8l7.5 8z" fill="#d9573f"/><rect x="17" y="11" width="12" height="17" fill="#c9b996"/><path d="M15.5 12L23 4l7.5 8z" fill="#5a7fd1"/><rect x="7" y="21" width="4" height="7" rx="2" fill="#74492a"/><rect x="21" y="16" width="4" height="4" fill="#ffd27a"/><rect x="21" y="23" width="4" height="5" fill="#74492a"/></svg>`,
   home: `<svg viewBox="0 0 32 32"><path d="M4 15L16 4l12 11v13H20v-8h-8v8H4z" fill="#fff"/></svg>`,
 };
 

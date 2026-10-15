@@ -31,12 +31,14 @@ export class TitleScreen {
           <button class="side-btn daily">${icon('calendar')}Daily<i class="dot"></i></button>
           <button class="side-btn chest">${icon('chest')}Chest<i class="dot"></i><span class="timer"></span></button>
           <button class="side-btn treasury">${icon('castle')}Treasury<i class="dot"></i><span class="timer"></span></button>
+          <button class="side-btn town-btn">${icon('town')}Town<i class="dot"></i></button>
           <button class="side-btn trophy-btn">${icon('trophy')}Trophies</button>
           <button class="side-btn bestiary-btn">${icon('skull')}Bestiary</button>
         </div>
         <div class="stack" style="display:flex;flex-direction:column;gap:10px;align-items:center">
           <div class="kingdom-card"></div>
           <button class="btn big play">${icon('play')} Play</button>
+          <button class="btn purple challenge-btn">${icon('swords')} Daily Challenge<i class="dot"></i></button>
         </div>
       </div>
       <button class="version">v1.0.0</button>`;
@@ -50,6 +52,8 @@ export class TitleScreen {
     q('.chest').onclick = () => this.gate('chests', () => Modals.chest(game));
     q('.treasury').onclick = () => this.gate('treasury', () => Modals.treasury(game));
     q('.trophy-btn').onclick = () => Modals.trophies(game);
+    q('.town-btn').onclick = () => this.gate('kingdom', () => Modals.town(game));
+    q('.challenge-btn').onclick = () => this.gate('challenge', () => Modals.challenge(game));
     q('.bestiary-btn').onclick = () => Modals.bestiary(game);
     q('.version').onclick = () => {
       if (++this.versionTaps >= 5) {
@@ -94,6 +98,8 @@ export class TitleScreen {
     setDot('.daily', n.daily);
     setDot('.chest', n.chest);
     setDot('.treasury', n.treasury);
+    setDot('.town-btn', n.town);
+    setDot('.challenge-btn', n.challenge);
     const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
     lock('.shop', 'shop');
     lock('.heroes', 'heroes');
@@ -101,6 +107,8 @@ export class TitleScreen {
     lock('.daily', 'dailyLogin');
     lock('.chest', 'chests');
     lock('.treasury', 'treasury');
+    lock('.town-btn', 'kingdom');
+    lock('.challenge-btn', 'challenge');
     const base = d.base;
     const wave = base ? base.wave : 0;
     const card = $(this.el, '.kingdom-card');

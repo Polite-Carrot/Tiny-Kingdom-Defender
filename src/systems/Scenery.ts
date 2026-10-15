@@ -4,11 +4,12 @@
 
 import * as THREE from 'three';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { propModel } from '../entities/Models';
+import { propModel, buildingModel, windmillSails } from '../entities/Models';
 import type { Theme } from '../data/themes';
 import { Water } from './Water';
 import { Grass, type BladeSpot } from './Grass';
 import { Moat } from './Moat';
+import { BUILDING_PLOTS, type BuildingId } from '../data/kingdom';
 import { ModelBuilder as MB } from '../entities/ModelBuilder';
 
 /** Smooth 2D value noise in [0, 1]. */
@@ -75,9 +76,14 @@ export class Scenery {
   private time = 0;
   private look: Look;
 
-  constructor(private theme: Theme, private animated: boolean) {
+  private buildings: THREE.Mesh | null = null;
+  private sails: THREE.Mesh | null = null;
+  private lambert: THREE.MeshLambertMaterial;
+
+  constructor(private theme: Theme, private animated: boolean, buildings: BuildingId[] = []) {
     this.look = LOOKS[theme.id];
     const lambert = this.track(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+    this.lambert = lambert;
     this.group.add(this.buildSky());
     this.group.add(new THREE.Mesh(this.track(this.buildTerrain()), lambert));
     const props = this.buildProps();
@@ -104,6 +110,8 @@ export class Scenery {
     this.water = this.track(new Water(theme, WATER_Y, BOARD_HALF, (x, z) => this.groundHeight(x, z), TERRAIN_SIZE, animated ? 200 : 110, hasMoat ? MOAT_W : 0));
     this.group.add(this.water.mesh);
 
+    this.setBuildings(buildings);
+
     // Ambient particles: pollen, dust, snow or embers.
     const n = animated ? 220 : 90;
     const pos = new Float32Array(n * 3);
@@ -119,6 +127,52 @@ export class Scenery {
     this.particles = new THREE.Points(pgeo, pmat);
     this.particles.frustumCulled = false;
     this.group.add(this.particles);
+  }
+
+  /** Near a building plot (kept clear of trees and grass). */
+  private onPlot(x: number, z: number, r = 1.5): boolean {
+    for (const k in BUILDING_PLOTS) {
+      const [px, pz] = BUILDING_PLOTS[k as BuildingId];
+      if ((x - px) ** 2 + (z - pz) ** 2 < r * r) return true;
+    }
+    return false;
+  }
+
+  /** Shows the kingdom's buildings on their plots beyond the moat. */
+  setBuildings(ids: BuildingId[]): void {
+    if (this.buildings) {
+      this.group.remove(this.buildings);
+      this.buildings.geometry.dispose();
+      this.buildings = null;
+    }
+    if (this.sails) {
+      this.group.remove(this.sails);
+      this.sails = null;
+    }
+    if (!ids.length) return;
+    const snow = this.theme.id === 'snow';
+    const items = ids.map((id) => {
+      const [x, z] = BUILDING_PLOTS[id];
+      // The plot is levelled (see height()); the foundation hides the terrain's coarse facets.
+      const y = this.height(x, z);
+      return { geo: buildingModel(id, snow), x, y, z, ry: Math.atan2(-x, -z), s: 1.25 };
+    });
+    const geo = mergeTransformed(items);
+    geo.computeVertexNormals();
+    this.buildings = new THREE.Mesh(geo, this.lambert);
+    this.buildings.castShadow = true;
+    this.group.add(this.buildings);
+    const mill = items.find((_, i) => ids[i] === 'windmill');
+    if (mill) {
+      this.sails = new THREE.Mesh(windmillSails(), this.lambert);
+      this.sails.castShadow = true;
+      // Hub on the windmill's front, 1.3 up (scaled by the building scale).
+      const fx = Math.sin(mill.ry), fz = Math.cos(mill.ry);
+      this.sails.position.set(mill.x + fx * 0.5 * mill.s, mill.y + 1.3 * mill.s, mill.z + fz * 0.5 * mill.s);
+      this.sails.rotation.y = mill.ry;
+      this.sails.scale.setScalar(mill.s);
+      this.group.add(this.sails);
+    }
   }
 
   private track<T extends { dispose(): void }>(o: T): T {
@@ -187,6 +241,7 @@ export class Scenery {
       const r = BOARD_HALF + 0.4 + Math.sqrt(hash(i, 1.93)) * 26;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (Math.abs(x) < BOARD_HALF + 0.2 && Math.abs(z) < BOARD_HALF + 0.2) continue;
+      if (this.onPlot(x, z, 1.15)) continue;
       const y = this.height(x, z);
       if (y < WATER_Y + 0.55 || y > 1.6) continue;
       // Skip steep slopes.
@@ -330,8 +385,22 @@ export class Scenery {
 
   // --- Island terrain ---------------------------------------------------------------
 
-  /** Terrain height around the board: low next to the plateau, hills further out, sinking into the sea. */
+  private plotHeights: number[] | null = null;
+
+  /** Terrain height, levelled into a flat pad on each building plot. */
   private height(x: number, z: number): number {
+    const h = this.rawHeight(x, z);
+    if (!this.plotHeights) this.plotHeights = Object.values(BUILDING_PLOTS).map(([px, pz]) => this.rawHeight(px, pz));
+    let out = h;
+    Object.values(BUILDING_PLOTS).forEach(([px, pz], i) => {
+      const d = Math.hypot(x - px, z - pz);
+      if (d < 3.4) out = this.plotHeights![i] + (out - this.plotHeights![i]) * smooth(1.3, 3.4, d);
+    });
+    return out;
+  }
+
+  /** Terrain height around the board: low next to the plateau, hills further out, sinking into the sea. */
+  private rawHeight(x: number, z: number): number {
     const dx = Math.max(0, Math.abs(x) - BOARD_HALF);
     const dz = Math.max(0, Math.abs(z) - BOARD_HALF);
     const d = Math.hypot(dx, dz);
@@ -375,7 +444,8 @@ export class Scenery {
     for (let i = 0; i < p.count; i += 3) {
       const ys = [p.getY(i), p.getY(i + 1), p.getY(i + 2)];
       // Steep faces read as rock.
-      const steep = Math.max(...ys) - Math.min(...ys) > 0.75;
+      // (Not on the levelled building plots, whose edges are steep but grassy.)
+      const steep = Math.max(...ys) - Math.min(...ys) > 0.75 && !this.onPlot(p.getX(i), p.getZ(i), 3.6);
       for (let j = 0; j < 3; j++) {
         const x = p.getX(i + j), y = ys[j], z = p.getZ(i + j);
         const n = noise(x * 0.7, z * 0.7);
@@ -412,6 +482,7 @@ export class Scenery {
       const r = 10 + hash(i, 7.7) * 22;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (Math.abs(x) < BOARD_HALF + 0.6 && Math.abs(z) < BOARD_HALF + 0.6) continue;
+      if (this.onPlot(x, z, 2.3)) continue;
       const y = this.height(x, z);
       if (y < WATER_Y + 0.6 || y > 2.2) continue;
       // Clump props into groves.
@@ -490,6 +561,7 @@ export class Scenery {
     this.clouds.rotation.y += dt * 0.006;
     this.water.update(this.time);
     this.moat?.update(this.time);
+    if (this.sails) this.sails.rotation.z = -this.time * 0.8;
     this.grass?.update(this.time);
     if (!this.animated) return;
     const attr = this.particles.geometry.attributes.position as THREE.BufferAttribute;
@@ -507,6 +579,7 @@ export class Scenery {
   }
 
   dispose(): void {
+    this.buildings?.geometry.dispose();
     for (const d of this.disposables) d.dispose();
   }
 }

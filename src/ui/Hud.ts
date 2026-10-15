@@ -117,6 +117,20 @@ export class Hud {
     $(this.el, '.shop-btn').onclick = () => cb.shop();
   }
 
+  private challengeLabel: string | null = null;
+  /** Challenge waves are numbered from 1. */
+  private waveOffset = 0;
+
+  /** Daily Challenge: label the wave pill and hide the shop (upgrades can't change mid-challenge). */
+  setChallenge(label: string | null, startWave = 0): void {
+    this.challengeLabel = label;
+    this.waveOffset = label ? startWave : 0;
+    this.lastWaveKey = '';
+    this.waveEl.textContent = '';
+    ($(this.el, '.shop-btn') as HTMLElement).style.display = label ? 'none' : '';
+    this.el.classList.toggle('challenge', !!label);
+  }
+
   bind(run: Run): void {
     this.run = run;
     this.lastGold = this.lastHp = -1;
@@ -190,11 +204,11 @@ export class Hud {
       this.hpEl.textContent = String(run.castleHp);
     }
     const shown = run.state === 'prep' ? run.waveIndex + 1 : Math.max(1, run.waveIndex);
-    const waveTxt = `Wave ${shown}`;
+    const waveTxt = `Wave ${shown - this.waveOffset}`;
     if (this.waveEl.textContent !== waveTxt) {
       this.waveEl.textContent = waveTxt;
       const cp = run.lastCheckpoint;
-      this.ageEl.textContent = `${ageTitle(shown - 1)}${cp > 0 ? ` · ⚑ ${cp}` : ''}`;
+      this.ageEl.textContent = this.challengeLabel ? `⚔ ${this.challengeLabel}` : `${ageTitle(shown - 1)}${cp > 0 ? ` · ⚑ ${cp}` : ''}`;
     }
 
     // Next-wave button.
