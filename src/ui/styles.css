@@ -634,3 +634,12 @@ body.landscape .hud.ctx-open .hud-cam { display: none; }
 .spell-btn.ability-btn { box-shadow: 0 0 0 3px var(--sc), 0 4px 0 rgba(0,0,0,.3); background: radial-gradient(circle at 50% 35%, #c9a8ff 0%, #7a4fd6 80%); }
 .spell-btn.ability-btn.ready { box-shadow: 0 0 0 3px var(--sc), 0 4px 0 rgba(0,0,0,.3), 0 0 16px #b48cff; }
 .spell-btn.ability-btn .ico { filter: drop-shadow(0 2px 0 rgba(40,20,80,.45)); }
+
+/* Reset progress: ask, then press and hold for six seconds (as in Color Match & Merge). */
+.reset-line { text-align: center; font-weight: 700; margin: 4px 0 12px; }
+.hold { position: relative; display: block; width: 100%; margin: 4px 0 10px; padding: 16px 18px; border: 0; border-radius: 16px; background: #fff3e6; box-shadow: inset 0 0 0 3px var(--red), 0 5px 0 var(--red-d); font: inherit; font-weight: 900; font-size: 19px; color: var(--ink); cursor: pointer; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+.hold:active { transform: translateY(3px); box-shadow: inset 0 0 0 3px var(--red), 0 2px 0 var(--red-d); }
+/* The fill says how much longer; script drives it so letting go stops it dead. */
+.hold__fill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--held, 0)); background: linear-gradient(90deg, #ff8fb1, var(--red)); }
+.hold__label { position: relative; }
+.hold.is-done .hold__fill { background: var(--green, #59e05a); }

@@ -778,22 +778,94 @@ export function settings(game: Game): void {
         }));
       });
       $(m, '.dbg').onclick = () => debug(game);
-      let armed = false;
-      $(m, '.reset').onclick = (e) => {
-        const b = e.currentTarget as HTMLButtonElement;
-        if (!armed) {
-          armed = true;
-          b.textContent = 'Tap again to confirm';
-          return;
-        }
-        save.reset();
-        game.s.ui.closeModals();
-        game.s.ui.toast('Progress reset');
-        game.goTitle();
-      };
+      $(m, '.reset').onclick = () => resetProgress(game);
     };
     render();
   });
+}
+
+/** How long the erase button must be held down. */
+const RESET_HOLD_MS = 6000;
+
+/**
+ * Erasing progress asks twice and then asks for six seconds of intent (as in Color Match &
+ * Merge), so a stray tap can never wipe a kingdom.
+ */
+function resetProgress(game: Game): void {
+  const { ui, audio, save } = game.s;
+  // Closing the card mid-hold must stop the countdown.
+  let stop = () => {};
+  ui.modal((m, h) => {
+    m.innerHTML = `
+      <div class="ribbon lose">Reset progress?</div>
+      <div class="reset-ask">
+        <p class="reset-line">Every realm and its towers, every wave, coin and gem, your heroes, upgrades, town and trophies. <b>This cannot be undone.</b></p>
+        <div class="actions"><button class="btn big keep">Keep it</button><button class="btn red yes">Yes, erase it</button></div>
+      </div>
+      <div class="reset-hold-step" hidden>
+        <p class="reset-line">Hold the button down until the bar fills.</p>
+        <button class="hold" type="button"><i class="hold__fill" aria-hidden="true"></i><span class="hold__label">Press and hold</span></button>
+        <div class="actions"><button class="btn wood back">Cancel</button></div>
+      </div>`;
+    const ask = $(m, '.reset-ask'), step = $(m, '.reset-hold-step');
+    const hold = $(m, '.hold') as HTMLButtonElement;
+    const label = $(m, '.hold__label');
+    let from = 0, raf = 0, done = false;
+    // Driven frame by frame (not a CSS transition) so letting go stops the bar exactly where it stood.
+    const paint = (k: number, text: string) => {
+      hold.style.setProperty('--held', String(k));
+      label.textContent = text;
+    };
+    const release = () => {
+      if (done) return;
+      cancelAnimationFrame(raf);
+      raf = 0;
+      paint(0, 'Press and hold');
+    };
+    const tick = () => {
+      const held = Date.now() - from;
+      if (held >= RESET_HOLD_MS) {
+        raf = 0;
+        done = true;
+        hold.classList.add('is-done');
+        paint(1, 'Erased');
+        audio.play('error');
+        save.reset();
+        setTimeout(() => {
+          ui.closeModals();
+          ui.toast('Progress reset');
+          game.goTitle();
+        }, 700);
+        return;
+      }
+      paint(held / RESET_HOLD_MS, `Keep holding… ${Math.ceil((RESET_HOLD_MS - held) / 1000)}`);
+      raf = requestAnimationFrame(tick);
+    };
+    hold.addEventListener('pointerdown', (e) => {
+      if (raf || done) return;
+      // Capture, so a finger sliding off the button still counts as holding.
+      hold.setPointerCapture(e.pointerId);
+      from = Date.now();
+      audio.play('click');
+      raf = requestAnimationFrame(tick);
+    });
+    stop = () => {
+      if (!done) cancelAnimationFrame(raf);
+    };
+    hold.addEventListener('pointerup', release);
+    hold.addEventListener('pointercancel', release);
+    hold.addEventListener('contextmenu', (e) => e.preventDefault());
+    $(m, '.keep').onclick = () => h.close();
+    $(m, '.back').onclick = () => {
+      release();
+      h.close();
+    };
+    $(m, '.yes').onclick = () => {
+      ask.hidden = true;
+      step.hidden = false;
+      audio.play('select');
+    };
+  }, { onClose: () => stop() });
 }
 
 // --- Debug -----------------------------------------------------------------------------------------------
