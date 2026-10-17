@@ -7,6 +7,7 @@ import { TOWERS, TOWER_ORDER, type TowerId, type TargetMode, type TowerStats } f
 import { TOWER_UNLOCK_WAVE } from '../data/base';
 import { MAX_TIER, BRANCH_TIER, materialFor, levelName, starsOf, isSupport } from '../data/towers';
 import { ageTitle } from '../game/Siege';
+import { SPELLS, spellCooldown, type SpellId } from '../data/spells';
 import { waveSummary } from '../game/WaveComposer';
 import { SYNERGIES, SYNERGY_BY_ID } from '../data/synergies';
 import type { Run, Tower } from '../game/Run';
@@ -14,6 +15,8 @@ import type { Run, Tower } from '../game/Run';
 export interface HudCallbacks {
   pause(): void;
   toggleSpeed(): void;
+  toggleAuto(): void;
+  castSpell(id: SpellId): void;
   nextWave(): void;
   selectHero(): void;
   ability(): void;
@@ -42,6 +45,7 @@ export class Hud {
   private nextBtn: HTMLButtonElement;
   private previewEl: HTMLElement;
   private speedBtn: HTMLButtonElement;
+  private autoBtn: HTMLButtonElement;
   private heroBtn: HTMLButtonElement;
   private heroWrap: HTMLElement;
   private abilityBtn: HTMLButtonElement;
@@ -80,10 +84,12 @@ export class Hud {
         <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
       </div>
       <div class="rush-pill" style="display:none"></div>
+      <div class="hud-spells"></div>
       <div class="hud-actions">
         <div class="next-wave">
           <div class="wave-preview"></div>
           <div style="display:flex;gap:8px">
+            <button class="btn blue auto-btn" aria-label="Start waves automatically">Auto</button>
             <button class="btn blue speed-btn" aria-label="Game speed">1x</button>
             <button class="btn next-btn">Start</button>
           </div>
@@ -109,6 +115,8 @@ export class Hud {
 
     $(this.el, '.pause-btn').onclick = () => cb.pause();
     this.speedBtn.onclick = () => cb.toggleSpeed();
+    this.autoBtn = $(this.el, '.auto-btn') as HTMLButtonElement;
+    this.autoBtn.onclick = () => cb.toggleAuto();
     this.nextBtn.onclick = () => cb.nextWave();
     this.heroBtn.onclick = () => cb.selectHero();
     this.abilityBtn.onclick = () => cb.ability();
@@ -118,6 +126,7 @@ export class Hud {
   }
 
   private challengeLabel: string | null = null;
+  private spellBtns: HTMLButtonElement[] = [];
   /** Challenge waves are numbered from 1. */
   private waveOffset = 0;
 
@@ -138,17 +147,29 @@ export class Hud {
     this.closeCtx();
     const hero = run.hero;
     this.heroWrap.style.display = hero ? '' : 'none';
+    this.el.classList.toggle('no-hero', !hero);
+    // Spell bar: one button per unlocked spell.
+    const spellsEl = $(this.el, '.hud-spells');
+    const spells = SPELLS.filter((s) => run.config.meta.spells?.[s.id] !== undefined);
+    spellsEl.innerHTML = spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${s.icon}</span><span class="cd"></span></button>`).join('');
+    spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach((b) => (b.onclick = () => this.cb.castSpell(b.dataset.spell as SpellId)));
+    this.spellBtns = [...spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]')];
     if (hero) {
       (this.heroBtn.querySelector('img') as HTMLImageElement).src = heroThumb(hero.def.id);
       $(this.abilityBtn, '.ico').innerHTML = ICONS[ABILITY_ICON[hero.def.ability.kind]];
     }
-    this.setSpeed(1);
     this.setHeroSelected(false);
   }
 
   setSpeed(s: number): void {
     this.speedBtn.textContent = `${s}x`;
     this.speedBtn.classList.toggle('fast', s > 1);
+    this.speedBtn.classList.toggle('faster', s > 2);
+  }
+
+  setAuto(on: boolean): void {
+    this.autoBtn.classList.toggle('on', on);
+    this.autoBtn.innerHTML = on ? 'Auto ✓' : 'Auto';
   }
 
   setHeroSelected(on: boolean): void {
@@ -241,8 +262,20 @@ export class Hud {
         ? `conic-gradient(rgba(20,10,40,.65) ${cdFrac * 360}deg, rgba(0,0,0,0) 0)` : 'none';
     }
 
+    // Spells: recharge sweep, glow when ready.
+    for (const b of this.spellBtns) {
+      const id = b.dataset.spell as SpellId;
+      const cd = run.spellCd[id] ?? 0;
+      const full = spellCooldown(id, run.config.meta.spells?.[id] ?? 0);
+      b.classList.toggle('ready', cd <= 0 && run.state === 'playing');
+      const cdEl = b.querySelector('.cd') as HTMLElement;
+      const txt = cd > 0 ? String(Math.ceil(cd)) : '';
+      if (cdEl.textContent !== txt) cdEl.textContent = txt;
+      cdEl.style.background = cd > 0 ? `conic-gradient(rgba(20,10,40,.65) ${(cd / full) * 360}deg, rgba(0,0,0,0) 0)` : 'none';
+    }
+
     // Gold Rush indicator (from saves made while it was a rewarded placement).
-    const rushTxt = run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
+    const rushTxt = run.blessingT > 0 ? `💰 Gold Blessing · ${Math.ceil(run.blessingT)}s` : run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
     if (this.rushPill.dataset.t !== rushTxt) {
       this.rushPill.dataset.t = rushTxt;
       this.rushPill.innerHTML = rushTxt;

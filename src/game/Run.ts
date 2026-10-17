@@ -17,6 +17,8 @@ import { kingdomMap, siegeWave, clearLandCost, checkpointOf, ageOf, initialSpots
 import type { WaveDef } from './WaveComposer';
 import { MASTERY } from '../data/mastery';
 import type { ChallengeMods } from '../data/challenge';
+import { SPELL_RULES, spellPower, spellCooldown, type SpellId } from '../data/spells';
+import type { PerkId } from '../data/heroes';
 
 export interface MetaBonuses {
   towerLevels: Record<TowerId, number>;
@@ -35,6 +37,10 @@ export interface MetaBonuses {
   towerDamage?: number;
   /** Barricade HP multiplier. */
   barricadeHp?: number;
+  /** Spells you can cast, with their upgrade levels. */
+  spells?: Partial<Record<SpellId, number>>;
+  /** The hero's chosen skill perks. */
+  heroPerks?: PerkId[];
 }
 
 /** Persisted state of the kingdom (saved at wave starts and whenever the field is quiet). */
@@ -302,6 +308,8 @@ export type RunEvents = {
   landCleared: { spot: number; cost: number };
   goldRush: { waves: number };
   earlyCall: { gold: number };
+  /** A spell was cast (x, z: where it lands, for meteors). */
+  spell: { id: SpellId; x: number; z: number; radius: number; value: number };
   /** A Gold Mine paid out at the end of a wave. */
   mineGold: { tower: Tower; gold: number };
 };
@@ -429,20 +437,36 @@ export class Run {
   heroScale(meta: MetaBonuses = this.config.meta): { hp: number; damage: number; ability: number; cooldown: number } {
     const power = 1 + meta.heroPower;
     const l = (meta.heroLevel ?? 1) - 1;
+    const has = (p: PerkId) => meta.heroPerks?.includes(p) ?? false;
+    const legend = has('legend') ? 1.3 : 1;
     return {
-      hp: power * (1 + HERO_LEVELS.hpPerLevel * l),
-      damage: power * (1 + HERO_LEVELS.damagePerLevel * l),
-      ability: power * (1 + HERO_LEVELS.abilityPerLevel * l),
-      cooldown: Math.max(HERO_LEVELS.cooldownMin, 1 - HERO_LEVELS.cooldownPerLevel * l),
+      hp: power * (1 + HERO_LEVELS.hpPerLevel * l) * (has('vigor') ? 1.35 : 1) * legend,
+      damage: power * (1 + HERO_LEVELS.damagePerLevel * l) * (has('brawler') ? 1.2 : 1) * legend,
+      ability: power * (1 + HERO_LEVELS.abilityPerLevel * l) * (has('empower') ? 1.4 : 1),
+      cooldown: Math.max(HERO_LEVELS.cooldownMin, 1 - HERO_LEVELS.cooldownPerLevel * l) * (has('focus') ? 0.75 : 1),
     };
+  }
+
+  heroHasPerk(p: PerkId): boolean {
+    return this.config.meta.heroPerks?.includes(p) ?? false;
+  }
+
+  /** The hero's attack range (Eagle Eye adds a quarter). */
+  heroRange(): number {
+    return this.hero ? this.hero.def.range * (this.heroHasPerk('eagleEye') ? 1.25 : 1) : 0;
   }
 
   /** Damage dealt by the hero (credits kills to them for XP). */
   private heroDamage(e: Enemy, amount: number, type: DamageType): void {
     const was = e.alive;
+    this.heroHit = true;
     this.damage(e, amount, type);
+    this.heroHit = false;
     if (was && !e.alive) this.events.emit('heroKill', e);
   }
+
+  /** Set while the hero's own blow lands (for Bounty Hunter). */
+  private heroHit = false;
 
   /** Persistable state. `wave` = the wave to start when resuming. */
   snapshot(wave = this.waveIndex): BaseSnapshot {
@@ -473,6 +497,62 @@ export class Run {
       if (e.def.boss && (!boss || e.hp / e.maxHp > boss.hpFrac)) boss = { name: e.def.name, hpFrac: e.hp / e.maxHp };
     }
     return { wave, enemiesLeft: left, boss };
+  }
+
+  // --- Spells ----------------------------------------------------------------------
+
+  /** Seconds until each spell can be cast again. */
+  readonly spellCd: Partial<Record<SpellId, number>> = {};
+  /** Seconds of Gold Blessing left. */
+  blessingT = 0;
+
+  spellReady(id: SpellId): boolean {
+    return this.config.meta.spells?.[id] !== undefined && (this.spellCd[id] ?? 0) <= 0 && this.state === 'playing';
+  }
+
+  /** Casts a spell; false if it isn't ready or would do nothing. */
+  castSpell(id: SpellId): boolean {
+    if (!this.spellReady(id)) return false;
+    const lvl = this.config.meta.spells![id] ?? 0;
+    const power = spellPower(id, lvl).value;
+    let x = this.map.castle.x, z = this.map.castle.z, radius = 0;
+    if (id === 'meteor') {
+      const r = SPELL_RULES.meteorRadius;
+      let best = 0;
+      for (const e of this.enemies) {
+        if (!e.alive || e.hidden) continue;
+        let n = 0;
+        for (const o of this.enemies) if (o.alive && !o.hidden && (o.x - e.x) ** 2 + (o.z - e.z) ** 2 <= r * r) n += o.def.boss ? 4 : 1;
+        if (n > best) {
+          best = n;
+          x = e.x;
+          z = e.z;
+        }
+      }
+      if (!best) return false;
+      radius = r;
+      const dmg = SPELL_RULES.meteorDamage * Math.pow(hpMultFor(this.currentWave), SPELL_RULES.meteorExp) * power;
+      for (const e of this.enemies) {
+        if (!e.alive || e.hidden || (e.x - x) ** 2 + (e.z - z) ** 2 > r * r) continue;
+        this.damage(e, dmg * (1 - 0.4 * Math.sqrt((e.x - x) ** 2 + (e.z - z) ** 2) / r), 'magic');
+      }
+    } else if (id === 'freeze') {
+      if (!this.aliveCount()) return false;
+      for (const e of this.enemies) if (e.alive) e.stunTimer = Math.max(e.stunTimer, e.def.boss ? power * 0.4 : power);
+    } else if (id === 'blessing') {
+      this.blessingT = power;
+    } else {
+      if (this.castleHp >= this.castleMaxHp) return false;
+      this.castleHp = Math.min(this.castleMaxHp, this.castleHp + power);
+    }
+    this.spellCd[id] = spellCooldown(id, lvl);
+    this.events.emit('spell', { id, x, z, radius, value: power });
+    return true;
+  }
+
+  private updateSpells(dt: number): void {
+    for (const k of Object.keys(this.spellCd) as SpellId[]) this.spellCd[k] = Math.max(0, (this.spellCd[k] ?? 0) - dt);
+    if (this.blessingT > 0) this.blessingT = Math.max(0, this.blessingT - dt);
   }
 
   /** No enemies on the field or waiting to spawn. */
@@ -952,6 +1032,7 @@ export class Run {
       return;
     }
     this.time += dt;
+    this.updateSpells(dt);
     this.updateSpawns();
     this.updateWaveTimer(dt);
     this.updateEnemies(dt);
@@ -1349,7 +1430,7 @@ export class Run {
         if (t.stats.goldAura > 0 && (t.x - e.x) ** 2 + (t.z - e.z) ** 2 <= t.stats.range * t.stats.range) prospect = Math.max(prospect, t.stats.goldAura);
       }
     }
-    const night = nightOf(e.wave) >= 1 ? 1 + SIEGE.nightGold : 1;
+    const night = (nightOf(e.wave) >= 1 ? 1 + SIEGE.nightGold : 1) * (this.blessingT > 0 ? 2 : 1) * (this.heroHit && this.heroHasPerk('bounty') ? 1.5 : 1);
     const bounty = reward ? Math.round(e.def.bounty * e.bountyMult * rush * night * goldScaleAt(e.wave) * (1 + this.config.meta.goldBonus) * (1 + prospect)) : 0;
     if (reward) {
       this.stats.kills++;
@@ -1558,11 +1639,13 @@ export class Run {
       if (p.freezeChance > 0 && this.rng.next() < p.freezeChance && !e.def.boss) e.stunTimer = Math.max(e.stunTimer, p.stun);
       if (p.dot > 0) this.applyDot(e, dmg * p.dot, p.dotDuration, p.damageType, p.kind === 'poison' ? 'poison' : 'burn', p.towerId);
       const wasAlive = e.alive;
+      this.heroHit = p.towerId === -1 && (p.kind === 'heroArrow' || p.kind === 'heroBolt');
       // Shatter: frozen or slowed enemies take extra cannon damage.
       if (tower?.synergies.includes('shatter') && tower.def.id === 'cannon' && (e.slowFactor < 1 || e.stunTimer > 0)) dmg *= 1.4;
       this.damage(e, dmg, p.damageType);
       if (p.knockback > 0 && e.alive) this.knockBack(e, p.knockback);
       if (wasAlive && !e.alive && tower) tower.kills++;
+      this.heroHit = false;
       if (wasAlive && !e.alive && p.towerId === -1 && (p.kind === 'heroArrow' || p.kind === 'heroBolt')) this.events.emit('heroKill', e);
     };
     if (p.splash > 0) {
@@ -1688,7 +1771,7 @@ export class Run {
     const d = Math.hypot(dx, dz);
     h.moving = d > 0.05;
     if (h.moving) {
-      const step = Math.min(d, h.def.speed * dt);
+      const step = Math.min(d, h.def.speed * (this.heroHasPerk('swift') ? 1.3 : 1) * dt);
       h.x += (dx / d) * step;
       h.z += (dz / d) * step;
       h.facing = Math.atan2(dx, dz);
@@ -1701,23 +1784,23 @@ export class Run {
       if (!e.alive || e.def.flying) continue;
       if ((e.x - h.x) ** 2 + (e.z - h.z) ** 2 < 0.55 * 0.55) {
         contact = true;
-        h.hp -= (e.def.boss ? ENEMY_RULES.bossContactDps : ENEMY_RULES.contactDps) * dt;
+        h.hp -= (e.def.boss ? ENEMY_RULES.bossContactDps : ENEMY_RULES.contactDps) * (this.heroHasPerk('guardian') ? 0.6 : 1) * dt;
       }
     }
     if (contact) h.contactTimer = 2;
-    else if ((h.contactTimer -= dt) <= 0) h.hp = Math.min(h.maxHp, h.hp + h.def.regen * dt);
+    else if ((h.contactTimer -= dt) <= 0) h.hp = Math.min(h.maxHp, h.hp + h.def.regen * (this.heroHasPerk('vigor') ? 1.5 : 1) * dt);
     if (h.hp <= 0) {
       h.dead = true;
-      h.respawn = h.def.respawnTime;
+      h.respawn = h.def.respawnTime * (this.heroHasPerk('phoenix') ? 0.5 : 1);
       this.events.emit('heroDeath', h);
       return;
     }
 
     h.cooldown -= dt;
     if (h.cooldown > 0) return;
-    const target = this.findTarget(h.x, h.z, h.def.range, h.def.hitsAir, true, 'closest');
+    const target = this.findTarget(h.x, h.z, this.heroRange(), h.def.hitsAir, true, 'closest');
     if (!target) return;
-    h.cooldown = h.def.cooldown;
+    h.cooldown = h.def.cooldown * (this.heroHasPerk('swift') ? 0.85 : 1);
     h.attackAnim = 0.25;
     if (!h.moving) h.facing = Math.atan2(target.x - h.x, target.z - h.z);
     this.events.emit('heroAttack', { hero: h, target });

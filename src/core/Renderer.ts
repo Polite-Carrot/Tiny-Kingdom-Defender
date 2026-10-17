@@ -110,10 +110,32 @@ export class Renderer {
     this.setNight(this.night);
   }
 
+  /** Weather haze: 0..1 and the colour it pulls the fog towards; flash = lightning (0..1). */
+  private haze = 0;
+  private hazeColor = new THREE.Color('#c8ccd4');
+  private flash = 0;
+  private fogRange = { near: 30, far: 70 };
+
+  /** Camera-dependent fog distances (weather pulls them in). */
+  setFogRange(near: number, far: number): void {
+    this.fogRange.near = near;
+    this.fogRange.far = far;
+    this.setNight(this.night);
+  }
+
+  setWeather(haze: number, color: THREE.ColorRepresentation, flash: number): void {
+    if (Math.abs(haze - this.haze) < 0.002 && flash === this.flash) return;
+    this.haze = haze;
+    this.hazeColor.set(color);
+    this.flash = flash;
+    this.setNight(this.night);
+  }
+
   /** Time of day: lights, fog and sky go from the Age's daylight through a warm dusk to moonlight. */
   setNight(k: number): void {
     this.night = k;
     const dusk = Math.max(0, 1 - Math.abs(k - 0.5) * 2);
+    if (!(this.scene.background instanceof THREE.Color)) this.scene.background = this.base.sky.clone();
     const bg = this.scene.background as THREE.Color;
     bg.copy(this.base.sky).lerp(NIGHT.sky, k).lerp(NIGHT.duskSky, dusk * 0.35);
     (this.scene.fog as THREE.Fog).color.copy(this.base.fog).lerp(NIGHT.fog, k).lerp(NIGHT.duskSky, dusk * 0.3);
@@ -123,6 +145,18 @@ export class Renderer {
     this.hemi.groundColor.set('#6b5a40').lerp(NIGHT.ground, k);
     this.hemi.intensity = 0.95 * (1 - 0.25 * k);
     if (this.bloom) this.bloom.strength = 0.32 + 0.3 * k;
+    // Weather: thicker, tinted fog and dimmer light; lightning flashes it all bright.
+    const fog = this.scene.fog as THREE.Fog;
+    const h = this.haze;
+    fog.near = this.fogRange.near * (1 - 0.7 * h);
+    fog.far = fog.near + (this.fogRange.far - this.fogRange.near) * (1 - 0.88 * h);
+    fog.color.lerp(this.hazeColor.clone().multiplyScalar(1 - 0.7 * k), h * 0.75);
+    this.sun.intensity *= 1 - 0.3 * h;
+    this.hemi.intensity *= 1 - 0.15 * h;
+    if (this.flash > 0) {
+      this.hemi.intensity += 2.2 * this.flash;
+      this.sun.intensity += 1.5 * this.flash;
+    }
   }
 
   render(): void {

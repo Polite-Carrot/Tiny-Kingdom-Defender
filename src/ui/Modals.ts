@@ -6,7 +6,7 @@ import { towerThumb, heroThumb, thumb, enemyThumb } from './Thumbnails';
 import type { Game } from '../game/Game';
 import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, isSupport, type TowerId } from '../data/towers';
-import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, xpForLevel, gearTierFor, type AbilityKind } from '../data/heroes';
+import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, PERKS, PERK_TIERS, xpForLevel, gearTierFor, type AbilityKind, type HeroId } from '../data/heroes';
 
 const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
 import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
@@ -23,6 +23,7 @@ import { MASTERY, masteryTitle } from '../data/mastery';
 import { ageTitle } from '../game/Siege';
 import { MAPS, MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
 import { GRID_SIZE } from '../data/base';
+import { SPELLS, SPELL_RULES, spellPower, spellCooldown, type SpellId } from '../data/spells';
 
 // --- Helpers --------------------------------------------------------------------------
 
@@ -209,7 +210,7 @@ export function pause(game: Game, onClose: () => void): void {
 
 // --- Shop ----------------------------------------------------------------------------------------
 
-export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free' = 'towers', onClose?: () => void): void {
+export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmetics' | 'free' = 'towers', onClose?: () => void): void {
   const { meta } = game.s;
   let current = tab;
   game.s.ui.modal((m) => {
@@ -237,6 +238,19 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
             <div class="body"><div class="name">${def.name} ${locked ? icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px;display:inline-block"') : `<span class="muted">Lv ${lvl}</span>`}</div>
             <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : `+${Math.round(lvl * TOWER_META.damagePerLevel * 100)}% damage · +${Math.round(lvl * TOWER_META.rangePerLevel * 100)}% range${ml ? ` · mastery +${Math.round(ml * MASTERY.damagePerLevel * 100)}% damage` : ''}`}</div>
             <div class="levelpips">${Array.from({ length: TOWER_META.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>${mastery}</div>${btn}</div>`;
+        }).join('');
+      } else if (current === 'spells') {
+        body = SPELLS.map((sp) => {
+          const open = meta.spellUnlocked(sp.id);
+          const lvl = meta.spellLevel(sp.id);
+          const cost = meta.spellUpgradeCost(sp.id);
+          const btn = !open ? `<button class="btn small disabled" disabled>Wave ${sp.unlockWave}</button>`
+            : cost === null ? `<button class="btn small gold disabled" disabled>MAX</button>`
+            : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-spell="${sp.id}">${costHtml(cost)}</button>`;
+          return `<div class="list-item ${open ? '' : 'locked-row'}"><div class="thumb bld">${sp.icon}</div>
+            <div class="body"><div class="name">${sp.name} ${open ? `<span class="muted">Lv ${lvl}</span>` : ''}</div><div class="desc">${sp.description}</div>
+            <div class="desc" style="font-weight:800">${spellPower(sp.id, lvl).text} · recharges in ${Math.round(spellCooldown(sp.id, lvl))}s</div>
+            <div class="levelpips">${Array.from({ length: SPELL_RULES.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div></div>${btn}</div>`;
         }).join('');
       } else if (current === 'kingdom') {
         body = (Object.keys(META_UPGRADES) as MetaUpgradeKey[]).map((k) => {
@@ -274,7 +288,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
       }
       m.innerHTML = `<div class="ribbon">Shop</div>${currencyBar(game)}
         <div class="muted" style="text-align:center;margin:-4px 0 8px">Permanent upgrades paid with coins. They boost every tower, forever.</div>
-        <div class="tabs">${(['towers', 'kingdom', 'cosmetics', 'free'] as const).map((t) => `<button class="tab ${t === current ? 'on' : ''}" data-tab="${t}">${{ towers: 'Towers', kingdom: 'Kingdom', cosmetics: 'Style', free: 'Free' }[t]}</button>`).join('')}</div>
+        <div class="tabs">${(['towers', 'spells', 'kingdom', 'cosmetics', 'free'] as const).map((t) => `<button class="tab ${t === current ? 'on' : ''}" data-tab="${t}">${{ towers: 'Towers', spells: 'Spells', kingdom: 'Castle', cosmetics: 'Style', free: 'Free' }[t]}</button>`).join('')}</div>
         <div class="list">${body}</div>`;
       m.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.onclick = () => {
         current = b.dataset.tab as typeof current;
@@ -293,6 +307,7 @@ export function shop(game: Game, tab: 'towers' | 'kingdom' | 'cosmetics' | 'free
       };
       m.querySelectorAll<HTMLButtonElement>('[data-tower]').forEach((b) => (b.onclick = () => buy(meta.buyTowerUpgrade(b.dataset.tower as TowerId))));
       m.querySelectorAll<HTMLButtonElement>('[data-meta]').forEach((b) => (b.onclick = () => buy(meta.buyMetaUpgrade(b.dataset.meta as MetaUpgradeKey))));
+      m.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach((b) => (b.onclick = () => buy(meta.buySpellUpgrade(b.dataset.spell as SpellId))));
       m.querySelectorAll<HTMLButtonElement>('[data-unlock]').forEach((b) => (b.onclick = () => buy(meta.unlockLightning(), 'Lightning Tower unlocked!')));
       m.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach((b) => (b.onclick = () => {
         const ok = meta.buyCosmetic(b.dataset.buy!);
@@ -357,12 +372,17 @@ export function heroes(game: Game): void {
             <div class="desc">${h.description}</div>
             <div class="hstats">${bar('HP', h.hp / 560)}${bar('DPS', dps / 60)}${bar('Range', h.range / 3)}${bar('Speed', h.speed / 3.6)}</div>
             <div class="ability"><span class="aico">${ICONS[ABILITY_ICONS[h.ability.kind]]}</span><span><b>${h.ability.name}</b> ${h.ability.description}</span></div>
+            ${owned ? perkRow(game, id) : ''}
           </div>
           <div class="act">${btn}</div></div>`;
       }).join('')}</div><div class="muted" style="text-align:center;margin-top:8px">Hero Training in the Shop boosts every hero.</div>`;
       m.querySelectorAll<HTMLButtonElement>('[data-sel]').forEach((b) => (b.onclick = () => {
         meta.selectHero(b.dataset.sel as typeof d.selectedHero);
         render();
+      }));
+      m.querySelectorAll<HTMLButtonElement>('[data-perk]').forEach((b) => (b.onclick = () => {
+        const id = b.dataset.perk as HeroId;
+        perkChoice(game, id, meta.pendingPerkTier(id), render);
       }));
       m.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach((b) => (b.onclick = () => {
         if (meta.unlockHero(b.dataset.buy as typeof d.selectedHero)) {
@@ -973,6 +993,130 @@ export function realms(game: Game): void {
       h.close();
       game.switchMap(b.dataset.map as MapId);
       game.s.ui.toast(`Welcome to ${MAP_BY_ID[b.dataset.map as MapId].name}!`);
+    }));
+  });
+}
+
+// --- Hero skills ------------------------------------------------------------------------------------
+
+/** The hero's skill tiers: chosen perks, the one waiting to be picked, and locked ones. */
+function perkRow(game: Game, id: HeroId): string {
+  const meta = game.s.meta;
+  const lvl = meta.heroLevel(id);
+  const picks = meta.d.heroPerks[id] ?? [];
+  const pending = meta.pendingPerkTier(id);
+  const chips = PERK_TIERS.map((t, i) => {
+    const p = picks[i];
+    if (lvl >= t.level && (p === 0 || p === 1)) {
+      const perk = PERKS[t.options[p]];
+      return `<span class="perk on" title="${perk.description}">${perk.icon} ${perk.name}</span>`;
+    }
+    if (lvl >= t.level) return `<span class="perk pending">★ Lv ${t.level}</span>`;
+    return `<span class="perk locked">Lv ${t.level}</span>`;
+  }).join('');
+  return `<div class="perks">${chips}${pending >= 0 ? `<button class="btn small gold" data-perk="${id}">Choose skill!</button>` : ''}</div>`;
+}
+
+/** Pick one of the two perks of a skill tier. */
+export function perkChoice(game: Game, id: HeroId, tier: number, onDone?: () => void): void {
+  if (tier < 0) return;
+  const { meta, ui, audio } = game.s;
+  const t = PERK_TIERS[tier];
+  const h = HEROES[id];
+  ui.modal((m, handle) => {
+    m.innerHTML = `<div class="ribbon purple">New skill: ${h.name}</div>
+      <div class="muted" style="text-align:center;margin-bottom:10px">Level ${t.level} reached. Choose one: it's kept forever for ${h.name}.</div>
+      <div class="perk-choice">${t.options.map((pid, i) => {
+        const p = PERKS[pid];
+        return `<button class="perk-card" data-opt="${i}"><span class="pi">${p.icon}</span><b>${p.name}</b><span>${p.description}</span></button>`;
+      }).join('')}</div>`;
+    m.querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) => (b.onclick = () => {
+      meta.choosePerk(id, tier, Number(b.dataset.opt) as 0 | 1);
+      audio.play('upgrade');
+      ui.toast(`${h.name} learned ${PERKS[t.options[Number(b.dataset.opt)]].name}!`);
+      game.battle?.refreshHero();
+      handle.close();
+      // Another tier may be waiting (a big level jump).
+      const next = meta.pendingPerkTier(id);
+      if (next >= 0) setTimeout(() => perkChoice(game, id, next, onDone), 300);
+      else onDone?.();
+    }));
+  }, { closable: false });
+}
+
+// --- Stats ----------------------------------------------------------------------------------------
+
+export function stats(game: Game): void {
+  const { meta } = game.s;
+  const d = meta.d;
+  const hours = d.stats.playTime / 3600;
+  const time = hours >= 1 ? `${hours.toFixed(1)} h` : `${Math.round(d.stats.playTime / 60)} min`;
+  // Favourite tower: the one with the most mastery XP.
+  const fav = TOWER_ORDER.reduce((a, t) => (meta.masteryXp(t) > meta.masteryXp(a) ? t : a), TOWER_ORDER[0]);
+  const seen = Object.values(d.bestiary).filter((b) => b && b.seen > 0).length;
+  const tile = (v: string | number, label: string) => `<div>${typeof v === 'number' ? fmt(v) : v}<small>${label}</small></div>`;
+  game.s.ui.modal((m) => {
+    m.innerHTML = `<div class="ribbon">${icon('scroll')} Your Records</div>
+      <div class="stat-section">Kingdom</div>
+      <div class="stat-grid wide">
+        ${tile(meta.bestWave(), 'BEST WAVE')}
+        ${tile(d.stats.wavesCleared, 'WAVES CLEARED')}
+        ${tile(d.stats.kills, 'ENEMIES DEFEATED')}
+        ${tile(d.life.bossKills, 'BOSSES')}
+        ${tile(d.life.eliteKills, 'ELITES')}
+        ${tile(time, 'TIME PLAYED')}
+      </div>
+      <div class="stat-section">Building</div>
+      <div class="stat-grid wide">
+        ${tile(d.life.towersBuilt, 'TOWERS BUILT')}
+        ${tile(d.life.celestialTowers, 'CELESTIAL TOWERS')}
+        ${tile(d.life.barricades, 'BARRICADES')}
+        ${tile(d.life.synergies, 'SYNERGIES')}
+        ${tile(d.buildings.length + '/7', 'TOWN BUILDINGS')}
+        ${tile(d.life.abilityUses + (d.life.spellsCast ?? 0), 'ABILITIES & SPELLS')}
+      </div>
+      <div class="stat-section">Treasure</div>
+      <div class="stat-grid wide">
+        ${tile(d.stats.coinsEarned, 'COINS EARNED')}
+        ${tile(d.achievements.length + '/' + ACHIEVEMENTS.length, 'TROPHIES')}
+        ${tile(seen + '/' + Object.keys(ENEMIES).length, 'ENEMIES MET')}
+        ${tile(d.challenge.best, 'CHALLENGE BEST')}
+        ${tile(d.daily.streak, 'LOGIN STREAK')}
+        ${tile(d.unlocks.heroes.length + '/' + HERO_ORDER.length, 'HEROES')}
+      </div>
+      <div class="stat-section">Favourite tower</div>
+      <div class="list-item"><div class="thumb"><img src="${towerThumb(fav, Math.max(1, Math.min(10, meta.masteryLevel(fav) + 1)))}" alt=""/></div>
+        <div class="body"><div class="name">${TOWERS[fav].name}</div><div class="desc">Mastery ${meta.masteryLevel(fav)} · ${fmt(meta.masteryXp(fav))} XP</div></div></div>
+      <div class="stat-section">Realms</div>
+      <div class="list">${MAPS.map((r) => `<div class="list-item ${meta.mapUnlocked(r.id) ? '' : 'locked-row'}"><div class="thumb">${mapSketch(r)}</div>
+        <div class="body"><div class="name">${r.icon} ${r.name}</div><div class="desc">${meta.mapUnlocked(r.id) ? `Best wave ${meta.mapBest(r.id)}` : `Opens at wave ${r.unlockWave}`}</div></div></div>`).join('')}</div>`;
+  });
+}
+
+// --- Menu hubs ---------------------------------------------------------------------------------------
+
+export interface HubTile {
+  label: string;
+  icon: string;
+  dot?: boolean;
+  locked?: string | null;
+  sub?: string;
+  open: () => void;
+}
+
+/** A group of menu tiles (Rewards, Kingdom, Records). */
+export function hub(game: Game, title: string, tiles: HubTile[]): void {
+  game.s.ui.modal((m, h) => {
+    m.innerHTML = `<div class="ribbon">${title}</div><div class="hub-grid">${tiles.map((t, i) => `<button class="hub-tile ${t.locked ? 'locked' : ''}" data-i="${i}">
+      ${t.icon}<span>${t.label}</span>${t.sub ? `<small>${t.sub}</small>` : ''}${t.locked ? `<small>${t.locked}</small>` : ''}<i class="dot ${t.dot ? 'on' : ''}"></i></button>`).join('')}</div>`;
+    m.querySelectorAll<HTMLButtonElement>('[data-i]').forEach((b) => (b.onclick = () => {
+      const t = tiles[Number(b.dataset.i)];
+      if (t.locked) {
+        game.s.ui.toast(t.locked);
+        return;
+      }
+      h.close();
+      setTimeout(t.open, 120);
     }));
   });
 }

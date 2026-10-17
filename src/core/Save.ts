@@ -6,6 +6,7 @@ import type { EnemyId } from '../data/enemies';
 import type { BaseSnapshot } from '../game/Run';
 import type { BuildingId } from '../data/kingdom';
 import type { MapId } from '../data/maps';
+import type { SpellId } from '../data/spells';
 
 export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'tkd_save';
@@ -35,6 +36,10 @@ export interface Settings {
   debugAdOutcome: AdOutcomeSetting;
   /** Debug: mock ads report "not ready". */
   debugAdsUnavailable: boolean;
+  /** Game speed the siege opens at (1, 2 or 3). */
+  speed: number;
+  /** Start the next wave as soon as the field is clear. */
+  autoWave: boolean;
 }
 
 export interface LifeStats {
@@ -50,6 +55,8 @@ export interface LifeStats {
   /** Checkpoints reached with the castle at full health. */
   perfectCheckpoints: number;
   heroKills: number;
+  /** Spells cast (optional in older saves). */
+  spellsCast?: number;
 }
 
 export interface SaveData {
@@ -93,6 +100,10 @@ export interface SaveData {
    * Realms (maps). `base` and the progress checkpoint/frontier fields always belong to the
    * current realm; the others wait in `saved` until you switch back. `best` is per realm.
    */
+  /** Spell upgrade levels. */
+  spellLevels: Partial<Record<SpellId, number>>;
+  /** Hero skill choices: for each hero, the perk picked at each skill tier (0 or 1). */
+  heroPerks: Partial<Record<HeroId, number[]>>;
   realms: { current: MapId; saved: Partial<Record<MapId, { base: BaseSnapshot | null; checkpointsPaid: number; frontierSeen: number }>>; best: Partial<Record<MapId, number>> };
 }
 
@@ -109,7 +120,7 @@ export function defaultSave(now = Date.now()): SaveData {
     selectedHero: 'ranger',
     heroXp: {},
     cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none' },
-    settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false },
+    settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false },
     treasury: { lastCollect: now },
     chest: { nextFree: now, pendingMilestone: 0 },
     daily: { lastClaimDay: null, streak: 0 },
@@ -125,6 +136,8 @@ export function defaultSave(now = Date.now()): SaveData {
     buildings: [],
     challenge: { day: '', attempted: false, done: false, score: 0, best: 0, history: [] },
     lastSeen: now,
+    spellLevels: {},
+    heroPerks: {},
     realms: { current: 'vale', saved: {}, best: {} },
   };
 }

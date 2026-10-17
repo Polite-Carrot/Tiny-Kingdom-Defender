@@ -19,7 +19,8 @@ import type { Theme } from '../data/themes';
 import { materialFor } from '../data/towers';
 import { tileToWorld, worldToTile } from './LevelMap';
 import { SYNERGY_BY_ID } from '../data/synergies';
-import { themeOf, nightOf, activeRoads } from './Siege';
+import { themeOf, nightOf, activeRoads, weatherOf } from './Siege';
+import { Weather } from '../systems/Weather';
 import type { Run, Tower, Enemy, ProjectileKind } from './Run';
 
 export interface ViewHooks {
@@ -337,6 +338,8 @@ export class BattleView {
 
   private night = 0;
   private lanternGlow: THREE.Mesh | null = null;
+  private weather: Weather | null = null;
+  private weatherK = 0;
 
   /** Lantern posts along the roads; their flames light up as night falls. */
   private buildLanterns(): void {
@@ -366,6 +369,24 @@ export class BattleView {
     const mat = this.boardTrack(new THREE.MeshBasicMaterial({ color: '#ffcf6a' }));
     this.lanternGlow = new THREE.Mesh(this.boardTrack(flames.build()), mat);
     this.board.add(this.lanternGlow);
+  }
+
+  /** Weather of the wave being fought: eases in, and only changes kind once it has cleared. */
+  private updateWeather(dt: number): void {
+    if (!this.weather) {
+      this.weather = new Weather(this.renderer.quality);
+      this.root.add(this.weather.group);
+    }
+    const run = this.run;
+    const want = weatherOf(run.state === 'prep' ? run.waveIndex : run.currentWave);
+    const w = this.weather;
+    const target = want !== 'clear' && want === w.current ? 1 : 0;
+    this.weatherK += Math.sign(target - this.weatherK) * Math.min(Math.abs(target - this.weatherK), dt * 0.35);
+    if (this.weatherK <= 0.001 && want !== w.current) w.setKind(want);
+    w.update(dt, this.weatherK);
+    const haze = w.current === 'fog' ? 1 : w.current === 'sand' ? 0.75 : w.current === 'snow' ? 0.55 : w.current === 'rain' ? 0.45 : w.current === 'ash' ? 0.5 : 0;
+    const col = w.current === 'sand' ? '#d8b878' : w.current === 'ash' ? '#6a6068' : w.current === 'rain' ? '#8a96a8' : '#d4d8e0';
+    this.renderer.setWeather(haze * this.weatherK, col, w.flash);
   }
 
   /** Eases the light towards the time of day of the wave being fought. */
@@ -624,6 +645,38 @@ export class BattleView {
       } else if (id === 'alchemist') this.audio.play('poison');
       else if (id === 'catapult') this.audio.play('ballista', 0.8);
       else if (id === 'gale') this.audio.play('frost', 0.7);
+    });
+    on('spell', ({ id, x, z, radius, value }) => {
+      const c = this.run.map.castle;
+      if (id === 'meteor') {
+        // A streak from the sky, then a fiery blast.
+        this.bolts.spawn([x - 2.5, 9, z - 1.5, x - 1.2, 4.5, z - 0.7, x, 0.3, z], '#ffb347');
+        this.particles.burst(x, 0.3, z, '#ff7a2a', 30, { speed: 3.5, up: 4, size: 0.16, gravity: -1, life: 0.8 });
+        this.particles.burst(x, 0.3, z, '#ffd36a', 18, { speed: 2.4, up: 5, size: 0.1, gravity: -1.2, life: 0.6 });
+        this.particles.burst(x, 0.2, z, '#5a4a40', 16, { speed: 2, up: 1.5, size: 0.2, gravity: -0.3, life: 1.2 });
+        this.rings.spawn(x, z, radius, '#ff9a3a', 0.5);
+        this.rings.spawn(x, z, radius * 0.6, '#ffe08a', 0.35);
+        this.rig.shake(0.35);
+        this.audio.play('bossRoar', 0.5);
+        this.audio.play('cannon');
+      } else if (id === 'freeze') {
+        for (const e of this.run.enemies) {
+          if (!e.alive) continue;
+          this.rings.spawn(e.x, e.z, 0.45, '#bfeaff', 0.6);
+          this.particles.burst(e.x, 0.4, e.z, '#dff6ff', 5, { speed: 1, up: 1.2, size: 0.07, life: 0.6 });
+        }
+        this.audio.play('frost');
+      } else if (id === 'blessing') {
+        this.particles.burst(c.x, 1.6, c.z, '#ffd84a', 50, { speed: 3, up: 4, size: 0.1, gravity: -1.5, life: 1.2 });
+        this.rings.spawn(c.x, c.z, 3, '#ffd84a', 0.8);
+        this.audio.play('reward');
+      } else {
+        this.particles.burst(c.x, 1, c.z, '#7dffb0', 30, { speed: 2, up: 3, size: 0.1, gravity: -1, life: 0.9 });
+        this.rings.spawn(c.x, c.z, 1.6, '#7dffb0', 0.6);
+        const s = this.project(c.x, 1.6, c.z);
+        this.hooks.floatText(s.x, s.y, `+${value} ♥`, 'heal big');
+        this.audio.play('upgrade');
+      }
     });
     on('mineGold', ({ tower, gold }) => {
       const v = this.towerViews.get(tower.id);
@@ -1259,6 +1312,7 @@ export class BattleView {
 
   update(dt: number, simSpeed: number): void {
     this.applyNight(false, dt);
+    this.updateWeather(dt);
     this.updateFrontier(dt);
     this.updateWalls(dt);
     this.updateSynergyLinks(dt);
@@ -1599,6 +1653,8 @@ export class BattleView {
     this.propsMesh?.geometry.dispose();
     for (const m of this.enemyMeshes.values()) m.dispose();
     this.particles.dispose();
+    this.weather?.dispose();
+    this.renderer.setWeather(0, '#ffffff', 0);
     this.rings.dispose();
     this.bolts.dispose();
     this.material.dispose();

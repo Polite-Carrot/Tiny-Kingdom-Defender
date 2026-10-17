@@ -137,3 +137,36 @@ export function gearTierFor(level: number): number {
   for (let i = 0; i < HERO_GEAR.length; i++) if (level >= HERO_GEAR[i].level) t = i;
   return t;
 }
+
+// --- Hero skills: at these levels you pick one of two perks (per hero, kept forever) ---------
+
+export type PerkId = 'eagleEye' | 'brawler' | 'vigor' | 'swift' | 'focus' | 'empower' | 'phoenix' | 'bounty' | 'guardian' | 'legend';
+
+export interface PerkDef {
+  id: PerkId;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export const PERKS: Record<PerkId, PerkDef> = {
+  eagleEye: { id: 'eagleEye', name: 'Eagle Eye', description: '+25% attack range', icon: '🎯' },
+  brawler: { id: 'brawler', name: 'Brawler', description: '+20% damage', icon: '👊' },
+  vigor: { id: 'vigor', name: 'Vigor', description: '+35% HP and heals 50% faster', icon: '❤️' },
+  swift: { id: 'swift', name: 'Swift', description: 'Moves 30% faster and attacks 15% faster', icon: '💨' },
+  focus: { id: 'focus', name: 'Focus', description: 'Ability recharges 25% faster', icon: '🧘' },
+  empower: { id: 'empower', name: 'Empower', description: 'Ability is 40% stronger', icon: '✨' },
+  phoenix: { id: 'phoenix', name: 'Phoenix', description: 'Returns from defeat twice as fast', icon: '🔥' },
+  bounty: { id: 'bounty', name: 'Bounty Hunter', description: 'Enemies the hero defeats drop 50% more gold', icon: '💰' },
+  guardian: { id: 'guardian', name: 'Guardian', description: 'Takes 40% less damage from enemies in contact', icon: '🛡️' },
+  legend: { id: 'legend', name: 'Legend', description: '+30% damage and HP', icon: '👑' },
+};
+
+/** Skill tiers: the level they open at and the two perks to choose from. */
+export const PERK_TIERS: { level: number; options: [PerkId, PerkId] }[] = [
+  { level: 3, options: ['eagleEye', 'brawler'] },
+  { level: 7, options: ['vigor', 'swift'] },
+  { level: 12, options: ['focus', 'empower'] },
+  { level: 18, options: ['phoenix', 'bounty'] },
+  { level: 25, options: ['guardian', 'legend'] },
+];

@@ -8,7 +8,8 @@ import {
 } from '../data/economy';
 import { MISSION_POOL, MISSIONS_PER_DAY, type MissionDef, type MissionStat } from '../data/missions';
 import { TOWER_UNLOCK_WAVE, UNLOCK_WAVE } from '../data/base';
-import { HEROES, heroLevelFor, gearTierFor, type HeroId } from '../data/heroes';
+import { HEROES, heroLevelFor, gearTierFor, PERK_TIERS, type HeroId, type PerkId } from '../data/heroes';
+import { SPELLS, SPELL_BY_ID, SPELL_RULES, type SpellId } from '../data/spells';
 import { ACHIEVEMENTS, type AchievementDef } from '../data/achievements';
 import type { EnemyId } from '../data/enemies';
 import { TOWER_ORDER, type TowerId } from '../data/towers';
@@ -100,7 +101,65 @@ export class Meta {
       mastery,
       towerDamage: has('blacksmith') ? KINGDOM_BONUS.blacksmithDamage : 0,
       barricadeHp: has('barracks') ? 1 + KINGDOM_BONUS.barracksHp : 1,
+      spells: this.spellsAvailable(),
+      heroPerks: this.heroPerks(this.d.selectedHero),
     };
+  }
+
+  // --- Spells -------------------------------------------------------------------------
+
+  spellUnlocked(id: SpellId): boolean {
+    return this.bestWave() >= SPELL_BY_ID[id].unlockWave;
+  }
+
+  spellLevel(id: SpellId): number {
+    return this.d.spellLevels[id] ?? 0;
+  }
+
+  /** Unlocked spells with their levels. */
+  spellsAvailable(): Partial<Record<SpellId, number>> {
+    const out: Partial<Record<SpellId, number>> = {};
+    for (const s of SPELLS) if (this.spellUnlocked(s.id)) out[s.id] = this.spellLevel(s.id);
+    return out;
+  }
+
+  spellUpgradeCost(id: SpellId): number | null {
+    const l = this.spellLevel(id);
+    return l >= SPELL_RULES.maxLevel ? null : metaCost(SPELL_BY_ID[id].baseCost, l);
+  }
+
+  buySpellUpgrade(id: SpellId): boolean {
+    const cost = this.spellUpgradeCost(id);
+    if (cost === null || !this.spellUnlocked(id) || !this.spend(cost, `spell_${id}`)) return false;
+    this.d.spellLevels[id] = this.spellLevel(id) + 1;
+    this.analytics.track('upgrade_purchased', { upgrade: `spell_${id}`, level: this.spellLevel(id), cost });
+    this.commit();
+    return true;
+  }
+
+  // --- Hero skills ----------------------------------------------------------------------
+
+  /** Perks a hero has picked (only tiers its level has reached count). */
+  heroPerks(id: HeroId): PerkId[] {
+    const picks = this.d.heroPerks[id] ?? [];
+    const lvl = this.heroLevel(id);
+    return PERK_TIERS.flatMap((t, i) => (lvl >= t.level && (picks[i] === 0 || picks[i] === 1) ? [t.options[picks[i]]] : []));
+  }
+
+  /** The first skill tier this hero has reached but not chosen yet, or -1. */
+  pendingPerkTier(id: HeroId): number {
+    const picks = this.d.heroPerks[id] ?? [];
+    const lvl = this.heroLevel(id);
+    return PERK_TIERS.findIndex((t, i) => lvl >= t.level && picks[i] !== 0 && picks[i] !== 1);
+  }
+
+  choosePerk(id: HeroId, tier: number, option: 0 | 1): void {
+    const picks = [...(this.d.heroPerks[id] ?? [])];
+    while (picks.length <= tier) picks.push(-1);
+    picks[tier] = option;
+    this.d.heroPerks[id] = picks;
+    this.analytics.track('upgrade_purchased', { upgrade: `perk_${id}_${PERK_TIERS[tier].options[option]}`, level: tier + 1, cost: 0 });
+    this.commit();
   }
 
   // --- Realms (maps) ---------------------------------------------------------------

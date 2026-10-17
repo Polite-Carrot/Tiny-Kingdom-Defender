@@ -27,15 +27,10 @@ export class TitleScreen {
       <div class="menu-main">
         <div class="menu-side">
           <button class="side-btn shop">${icon('shop')}Shop<i class="dot"></i></button>
-          <button class="side-btn heroes">${icon('hero')}Heroes</button>
-          <button class="side-btn missions">${icon('scroll')}Missions<i class="dot"></i></button>
-          <button class="side-btn daily">${icon('calendar')}Daily<i class="dot"></i></button>
-          <button class="side-btn chest">${icon('chest')}Chest<i class="dot"></i><span class="timer"></span></button>
-          <button class="side-btn treasury">${icon('castle')}Treasury<i class="dot"></i><span class="timer"></span></button>
-          <button class="side-btn town-btn">${icon('town')}Town<i class="dot"></i></button>
-          <button class="side-btn realms-btn">${icon('map')}Realms</button>
-          <button class="side-btn trophy-btn">${icon('trophy')}Trophies</button>
-          <button class="side-btn bestiary-btn">${icon('skull')}Bestiary</button>
+          <button class="side-btn heroes">${icon('hero')}Heroes<i class="dot"></i></button>
+          <button class="side-btn rewards">${icon('chest')}Rewards<i class="dot"></i><span class="timer"></span></button>
+          <button class="side-btn kingdom-btn">${icon('town')}Kingdom<i class="dot"></i></button>
+          <button class="side-btn records">${icon('trophy')}Records</button>
         </div>
         <div class="stack" style="display:flex;flex-direction:column;gap:10px;align-items:center">
           <div class="kingdom-card"></div>
@@ -49,15 +44,10 @@ export class TitleScreen {
     q('.settings').onclick = () => Modals.settings(game);
     q('.shop').onclick = () => this.gate('shop', () => Modals.shop(game));
     q('.heroes').onclick = () => this.gate('heroes', () => Modals.heroes(game));
-    q('.missions').onclick = () => this.gate('missions', () => Modals.missions(game));
-    q('.daily').onclick = () => this.gate('dailyLogin', () => Modals.daily(game));
-    q('.chest').onclick = () => this.gate('chests', () => Modals.chest(game));
-    q('.treasury').onclick = () => this.gate('treasury', () => Modals.treasury(game));
-    q('.trophy-btn').onclick = () => Modals.trophies(game);
-    q('.town-btn').onclick = () => this.gate('kingdom', () => Modals.town(game));
-    q('.realms-btn').onclick = () => this.gate('realms', () => Modals.realms(game));
+    q('.rewards').onclick = () => this.gate('dailyLogin', () => this.rewardsHub());
+    q('.kingdom-btn').onclick = () => this.gate('kingdom', () => this.kingdomHub());
+    q('.records').onclick = () => this.recordsHub();
     q('.challenge-btn').onclick = () => this.gate('challenge', () => Modals.challenge(game));
-    q('.bestiary-btn').onclick = () => Modals.bestiary(game);
     q('.version').onclick = () => {
       if (++this.versionTaps >= 5) {
         this.versionTaps = 0;
@@ -73,6 +63,44 @@ export class TitleScreen {
     const meta = this.game.s.meta;
     if (meta.featureUnlocked(f)) fn();
     else this.game.s.ui.toast(`Unlocks when you reach wave ${UNLOCK_WAVE[f]}`);
+  }
+
+  /** Text for a locked hub tile, or null when open. */
+  private lockText(f: keyof typeof UNLOCK_WAVE): string | null {
+    return this.game.s.meta.featureUnlocked(f) ? null : `Reach wave ${UNLOCK_WAVE[f]}`;
+  }
+
+  private rewardsHub(): void {
+    const g = this.game;
+    const meta = g.s.meta;
+    const n = meta.notifications();
+    const chestSub = meta.d.chest.pendingMilestone > 0 ? `${meta.d.chest.pendingMilestone + (meta.freeChestReady() ? 1 : 0)} ready` : meta.freeChestReady() ? 'Ready!' : fmtTime(meta.freeChestRemaining());
+    Modals.hub(g, `${icon('chest')} Rewards`, [
+      { label: 'Daily reward', icon: icon('calendar'), dot: n.daily, locked: this.lockText('dailyLogin'), sub: meta.dailyStatus().available ? 'Ready!' : `Streak ${meta.d.daily.streak}`, open: () => Modals.daily(g) },
+      { label: 'Chests', icon: icon('chest'), dot: n.chest, locked: this.lockText('chests'), sub: chestSub, open: () => Modals.chest(g) },
+      { label: 'Treasury', icon: icon('castle'), dot: n.treasury, locked: this.lockText('treasury'), sub: `${meta.treasuryAmount()} coins${meta.treasuryFull() ? ' · FULL' : ''}`, open: () => Modals.treasury(g) },
+      { label: 'Missions', icon: icon('scroll'), dot: n.missions, locked: this.lockText('missions'), sub: `${meta.missions().filter((m) => m.done).length}/${meta.missions().length} done`, open: () => Modals.missions(g) },
+    ]);
+  }
+
+  private kingdomHub(): void {
+    const g = this.game;
+    const meta = g.s.meta;
+    const realm = MAP_BY_ID[meta.mapId()];
+    Modals.hub(g, `${icon('town')} Kingdom`, [
+      { label: 'Town', icon: icon('town'), dot: meta.notifications().town, locked: this.lockText('kingdom'), sub: `${meta.d.buildings.length}/7 built`, open: () => Modals.town(g) },
+      { label: 'Realms', icon: icon('map'), locked: this.lockText('realms'), sub: `${realm.icon} ${realm.name}`, open: () => Modals.realms(g) },
+    ]);
+  }
+
+  private recordsHub(): void {
+    const g = this.game;
+    const d = g.s.meta.d;
+    Modals.hub(g, `${icon('trophy')} Records`, [
+      { label: 'Trophies', icon: icon('trophy'), sub: `${d.achievements.length} earned`, open: () => Modals.trophies(g) },
+      { label: 'Bestiary', icon: icon('skull'), sub: `${Object.values(d.bestiary).filter((b) => b && b.seen > 0).length} met`, open: () => Modals.bestiary(g) },
+      { label: 'Stats', icon: icon('scroll'), sub: `Best wave ${g.s.meta.bestWave()}`, open: () => Modals.stats(g) },
+    ]);
   }
 
   onEnter(): void {
@@ -97,21 +125,15 @@ export class TitleScreen {
     const n = meta.notifications();
     const setDot = (sel: string, on: boolean) => $(this.el, `${sel} .dot`).classList.toggle('on', on);
     setDot('.shop', n.upgrades);
-    setDot('.missions', n.missions);
-    setDot('.daily', n.daily);
-    setDot('.chest', n.chest);
-    setDot('.treasury', n.treasury);
-    setDot('.town-btn', n.town);
+    setDot('.heroes', d.unlocks.heroes.some((h) => meta.pendingPerkTier(h) >= 0));
+    setDot('.rewards', n.daily || n.chest || n.treasury || n.missions);
+    setDot('.kingdom-btn', n.town);
     setDot('.challenge-btn', n.challenge);
     const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
     lock('.shop', 'shop');
     lock('.heroes', 'heroes');
-    lock('.missions', 'missions');
-    lock('.daily', 'dailyLogin');
-    lock('.chest', 'chests');
-    lock('.treasury', 'treasury');
-    lock('.town-btn', 'kingdom');
-    lock('.realms-btn', 'realms');
+    lock('.rewards', 'dailyLogin');
+    lock('.kingdom-btn', 'kingdom');
     lock('.challenge-btn', 'challenge');
     const base = d.base;
     const wave = base ? base.wave : 0;
@@ -130,19 +152,16 @@ export class TitleScreen {
     if (!force && now - this.lastTick < 500) return;
     this.lastTick = now;
     const meta = this.game.s.meta;
-    const chestT = $(this.el, '.chest .timer');
-    if (meta.featureUnlocked('chests')) {
-      chestT.style.display = '';
-      chestT.textContent = meta.d.chest.pendingMilestone > 0 ? `×${meta.d.chest.pendingMilestone + (meta.freeChestReady() ? 1 : 0)}` : meta.freeChestReady() ? 'Ready!' : fmtTime(meta.freeChestRemaining());
-    } else chestT.style.display = 'none';
-    const tr = $(this.el, '.treasury .timer');
-    if (meta.featureUnlocked('treasury')) {
-      tr.style.display = '';
-      tr.innerHTML = `${meta.treasuryAmount()}${meta.treasuryFull() ? ' FULL' : ''}`;
-    } else tr.style.display = 'none';
-    if (force) return;
     const n = meta.notifications();
-    $(this.el, '.chest .dot').classList.toggle('on', n.chest);
-    $(this.el, '.treasury .dot').classList.toggle('on', n.treasury);
+    // Rewards: how many things are waiting, or when the next chest is ready.
+    const ready = [n.daily, n.chest, n.treasury, n.missions].filter(Boolean).length;
+    const t = $(this.el, '.rewards .timer');
+    if (meta.featureUnlocked('dailyLogin')) {
+      t.style.display = '';
+      t.textContent = ready ? `${ready} ready` : meta.featureUnlocked('chests') ? fmtTime(meta.freeChestRemaining()) : '';
+      if (!t.textContent) t.style.display = 'none';
+    } else t.style.display = 'none';
+    if (force) return;
+    $(this.el, '.rewards .dot').classList.toggle('on', ready > 0);
   }
 }

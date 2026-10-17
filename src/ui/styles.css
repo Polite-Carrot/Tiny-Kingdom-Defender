@@ -512,3 +512,40 @@ body.landscape .modal.frontier { width: 330px; }
 .mastery small { font-weight: 700; opacity: .8; white-space: nowrap; }
 .map-sketch { width: 52px; height: 52px; display: block; }
 .list-item.realm .thumb { padding: 0; background: none; }
+.speed-btn.faster { background: #ff8a3d; color: #fff; box-shadow: inset 0 -5px 0 #c4561c, 0 4px 0 rgba(0,0,0,.25); }
+.auto-btn { min-width: 56px; padding: 0 10px; font-size: 15px; }
+.auto-btn.on { background: var(--green, #59e05a); box-shadow: inset 0 -5px 0 #37933b, 0 4px 0 rgba(0,0,0,.25); }
+
+/* Spell bar */
+.hud-spells { position: absolute; left: calc(var(--sal) + 10px); bottom: calc(var(--sab) + 92px); display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; }
+.hud.no-hero .hud-spells { bottom: calc(var(--sab) + 12px); }
+body.landscape .hud-spells { left: calc(var(--sal) + 92px); bottom: calc(var(--sab) + 10px); flex-direction: row; }
+body.landscape .hud.no-hero .hud-spells { left: calc(var(--sal) + 10px); }
+.spell-btn { pointer-events: auto; position: relative; width: 50px; height: 50px; border: 0; border-radius: 50%; padding: 0; background: radial-gradient(circle at 50% 35%, #fff 0%, var(--sc) 70%); box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 4px 0 rgba(0,0,0,.3); cursor: pointer; }
+.spell-btn .ico { font-size: 25px; line-height: 50px; display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,.25)); }
+.spell-btn .cd { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 900; font-size: 16px; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+.spell-btn.ready { animation: adPulse 1.4s infinite; box-shadow: 0 0 0 3px #fff, 0 4px 0 rgba(0,0,0,.3), 0 0 16px var(--sc); }
+.spell-btn:active { transform: translateY(2px); }
+
+/* Hero skills */
+.perks { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; }
+.perk { font-size: 11px; font-weight: 900; padding: 2px 7px; border-radius: 9px; background: rgba(0,0,0,.08); color: #8a7fa6; }
+.perk.on { background: rgba(162,116,255,.18); color: #5a3aa8; }
+.perk.pending { background: var(--gold); color: #5a3a00; }
+.perks .btn.small { min-height: 30px; padding: 2px 10px; font-size: 13px; }
+.perk-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.perk-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; border: 0; border-radius: 16px; background: #fff; font: inherit; color: var(--ink); box-shadow: inset 0 -5px 0 rgba(0,0,0,.1), 0 4px 0 rgba(0,0,0,.15); cursor: pointer; }
+.perk-card .pi { font-size: 38px; line-height: 1; }
+.perk-card b { font-size: 17px; }
+.perk-card span:last-child { font-size: 13px; font-weight: 700; opacity: .85; text-align: center; }
+.perk-card:active { transform: translateY(2px); }
+
+/* Records + menu hubs */
+.stat-section { font-weight: 900; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: #8a7fa6; margin: 10px 0 6px; }
+.stat-grid.wide { grid-template-columns: repeat(3, 1fr); }
+.hub-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.hub-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px 12px; border: 0; border-radius: 18px; background: #fff; font: inherit; font-weight: 900; color: var(--ink); box-shadow: inset 0 -5px 0 rgba(0,0,0,.1), 0 4px 0 rgba(0,0,0,.15); cursor: pointer; }
+.hub-tile .ico { width: 42px; height: 42px; }
+.hub-tile small { font-size: 11px; font-weight: 800; opacity: .7; }
+.hub-tile.locked { filter: grayscale(1); opacity: .6; }
+.hub-tile:active { transform: translateY(2px); }

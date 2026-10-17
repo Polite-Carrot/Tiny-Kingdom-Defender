@@ -17,6 +17,7 @@ import type { Services } from './Services';
 import { GRID_SIZE } from '../data/base';
 import { themeOf, setActiveMap } from './Siege';
 import type { MapId } from '../data/maps';
+import type { HeroId } from '../data/heroes';
 import { TitleScreen } from '../ui/Screens';
 import * as Modals from '../ui/Modals';
 import { TWISTS } from '../data/challenge';
@@ -67,6 +68,8 @@ export class Game {
     this.hud = new Hud({
       pause: () => this.openPause(),
       toggleSpeed: () => this.battle?.toggleSpeed(),
+      toggleAuto: () => this.battle?.toggleAuto(),
+      castSpell: (id) => this.battle?.castSpell(id),
       nextWave: () => this.battle?.nextWave(),
       selectHero: () => this.battle?.toggleHero(),
       ability: () => this.battle?.ability(),
@@ -179,9 +182,7 @@ export class Game {
       safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: sa.left + (this.battle.run.hero ? 92 : 12), right: sa.right + 252 };
     }
     rig.frame(w, h, safe);
-    const fog = renderer.scene.fog as import('three').Fog;
-    fog.near = rig.distance * 1.15;
-    fog.far = rig.distance + 120;
+    renderer.setFogRange(rig.distance * 1.15, rig.distance + 120);
     renderer.camera.far = Math.max(rig.distance * 4, 600);
     renderer.camera.updateProjectionMatrix();
   }
@@ -243,6 +244,7 @@ export class Game {
     this.lastStats = { ...battle.run.stats };
     battle.onCheckpoint = (wave, coins, firstTime) => this.onCheckpoint(wave, coins, firstTime);
     battle.onFallen = (from, to) => Modals.fallen(this, from, to, battle.run.nearMiss());
+    battle.onPerkChoice = (hero) => this.askPerk(battle, hero);
     battle.onReviveOffer = () => Modals.revive(this, battle);
     battle.onAgeChange = () => this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
     battle.run.events.on('waveCleared', () => this.flushRunStats());
@@ -334,6 +336,20 @@ export class Game {
     Modals.welcomeBack(this, info);
   }
 
+  /** Pauses the siege while the player picks a hero skill. */
+  private askPerk(battle: Battle, hero: HeroId): void {
+    if (this.battle !== battle || this.s.ui.modalOpen) {
+      // Something else is on screen: the Heroes menu will offer the choice later.
+      return;
+    }
+    battle.paused = true;
+    this.pauseModalOpen = true;
+    Modals.perkChoice(this, hero, this.s.meta.pendingPerkTier(hero), () => {
+      this.pauseModalOpen = false;
+      if (this.battle === battle && !this.s.ads.showing) battle.paused = false;
+    });
+  }
+
   /** Moves to another realm and shows its kingdom behind the menu. */
   switchMap(id: MapId): void {
     if (!this.s.meta.switchMap(id)) return;
@@ -374,6 +390,7 @@ export class Game {
       Modals.challengeResult(this, score, res, battle.run.nearMiss(), battle.lossTip());
     };
     battle.onAgeChange = () => this.music(themeOf(battle.run.waveIndex).id as MusicTrack);
+    battle.onPerkChoice = (hero) => this.askPerk(battle, hero);
     this.s.rig.resetView();
     this.s.rig.pan.set(0, 0);
     this.onResize();

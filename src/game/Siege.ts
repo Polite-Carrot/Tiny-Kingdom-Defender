@@ -54,6 +54,29 @@ export function nightOf(wave: number): number {
   return m >= SIEGE.nightFrom ? 1 : m === SIEGE.nightFrom - 1 ? 0.5 : 0;
 }
 
+export type WeatherKind = 'clear' | 'rain' | 'fog' | 'sand' | 'snow' | 'ash';
+
+/** Weather for a wave: about one wave in four, chosen by the Age (deterministic). */
+export function weatherOf(wave: number): WeatherKind {
+  const r = new Random(hashString(`weather-${active.id}-${wave}`)).next();
+  if (wave < 3 || r > SIEGE.weatherChance) return 'clear';
+  const id = themeOf(wave).id;
+  const pick = r / SIEGE.weatherChance;
+  if (id === 'meadow') return pick < 0.6 ? 'rain' : 'fog';
+  if (id === 'desert') return 'sand';
+  if (id === 'snow') return pick < 0.7 ? 'snow' : 'fog';
+  return 'ash';
+}
+
+export const WEATHER_NAMES: Record<WeatherKind, [string, string]> = {
+  clear: ['', ''],
+  rain: ['Rain sweeps in', 'Thunder rolls over the kingdom'],
+  fog: ['Fog rolls in', 'Keep watch: the roads vanish into the mist'],
+  sand: ['Sandstorm!', 'Stinging sand blows across the realm'],
+  snow: ['Snowstorm!', 'A blizzard howls over the walls'],
+  ash: ['Ash falls', 'The volcano rumbles and the sky turns grey'],
+};
+
 export function isBossWave(wave: number): boolean {
   return (wave + 1) % SIEGE.bossEvery === 0;
 }

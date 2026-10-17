@@ -84,6 +84,8 @@ export const SIEGE = {
   nightFrom: 7,
   /** Enemies defeated at night drop this much more gold. */
   nightGold: 0.15,
+  /** Share of waves with weather (rain, fog, sandstorm, snowstorm or ash; visual only). */
+  weatherChance: 0.25,
 };
 
 /** Coins (meta currency) earned in the siege. */

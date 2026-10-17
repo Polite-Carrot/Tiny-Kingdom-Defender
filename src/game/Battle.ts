@@ -11,11 +11,12 @@ import { SIEGE, TOWER_UNLOCK_WAVE, BARRICADE } from '../data/base';
 import { worldToTile } from './LevelMap';
 import { ELITE_RULES } from '../data/enemies';
 import { SYNERGY_BY_ID } from '../data/synergies';
-import { HERO_LEVELS, HERO_GEAR, gearTierFor } from '../data/heroes';
-import { ageTitle, themeOf, kingdomMap, hpMultFor, nightOf, activeRoads } from './Siege';
+import { HERO_LEVELS, HERO_GEAR, gearTierFor, type HeroId } from '../data/heroes';
+import { ageTitle, themeOf, kingdomMap, hpMultFor, nightOf, activeRoads, weatherOf, WEATHER_NAMES } from './Siege';
 import { towerThumb } from '../ui/Thumbnails';
 import { el } from '../ui/dom';
 import { MASTERY, masteryTitle } from '../data/mastery';
+import type { SpellId } from '../data/spells';
 import { challengeMods, CHALLENGE, type ChallengeDef } from '../data/challenge';
 
 /** A fresh siege for the Daily Challenge: every pad cleared, no towers, the day's gold. */
@@ -89,6 +90,9 @@ export class Battle {
 
     if (!s.save.data.base && !c) this.persist(true);
     this.hud.bind(this.run);
+    this.speed = [1, 2, 3].includes(s.save.data.settings.speed) ? s.save.data.settings.speed : 1;
+    this.hud.setSpeed(this.speed);
+    this.hud.setAuto(s.save.data.settings.autoWave);
     this.hud.setChallenge(c ? 'Daily Challenge' : null, c?.startWave ?? 0);
     this.bindCommonEvents();
     if (c) this.bindChallengeEvents();
@@ -155,6 +159,14 @@ export class Battle {
     }, { closable: false, cls: 'frontier' });
   }
 
+  /** Hero skill chosen or stats changed: apply them to the hero on the field. */
+  refreshHero(): void {
+    this.run.applyMeta({ ...this.s.meta.metaBonuses(), spells: this.run.config.meta.spells });
+  }
+
+  /** A skill tier was reached: ask which perk to take (the siege pauses meanwhile). */
+  onPerkChoice: (hero: HeroId) => void = () => {};
+
   /** Hero XP; on a level-up the hero gets stronger at once (and new gear shows if it unlocked). */
   private giveHeroXp(xp: number): void {
     const hero = this.run.hero;
@@ -168,6 +180,7 @@ export class Battle {
     audio.play('upgrade');
     this.view.heroLevelUp(r.newGear ? gearTierFor(r.level) : -1);
     meta.commit();
+    if (meta.pendingPerkTier(hero.def.id) >= 0) setTimeout(() => this.onPerkChoice(hero.def.id), 1200);
   }
 
   /** A boss steps out of its tunnel: freeze for a moment, swoop the camera in and show its name. */
@@ -235,6 +248,8 @@ export class Battle {
       const now = nightOf(index), before = nightOf(index - 1);
       if (now >= 1 && before < 1) setTimeout(() => ui.banner('Night falls', `Enemies drop ${Math.round(SIEGE.nightGold * 100)}% more gold in the dark`), 900);
       else if (now === 0 && before >= 1) setTimeout(() => ui.banner('Dawn breaks', 'A new day over the kingdom'), 900);
+      const wx = weatherOf(index);
+      if (wx !== 'clear' && wx !== weatherOf(index - 1)) setTimeout(() => ui.banner(WEATHER_NAMES[wx][0], WEATHER_NAMES[wx][1]), 1600);
     });
     ev.on('waveCleared', () => {
       this.wavesServed++;
@@ -393,6 +408,9 @@ export class Battle {
       return;
     }
     if (!this.paused) {
+      // Auto: call the next wave (with its early bonus) the moment the field is clear.
+      const run = this.run;
+      if (this.s.save.data.settings.autoWave && run.state === 'playing' && run.nextWaveTimer >= 0 && run.holdingFor < 0 && run.aliveCount() === 0) this.nextWave();
       this.acc += Math.min(dt, 0.1) * this.speed;
       let steps = 0;
       while (this.acc >= STEP && steps < MAX_STEPS * this.speed) {
@@ -543,7 +561,7 @@ export class Battle {
     this.view.hideRange();
     this.setHeroSelected(on);
     if (on) {
-      this.view.showRange(this.run.hero.x, this.run.hero.z, this.run.hero.def.range, '#7dff9a');
+      this.view.showRange(this.run.hero.x, this.run.hero.z, this.run.heroRange(), '#7dff9a');
       this.tutorial?.onHeroSelected();
     }
     this.s.audio.play('select');
@@ -639,8 +657,33 @@ export class Battle {
   }
 
   toggleSpeed(): void {
-    this.speed = this.speed === 1 ? 2 : 1;
+    this.speed = this.speed >= 3 ? 1 : this.speed + 1;
     this.hud.setSpeed(this.speed);
+    this.s.save.data.settings.speed = this.speed;
+    this.s.save.markDirty();
+  }
+
+  castSpell(id: SpellId): void {
+    const run = this.run;
+    const { ui, audio, meta } = this.s;
+    if (run.state === 'prep') return ui.toast('Start the wave first!');
+    if ((run.spellCd[id] ?? 0) > 0) return audio.play('error');
+    if (!run.castSpell(id)) {
+      audio.play('error');
+      ui.toast(id === 'repair' ? 'The castle is already at full strength' : 'No enemies to target');
+      return;
+    }
+    meta.d.life.spellsCast = (meta.d.life.spellsCast ?? 0) + 1;
+    if (id === 'blessing') ui.banner('Gold Blessing!', `Double gold for ${Math.round(run.blessingT)} seconds`);
+    else if (id === 'freeze') ui.banner('Deep Freeze!', 'Every enemy is frozen in place');
+  }
+
+  toggleAuto(): void {
+    const st = this.s.save.data.settings;
+    st.autoWave = !st.autoWave;
+    this.hud.setAuto(st.autoWave);
+    this.s.save.markDirty();
+    this.s.ui.toast(st.autoWave ? 'Auto: the next wave starts as soon as the field is clear' : 'Auto off');
   }
 
   /** Re-applies permanent upgrades bought in the shop mid-siege. */
