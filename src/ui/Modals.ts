@@ -136,13 +136,21 @@ export function fallen(game: Game, fromWave: number, toWave: number, near: NearM
       <div class="actions">
         ${meta.featureUnlocked('shop') ? `<button class="btn gold shopbtn">${icon('shop')} Shop</button>` : ''}
         <button class="btn big regroup">Regroup</button>
-      </div>`;
+      </div>
+      <div class="actions" style="margin-top:6px"><button class="btn wood tomenu">${icon('home')} Main menu</button></div>`;
     m.querySelector<HTMLButtonElement>('.shopbtn')?.addEventListener('click', () => shop(game));
     $(m, '.regroup').onclick = () => {
       h.close();
       b.applyMeta();
       b.retreat();
       ui.banner('Regrouped', `Wave ${toWave + 1}: tap Resume when ready`);
+    };
+    // Regroup (saving the kingdom at the checkpoint) and head back to the menu.
+    $(m, '.tomenu').onclick = () => {
+      h.close();
+      b.applyMeta();
+      b.retreat();
+      game.goTitle();
     };
   }, { closable: false });
 }
