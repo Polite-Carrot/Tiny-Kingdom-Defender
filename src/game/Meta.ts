@@ -516,9 +516,15 @@ export class Meta {
     this.commit();
   }
 
+  /** Owned (free ones always are). */
+  ownsCosmetic(id: string): boolean {
+    const c = COSMETICS.find((x) => x.id === id);
+    return !!c && (this.d.cosmetics.owned.includes(id) || (c.cost === 0 && c.shardCost === 0));
+  }
+
   buyCosmetic(id: string): boolean {
     const c = COSMETICS.find((x) => x.id === id);
-    if (!c || this.d.cosmetics.owned.includes(id)) return false;
+    if (!c || this.ownsCosmetic(id)) return false;
     if (c.shardCost > 0) {
       if (this.d.shards < c.shardCost) return false;
       this.d.shards -= c.shardCost;
@@ -535,10 +541,21 @@ export class Meta {
 
   equipCosmetic(id: string): void {
     const c = COSMETICS.find((x) => x.id === id);
-    if (!c || !this.d.cosmetics.owned.includes(id)) return;
-    if (c.kind === 'castle') this.d.cosmetics.castle = id;
-    else this.d.cosmetics.trail = id;
+    if (!c || !this.ownsCosmetic(id)) return;
+    this.d.cosmetics[c.kind] = id;
     this.commit();
+  }
+
+  /** Tint of an equipped cosmetic kind (hero, tower), or null for the classic look. */
+  cosmeticTint(kind: 'hero' | 'tower'): string | null {
+    const id = this.d.cosmetics[kind];
+    return !id || id.endsWith('_none') ? null : COSMETICS.find((c) => c.id === id)?.color ?? null;
+  }
+
+  /** Castle banner colour, or null for none. */
+  flagColor(): string | null {
+    const id = this.d.cosmetics.flag;
+    return !id || id === 'flag_none' ? null : COSMETICS.find((c) => c.id === id)?.color ?? null;
   }
 
   castleColor(): string {

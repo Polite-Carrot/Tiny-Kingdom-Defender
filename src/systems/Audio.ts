@@ -6,7 +6,8 @@ export type SfxName =
   | 'arrow' | 'cannon' | 'frost' | 'lightning' | 'hit' | 'death' | 'bossDeath' | 'leak' | 'coin' | 'build' | 'upgrade'
   | 'sell' | 'click' | 'waveStart' | 'waveClear' | 'victory' | 'defeat' | 'arrowRain' | 'meteor' | 'taunt' | 'heal'
   | 'bossRoar' | 'error' | 'chest' | 'reward' | 'select' | 'heroHit' | 'immune' | 'star' | 'aura'
-  | 'arcane' | 'ballista' | 'flame' | 'poison';
+  | 'arcane' | 'ballista' | 'flame' | 'poison'
+  | 'catapult' | 'gust' | 'mineGold' | 'freeze' | 'blessing' | 'repair' | 'thunder' | 'nightfall' | 'dawn' | 'checkpoint';
 
 export type MusicTrack = 'menu' | 'meadow' | 'desert' | 'snow' | 'volcano' | 'none';
 
@@ -270,7 +271,93 @@ export class AudioSystem {
       case 'aura':
         this.noiseHit(0.25, 0.08, 4000, 'highpass');
         break;
+      case 'catapult':
+        // Creak of the arm, then the whoosh of the throw.
+        this.tone(140, 0.18, 'sawtooth', 0.1 * v, { slide: 90, filter: 700 });
+        this.noiseHit(0.3, 0.22 * v, 500, 'bandpass', { delay: 0.08, slide: 1600, q: 1.2 });
+        break;
+      case 'gust':
+        this.noiseHit(0.45, 0.22 * v, 400, 'bandpass', { slide: 2400, q: 0.8 });
+        this.noiseHit(0.35, 0.1 * v, 3000, 'highpass', { delay: 0.1 });
+        break;
+      case 'mineGold':
+        [0, 7, 12, 16].forEach((n, i) => this.tone(mtof(79 + n), 0.12, 'triangle', 0.09, { delay: i * 0.05 }));
+        this.noiseHit(0.08, 0.12, 6000, 'highpass');
+        break;
+      case 'freeze':
+        this.noiseHit(0.6, 0.25, 6000, 'highpass', { slide: 9000 });
+        [0, 5, 10, 15].forEach((n, i) => this.tone(mtof(84 + n), 0.5, 'sine', 0.06, { delay: i * 0.06 }));
+        break;
+      case 'blessing':
+        [0, 4, 7, 12, 16, 19].forEach((n, i) => this.tone(mtof(76 + n), 0.35, 'triangle', 0.09, { delay: i * 0.06 }));
+        this.tone(mtof(100), 0.8, 'sine', 0.04, { delay: 0.35 });
+        break;
+      case 'repair':
+        for (let i = 0; i < 3; i++) {
+          this.tone(320, 0.08, 'square', 0.1, { delay: i * 0.16, filter: 1600 });
+          this.noiseHit(0.06, 0.2, 2500, 'bandpass', { delay: i * 0.16, q: 2 });
+        }
+        [0, 4, 7].forEach((n, i) => this.tone(mtof(72 + n), 0.25, 'triangle', 0.1, { delay: 0.5 + i * 0.06 }));
+        break;
+      case 'thunder':
+        this.noiseHit(1.8, 0.55 * v, 300, 'lowpass', { slide: 60 });
+        this.noiseHit(0.2, 0.3 * v, 2500, 'lowpass', { slide: 400 });
+        this.tone(55, 1.4, 'sine', 0.3 * v, { slide: 35, attack: 0.05 });
+        break;
+      case 'nightfall':
+        // A low hush and a soft falling call.
+        this.tone(mtof(57), 1.4, 'sine', 0.12, { attack: 0.3 });
+        this.tone(mtof(64), 1.4, 'sine', 0.08, { attack: 0.3, delay: 0.1 });
+        this.tone(mtof(76), 0.3, 'triangle', 0.08, { delay: 0.6, slide: mtof(72) });
+        this.tone(mtof(76), 0.35, 'triangle', 0.08, { delay: 1.0, slide: mtof(71) });
+        break;
+      case 'dawn':
+        [0, 4, 7, 11, 14].forEach((n, i) => this.tone(mtof(67 + n), 0.5, 'triangle', 0.08, { delay: i * 0.12, attack: 0.04 }));
+        break;
+      case 'checkpoint':
+        [0, 4, 7, 12].forEach((n, i) => this.tone(mtof(67 + n), 0.18, 'square', 0.08, { delay: i * 0.1, filter: 3000 }));
+        [12, 16, 19, 24].forEach((n) => this.tone(mtof(67 + n), 0.9, 'triangle', 0.07, { delay: 0.45 }));
+        this.noiseHit(0.5, 0.12, 6000, 'highpass', { delay: 0.45 });
+        break;
     }
+  }
+
+  // --- Ambience (weather) ----------------------------------------------------------
+
+  private amb: { src: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode; kind: 'rain' | 'wind' } | null = null;
+
+  /** Rain hiss or howling wind under the music, faded by `level` (0..1). */
+  setAmbience(kind: 'rain' | 'wind' | 'none', level: number): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    if (this.amb && (kind === 'none' || this.amb.kind !== kind) && level <= 0.01) {
+      this.amb.src.stop();
+      this.amb = null;
+    }
+    if (kind === 'none') {
+      if (this.amb) this.amb.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+      return;
+    }
+    if (!this.amb) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = kind === 'rain' ? 'highpass' : 'bandpass';
+      filter.frequency.value = kind === 'rain' ? 1800 : 500;
+      filter.Q.value = kind === 'rain' ? 0.5 : 0.9;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+      src.start();
+      this.amb = { src, filter, gain, kind };
+    }
+    const t = ctx.currentTime;
+    this.amb.gain.gain.setTargetAtTime((kind === 'rain' ? 0.16 : 0.12) * level, t, 0.4);
+    // Wind gusts: the band sweeps slowly.
+    if (kind === 'wind') this.amb.filter.frequency.setTargetAtTime(380 + 260 * (0.5 + 0.5 * Math.sin(t * 0.7)), t, 0.5);
   }
 
   // --- Music -------------------------------------------------------------------

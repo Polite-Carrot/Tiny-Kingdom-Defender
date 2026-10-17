@@ -85,7 +85,7 @@ export function checkpoint(game: Game, wave: number, coins: number, firstTime: b
   if (!b) return;
   const { meta, audio, ui } = game.s;
   b.paused = true;
-  audio.play('victory');
+  audio.play('checkpoint');
   ui.modal((m, h) => {
     m.innerHTML = `
       <div class="ribbon win">Checkpoint reached!</div>
@@ -264,9 +264,10 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
             <div class="levelpips">${Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div></div>${btn}</div>`;
         }).join('');
       } else if (current === 'cosmetics') {
+        const kindName = { castle: 'Castle skin', trail: 'Projectile trail', hero: 'Hero skin', tower: 'Tower finish', flag: 'Castle banner' } as const;
         body = COSMETICS.map((c) => {
-          const owned = d.cosmetics.owned.includes(c.id);
-          const equipped = d.cosmetics.castle === c.id || d.cosmetics.trail === c.id;
+          const owned = meta.ownsCosmetic(c.id);
+          const equipped = d.cosmetics[c.kind] === c.id;
           let btn: string;
           if (equipped) btn = `<button class="btn small gold disabled" disabled>Equipped</button>`;
           else if (owned) btn = `<button class="btn small blue" data-equip="${c.id}">Equip</button>`;
@@ -275,8 +276,12 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
             const afford = d.coins >= c.cost && d.shards >= c.shardCost;
             btn = `<button class="btn small ${afford ? '' : 'disabled'}" data-buy="${c.id}">${parts}</button>`;
           }
-          const th = c.kind === 'castle' ? `<img src="${thumb(`castle-${c.id}`)}" alt=""/>` : `<div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,${c.color},transparent 70%)"></div>`;
-          return `<div class="list-item"><div class="thumb">${th}</div><div class="body"><div class="name">${c.name}</div><div class="desc">${c.kind === 'castle' ? 'Castle skin' : 'Projectile trail'}</div></div>${btn}</div>`;
+          const th = c.kind === 'castle' ? `<img src="${thumb(`castle-${c.id}`)}" alt=""/>`
+            : c.kind === 'hero' ? `<div class="skin-swatch" style="--c:${c.color}"><img src="${heroThumb(d.selectedHero)}" alt=""/></div>`
+            : c.kind === 'tower' ? `<div class="skin-swatch" style="--c:${c.color}"><img src="${towerThumb('archer', 3)}" alt=""/></div>`
+            : c.kind === 'flag' ? `<div class="flag-swatch" style="--c:${c.color}">${c.id === 'flag_none' ? '–' : ''}</div>`
+            : `<div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,${c.color},transparent 70%)"></div>`;
+          return `<div class="list-item"><div class="thumb">${th}</div><div class="body"><div class="name">${c.name}</div><div class="desc">${kindName[c.kind]}</div></div>${btn}</div>`;
         }).join('');
       } else {
         const left = meta.shopBundlesLeft();
@@ -312,13 +317,17 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
       m.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach((b) => (b.onclick = () => {
         const ok = meta.buyCosmetic(b.dataset.buy!);
         if (!ok) game.s.ui.toast('Not enough coins or shards');
-        else game.s.audio.play('upgrade');
+        else {
+          game.s.audio.play('upgrade');
+          game.refreshCosmetics();
+        }
         render();
         refreshCoins(game);
       }));
       m.querySelectorAll<HTMLButtonElement>('[data-equip]').forEach((b) => (b.onclick = () => {
         meta.equipCosmetic(b.dataset.equip!);
         game.s.audio.play('select');
+        game.refreshCosmetics();
         render();
       }));
       m.querySelector<HTMLButtonElement>('[data-removeads]')?.addEventListener('click', () => {
@@ -564,6 +573,7 @@ export function settings(game: Game): void {
         <div class="setting"><label>Music</label><input type="range" min="0" max="1" step="0.05" class="music" value="${st.music}"/></div>
         <div class="setting"><label>Sound FX</label><input type="range" min="0" max="1" step="0.05" class="sfx" value="${st.sfx}"/></div>
         <div class="setting"><label>Graphics</label>${seg('quality', [['low', 'Low'], ['high', 'High']], st.quality)}</div>
+        <div class="setting"><label>Vibration</label>${seg('vib', [['0', 'Off'], ['1', 'On']], st.vibration ? '1' : '0')}</div>
         <div class="setting"><label>Show FPS</label>${seg('fps', [['0', 'Off'], ['1', 'On']], st.showFps ? '1' : '0')}</div>
         <div class="setting"><label>Ads</label><span class="muted">${save.data.ads.removeAds ? 'Interstitials removed' : 'Standard'}</span></div>
         <h3 style="margin:12px 0 4px;font-size:15px">Developer</h3>
@@ -589,6 +599,7 @@ export function settings(game: Game): void {
           switch (s.dataset.seg) {
             case 'quality': st.quality = v as 'low' | 'high'; break;
             case 'fps': st.showFps = v === '1'; break;
+            case 'vib': st.vibration = v === '1'; break;
             case 'ad': st.debugAdOutcome = v as typeof st.debugAdOutcome; break;
             case 'noads': st.debugAdsUnavailable = v === '1'; break;
           }

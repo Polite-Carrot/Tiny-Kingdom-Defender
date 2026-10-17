@@ -15,6 +15,8 @@ export class Weather {
   private dustVel = new Float32Array(0);
   private flashT = 0;
   private nextFlash = 6;
+  /** Set when lightning strikes (the view plays the thunder and clears it). */
+  thunderNow = false;
   /** Brightness of the current lightning flash (0..1), read by the view. */
   flash = 0;
 
@@ -90,6 +92,7 @@ export class Weather {
       if ((this.nextFlash -= dt) <= 0) {
         this.nextFlash = 5 + Math.random() * 9;
         this.flashT = 0.35;
+        this.thunderNow = intensity > 0.5;
       }
     }
     if (this.flashT > 0) this.flashT -= dt;

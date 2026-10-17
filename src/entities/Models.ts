@@ -1109,8 +1109,9 @@ export function heroModel(id: HeroId | 'champion', withWings = true): THREE.Buff
 
 // --- Map pieces ---------------------------------------------------------------
 
-export function castleModel(wall: string, tier = 0, archers = false): THREE.BufferGeometry {
-  return cached(`castle-${wall}-${tier}-${archers}`, () => {
+/** `banner`: a Style banner flies from the keep instead of the plain red flag. */
+export function castleModel(wall: string, tier = 0, archers = false, banner = false): THREE.BufferGeometry {
+  return cached(`castle-${wall}-${tier}-${archers}-${banner}`, () => {
     const b = new ModelBuilder();
     castleGrowth(b, wall, tier, archers);
     const c = new THREE.Color(wall);
@@ -1163,9 +1164,11 @@ export function castleModel(wall: string, tier = 0, archers = false): THREE.Buff
     b.box(0.56, 0.05, 0.56, light, { y: 1.41 });
     b.cone(0.38, 0.62, 4, '#3f6fd1', { y: 1.72, ry: Math.PI / 4 });
     b.ball(0.04, 0, GOLD, { y: 2.05 });
-    b.cyl(0.012, 0.012, 0.45, 4, WOOD_D, { y: 2.25 });
-    b.box(0.28, 0.16, 0.015, '#e84a3a', { x: 0.14, y: 2.38 });
-    b.box(0.08, 0.08, 0.02, GOLD, { x: 0.14, y: 2.38, z: 0.006 });
+    if (!banner) {
+      b.cyl(0.012, 0.012, 0.45, 4, WOOD_D, { y: 2.25 });
+      b.box(0.28, 0.16, 0.015, '#e84a3a', { x: 0.14, y: 2.38 });
+      b.box(0.08, 0.08, 0.02, GOLD, { x: 0.14, y: 2.38, z: 0.006 });
+    }
     // Gatehouse: arch, portcullis, lanterns and hanging banners.
     b.box(0.42, 0.52, 0.12, dark, { y: 0.36, z: 0.5 });
     b.box(0.26, 0.34, 0.03, '#1a1218', { y: 0.28, z: 0.565 });
@@ -1551,6 +1554,24 @@ export function windmillSails(): THREE.BufferGeometry {
       b.box(0.15, 0.48, 0.015, '#f3ead6', { x: -s * 0.38 + c * 0.09, y: c * 0.38 + s * 0.09, rz: a });
     }
     b.cyl(0.07, 0.07, 0.08, 8, WOOD, { rx: Math.PI / 2 });
+    return b.build();
+  });
+}
+
+/** A great banner for the castle: a tall pole with a swallow-tailed flag (flies along +X). */
+export function castleBannerModel(color: string): THREE.BufferGeometry {
+  return cached(`castle-banner-${color}`, () => {
+    const b = new ModelBuilder();
+    b.cyl(0.025, 0.03, 1.1, 6, '#4a3424', { y: 0.55 });
+    b.ball(0.05, 0, GOLD, { y: 1.12 });
+    const c = new THREE.Color(color);
+    const dark = c.clone().multiplyScalar(0.7);
+    b.box(0.5, 0.3, 0.015, c, { x: 0.27, y: 0.9 });
+    b.box(0.5, 0.04, 0.02, dark, { x: 0.27, y: 1.03 });
+    // Swallow tail and an emblem.
+    b.cone(0.11, 0.16, 3, c, { x: 0.58, y: 0.84, rz: -Math.PI / 2, sz: 0.1 });
+    b.cone(0.11, 0.16, 3, c, { x: 0.58, y: 0.96, rz: -Math.PI / 2, sz: 0.1 });
+    b.octa(0.07, '#fff3c4', { x: 0.25, y: 0.9, z: 0.012, sz: 0.2 });
     return b.build();
   });
 }

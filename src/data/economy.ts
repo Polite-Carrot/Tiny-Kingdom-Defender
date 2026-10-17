@@ -81,7 +81,9 @@ export const HERO_UNLOCK_COST: Record<string, number> = {
   ninja: 2500,
 };
 
-export const COSMETICS: { id: string; kind: 'castle' | 'trail'; name: string; cost: number; shardCost: number; color: string }[] = [
+export type CosmeticKind = 'castle' | 'trail' | 'hero' | 'tower' | 'flag';
+
+export const COSMETICS: { id: string; kind: CosmeticKind; name: string; cost: number; shardCost: number; color: string }[] = [
   { id: 'castle_default', kind: 'castle', name: 'Royal Stone', cost: 0, shardCost: 0, color: '#d9cbb0' },
   { id: 'castle_rose', kind: 'castle', name: 'Rose Keep', cost: 300, shardCost: 0, color: '#e8a0a8' },
   { id: 'castle_frost', kind: 'castle', name: 'Ice Citadel', cost: 0, shardCost: 25, color: '#bfe6f5' },
@@ -90,6 +92,24 @@ export const COSMETICS: { id: string; kind: 'castle' | 'trail'; name: string; co
   { id: 'trail_fire', kind: 'trail', name: 'Ember Trail', cost: 250, shardCost: 0, color: '#ff8a3d' },
   { id: 'trail_magic', kind: 'trail', name: 'Arcane Trail', cost: 0, shardCost: 20, color: '#c08cff' },
   { id: 'trail_rainbow', kind: 'trail', name: 'Rainbow Trail', cost: 600, shardCost: 25, color: '#7ff0c0' },
+  // Hero skins: a tint over the selected hero's outfit.
+  { id: 'hero_none', kind: 'hero', name: 'Classic Hero', cost: 0, shardCost: 0, color: '#ffffff' },
+  { id: 'hero_shadow', kind: 'hero', name: 'Shadow Hero', cost: 0, shardCost: 30, color: '#8a78c8' },
+  { id: 'hero_frost', kind: 'hero', name: 'Frostborn Hero', cost: 400, shardCost: 20, color: '#bfe2ff' },
+  { id: 'hero_ember', kind: 'hero', name: 'Ember Hero', cost: 400, shardCost: 20, color: '#ffb48a' },
+  { id: 'hero_gold', kind: 'hero', name: 'Gilded Hero', cost: 1200, shardCost: 45, color: '#ffe48a' },
+  // Tower finishes: a tint over every tower.
+  { id: 'tower_none', kind: 'tower', name: 'Classic Towers', cost: 0, shardCost: 0, color: '#ffffff' },
+  { id: 'tower_moon', kind: 'tower', name: 'Moonstone Towers', cost: 0, shardCost: 35, color: '#cfdcff' },
+  { id: 'tower_autumn', kind: 'tower', name: 'Autumn Towers', cost: 700, shardCost: 20, color: '#ffd4a8' },
+  { id: 'tower_verdant', kind: 'tower', name: 'Verdant Towers', cost: 700, shardCost: 20, color: '#d2f2c4' },
+  { id: 'tower_royal', kind: 'tower', name: 'Royal Gold Towers', cost: 1500, shardCost: 50, color: '#fff0b8' },
+  // Castle banners: a great flag flying over the keep.
+  { id: 'flag_none', kind: 'flag', name: 'No Banner', cost: 0, shardCost: 0, color: '#ffffff' },
+  { id: 'flag_crimson', kind: 'flag', name: 'Crimson Banner', cost: 350, shardCost: 0, color: '#c23a4a' },
+  { id: 'flag_emerald', kind: 'flag', name: 'Emerald Banner', cost: 350, shardCost: 0, color: '#2f9a5a' },
+  { id: 'flag_midnight', kind: 'flag', name: 'Midnight Banner', cost: 0, shardCost: 25, color: '#2a2a6a' },
+  { id: 'flag_sun', kind: 'flag', name: 'Sunburst Banner', cost: 900, shardCost: 30, color: '#f2b83a' },
 ];
 
 export const TOWER_IDS_FOR_META: TowerId[] = ['archer', 'cannon', 'frost', 'lightning'];

@@ -7,6 +7,10 @@ import { HERO_ORDER, heroLevelFor } from './heroes';
 import { TOWER_ORDER } from './towers';
 import { SYNERGIES } from './synergies';
 import { SIEGE, TOWER_UNLOCK_WAVE } from './base';
+import { MAPS, type MapId } from './maps';
+import { PERK_TIERS } from './heroes';
+import { MASTERY, masteryLevelFor } from './mastery';
+import { BUILDINGS } from './kingdom';
 
 export type TrophyIcon = 'skull' | 'trophy' | 'castle' | 'star' | 'hero' | 'bolt' | 'gem' | 'coin' | 'shield' | 'scroll' | 'map';
 
@@ -45,7 +49,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'build25', name: 'Builder', description: 'Build 25 towers.', icon: 'castle', target: 25, progress: (d) => d.life.towersBuilt, reward: { coins: 80 } },
   { id: 'build200', name: 'Royal Architect', description: 'Build 200 towers.', icon: 'castle', target: 200, progress: (d) => d.life.towersBuilt, reward: { coins: 400 } },
   { id: 'celestial', name: 'Touched by the Heavens', description: 'Upgrade a tower all the way to Celestial.', icon: 'star', target: 1, progress: (d) => d.life.celestialTowers, reward: { coins: 300, gems: 10 } },
-  { id: 'alltowers', name: 'Full Arsenal', description: 'Unlock all eight towers.', icon: 'star', target: TOWER_ORDER.length, progress: (d) => TOWER_ORDER.filter((t) => (t !== 'lightning' || d.unlocks.lightning) && TOWER_UNLOCK_WAVE[t] <= d.progress.bestWave).length, reward: { coins: 300 } },
+  { id: 'alltowers', name: 'Full Arsenal', description: `Unlock all ${TOWER_ORDER.length} towers.`, icon: 'star', target: TOWER_ORDER.length, progress: (d) => TOWER_ORDER.filter((t) => (t !== 'lightning' || d.unlocks.lightning) && TOWER_UNLOCK_WAVE[t] <= d.progress.bestWave).length, reward: { coins: 300 } },
   { id: 'walls20', name: 'Hold the Gate', description: 'Build 20 barricades.', icon: 'shield', target: 20, progress: (d) => d.life.barricades, reward: { coins: 150 } },
   { id: 'syn1', name: 'Better Together', description: 'Form a tower synergy.', icon: 'bolt', target: 1, progress: (d) => d.life.synergies, reward: { coins: 60 } },
   { id: 'synall', name: 'Grand Strategist', description: 'Discover every tower synergy.', icon: 'bolt', target: SYNERGIES.length, progress: (d) => d.life.synergyTypes.length, reward: { coins: 600, gems: 15 } },
@@ -56,4 +60,22 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'bestiary10', name: 'Field Notes', description: 'Discover 10 kinds of enemy.', icon: 'scroll', target: 10, progress: discovered, reward: { coins: 100 } },
   { id: 'bestiary', name: 'Monster Scholar', description: 'Discover every enemy in the bestiary.', icon: 'scroll', target: Object.keys(ENEMIES).length, progress: discovered, reward: { coins: 800, gems: 20 } },
   { id: 'rich', name: 'Royal Treasury', description: 'Earn 10,000 coins in total.', icon: 'coin', target: 10000, progress: (d) => d.stats.coinsEarned, reward: { coins: 300, gems: 5 } },
+  // Realms.
+  { id: 'realm_serpent', name: 'Snake Charmer', description: 'Reach wave 25 in Serpent Pass.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'serpent'), reward: { coins: 400, gems: 10 } },
+  { id: 'realm_winds', name: 'Eye of the Storm', description: 'Reach wave 25 in Four Winds.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'winds'), reward: { coins: 500, gems: 10 } },
+  { id: 'realm_crooked', name: 'Keeper of the Corner', description: 'Reach wave 25 in Crooked Keep.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'crooked'), reward: { coins: 600, gems: 15 } },
+  { id: 'realm_founder', name: 'Founder of Realms', description: 'Clear a wave in all four realms.', icon: 'castle', target: MAPS.length, progress: (d) => MAPS.filter((m) => realmBest(d, m.id) > 0).length, reward: { coins: 300, gems: 10 } },
+  { id: 'realm_all50', name: 'High King', description: 'Reach wave 50 in every realm.', icon: 'trophy', target: 50, progress: (d) => Math.min(...MAPS.map((m) => realmBest(d, m.id))), reward: { coins: 3000, gems: 60 } },
+  // Night, weather, spells, skills, mastery and the town.
+  { id: 'night30', name: 'Night Watch', description: 'Clear 30 waves at night.', icon: 'star', target: 30, progress: (d) => d.life.nightWaves ?? 0, reward: { coins: 250, gems: 5 } },
+  { id: 'storm20', name: 'Storm Chaser', description: 'Clear 20 waves in rain, fog, sand, snow or ash.', icon: 'bolt', target: 20, progress: (d) => d.life.weatherWaves ?? 0, reward: { coins: 250, gems: 5 } },
+  { id: 'spells50', name: 'Archmage', description: 'Cast 50 spells.', icon: 'bolt', target: 50, progress: (d) => d.life.spellsCast ?? 0, reward: { coins: 300, gems: 5 } },
+  { id: 'perks', name: 'Master of Skills', description: 'Choose all five skills for one hero.', icon: 'hero', target: PERK_TIERS.length, progress: (d) => Math.max(0, ...Object.values(d.heroPerks).map((p) => (p ?? []).filter((x) => x === 0 || x === 1).length)), reward: { coins: 800, gems: 20 } },
+  { id: 'mastered', name: 'Tower Master', description: 'Reach Master with any tower type.', icon: 'star', target: MASTERY.masterLevel, progress: (d) => Math.max(0, ...TOWER_ORDER.map((t) => masteryLevelFor(d.mastery[t] ?? 0))), reward: { coins: 1000, gems: 25 } },
+  { id: 'townfull', name: 'Thriving Kingdom', description: 'Build every building in your town.', icon: 'castle', target: BUILDINGS.length, progress: (d) => d.buildings.length, reward: { coins: 1500, gems: 30 } },
 ];
+
+/** Best wave in a realm (Kingdom Vale counts the old overall best for older saves). */
+function realmBest(d: SaveData, id: MapId): number {
+  return d.realms?.best?.[id] ?? (id === 'vale' ? d.progress.bestWave : 0);
+}

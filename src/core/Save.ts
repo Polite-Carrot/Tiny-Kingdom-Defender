@@ -40,6 +40,8 @@ export interface Settings {
   speed: number;
   /** Start the next wave as soon as the field is clear. */
   autoWave: boolean;
+  /** Vibrate the phone on big moments. */
+  vibration: boolean;
 }
 
 export interface LifeStats {
@@ -57,6 +59,9 @@ export interface LifeStats {
   heroKills: number;
   /** Spells cast (optional in older saves). */
   spellsCast?: number;
+  /** Waves cleared at night, and in weather. */
+  nightWaves?: number;
+  weatherWaves?: number;
 }
 
 export interface SaveData {
@@ -72,7 +77,7 @@ export interface SaveData {
   selectedHero: HeroId;
   /** Experience earned by each hero. */
   heroXp: Partial<Record<HeroId, number>>;
-  cosmetics: { owned: string[]; castle: string; trail: string };
+  cosmetics: { owned: string[]; castle: string; trail: string; hero: string; tower: string; flag: string };
   settings: Settings;
   treasury: { lastCollect: number };
   chest: { nextFree: number; pendingMilestone: number };
@@ -119,8 +124,8 @@ export function defaultSave(now = Date.now()): SaveData {
     unlocks: { lightning: false, heroes: ['ranger'] },
     selectedHero: 'ranger',
     heroXp: {},
-    cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none' },
-    settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false },
+    cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none', hero: 'hero_none', tower: 'tower_none', flag: 'flag_none' },
+    settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false, vibration: true },
     treasury: { lastCollect: now },
     chest: { nextFree: now, pendingMilestone: 0 },
     daily: { lastClaimDay: null, streak: 0 },

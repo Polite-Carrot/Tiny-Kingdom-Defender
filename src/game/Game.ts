@@ -18,6 +18,7 @@ import { GRID_SIZE } from '../data/base';
 import { themeOf, setActiveMap } from './Siege';
 import type { MapId } from '../data/maps';
 import type { HeroId } from '../data/heroes';
+import { setHaptics } from '../core/Haptics';
 import { TitleScreen } from '../ui/Screens';
 import * as Modals from '../ui/Modals';
 import { TWISTS } from '../data/challenge';
@@ -114,6 +115,7 @@ export class Game {
   async start(): Promise<void> {
     const { audio, save, analytics, meta, ads } = this.s;
     audio.setVolumes(save.data.settings.music, save.data.settings.sfx);
+    setHaptics(save.data.settings.vibration);
     meta.refreshMissions();
     analytics.track('session_start', {
       best_wave: meta.bestWave(), coins: save.data.coins, first_session: !save.data.base, save_recovered: save.recovered,
@@ -350,6 +352,16 @@ export class Game {
     });
   }
 
+  /** A skin, finish or banner changed: show it (behind the menu now, in the siege next time). */
+  refreshCosmetics(): void {
+    if (this.battle) {
+      this.s.ui.toast('Your new look appears next time you enter the kingdom');
+      return;
+    }
+    this.startDemo();
+    this.onResize();
+  }
+
   /** Moves to another realm and shows its kingdom behind the menu. */
   switchMap(id: MapId): void {
     if (!this.s.meta.switchMap(id)) return;
@@ -439,6 +451,7 @@ export class Game {
 
   applySettings(): void {
     const st = this.s.save.data.settings;
+    setHaptics(st.vibration);
     this.s.audio.setVolumes(st.music, st.sfx);
     if (st.quality !== this.s.renderer.quality) {
       this.s.renderer.setQuality(st.quality);

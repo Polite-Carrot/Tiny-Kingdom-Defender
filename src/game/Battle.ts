@@ -17,6 +17,7 @@ import { towerThumb } from '../ui/Thumbnails';
 import { el } from '../ui/dom';
 import { MASTERY, masteryTitle } from '../data/mastery';
 import type { SpellId } from '../data/spells';
+import { vibrate } from '../core/Haptics';
 import { challengeMods, CHALLENGE, type ChallengeDef } from '../data/challenge';
 
 /** A fresh siege for the Daily Challenge: every pad cleared, no towers, the day's gold. */
@@ -84,8 +85,12 @@ export class Battle {
         this.hud.bumpGold();
         s.audio.play('coin');
       }),
-      castleHit: () => !opts.demo && this.hud.castleHit(),
-    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings] });
+      castleHit: () => {
+        if (opts.demo) return;
+        this.hud.castleHit();
+        vibrate(35);
+      },
+    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings], heroTint: meta.cosmeticTint('hero'), towerTint: meta.cosmeticTint('tower'), flag: meta.flagColor() });
     if (opts.demo) return;
 
     if (!s.save.data.base && !c) this.persist(true);
@@ -188,6 +193,7 @@ export class Battle {
     const { ui, audio, rig } = this.s;
     ui.bossCard(e.def.name, e.def.description);
     audio.play('bossRoar');
+    vibrate([70, 50, 90], 0);
     this.view.bossIntro(e);
     if (this.holdSim) return;
     this.holdSim = true;
@@ -246,14 +252,22 @@ export class Battle {
     ev.on('towerBuilt', (t) => this.masteryKills.set(t.id, 0));
     ev.on('waveStart', ({ index }) => {
       const now = nightOf(index), before = nightOf(index - 1);
-      if (now >= 1 && before < 1) setTimeout(() => ui.banner('Night falls', `Enemies drop ${Math.round(SIEGE.nightGold * 100)}% more gold in the dark`), 900);
-      else if (now === 0 && before >= 1) setTimeout(() => ui.banner('Dawn breaks', 'A new day over the kingdom'), 900);
+      if (now >= 1 && before < 1) setTimeout(() => {
+        ui.banner('Night falls', `Enemies drop ${Math.round(SIEGE.nightGold * 100)}% more gold in the dark`);
+        this.s.audio.play('nightfall');
+      }, 900);
+      else if (now === 0 && before >= 1) setTimeout(() => {
+        ui.banner('Dawn breaks', 'A new day over the kingdom');
+        this.s.audio.play('dawn');
+      }, 900);
       const wx = weatherOf(index);
       if (wx !== 'clear' && wx !== weatherOf(index - 1)) setTimeout(() => ui.banner(WEATHER_NAMES[wx][0], WEATHER_NAMES[wx][1]), 1600);
     });
-    ev.on('waveCleared', () => {
+    ev.on('waveCleared', ({ index }) => {
       this.wavesServed++;
       this.flushMastery();
+      if (nightOf(index) >= 1) meta.d.life.nightWaves = (meta.d.life.nightWaves ?? 0) + 1;
+      if (weatherOf(index) !== 'clear') meta.d.life.weatherWaves = (meta.d.life.weatherWaves ?? 0) + 1;
     });
     ev.on('heroKill', (e) => {
       const xp = e.def.boss ? HERO_LEVELS.bossXp : e.elite ? HERO_LEVELS.eliteXp : Math.max(1, e.def.cost * HERO_LEVELS.xpPerCost);

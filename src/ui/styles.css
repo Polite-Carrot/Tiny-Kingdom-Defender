@@ -549,3 +549,9 @@ body.landscape .hud.no-hero .hud-spells { left: calc(var(--sal) + 10px); }
 .hub-tile small { font-size: 11px; font-weight: 800; opacity: .7; }
 .hub-tile.locked { filter: grayscale(1); opacity: .6; }
 .hub-tile:active { transform: translateY(2px); }
+.skin-swatch { position: relative; width: 44px; height: 44px; border-radius: 12px; overflow: hidden; }
+.skin-swatch img { width: 100%; height: 100%; }
+.skin-swatch::after { content: ''; position: absolute; inset: 0; background: var(--c); mix-blend-mode: multiply; }
+.flag-swatch { width: 30px; height: 36px; position: relative; display: grid; place-items: center; font-weight: 900; color: #8a7fa6; }
+.flag-swatch::before { content: ''; position: absolute; left: 2px; top: 0; width: 4px; height: 36px; background: #5a3a22; border-radius: 2px; }
+.flag-swatch::after { content: ''; position: absolute; left: 6px; top: 2px; width: 24px; height: 18px; background: var(--c); clip-path: polygon(0 0, 100% 0, 80% 50%, 100% 100%, 0 100%); }

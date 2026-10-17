@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel, barricadeModel, masteryModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel, barricadeModel, masteryModel, castleBannerModel } from '../entities/Models';
 import { MASTERY } from '../data/mastery';
 import type { BuildingId } from '../data/kingdom';
 import { HeroAnimator } from './HeroAnimator';
@@ -21,6 +21,7 @@ import { tileToWorld, worldToTile } from './LevelMap';
 import { SYNERGY_BY_ID } from '../data/synergies';
 import { themeOf, nightOf, activeRoads, weatherOf } from './Siege';
 import { Weather } from '../systems/Weather';
+import { vibrate } from '../core/Haptics';
 import type { Run, Tower, Enemy, ProjectileKind } from './Run';
 
 export interface ViewHooks {
@@ -119,6 +120,10 @@ export class BattleView {
   private grass: Grass | null = null;
   private castleColor: string;
   private buildings: BuildingId[] = [];
+  private towerMaterial!: THREE.MeshLambertMaterial;
+  private heroMaterial!: THREE.MeshLambertMaterial;
+  private flagColor: string | null = null;
+  private banner: THREE.Mesh | null = null;
   private roadCells: Map<number, number>;
   private padColor = new THREE.Color();
   private padHighlight = -1;
@@ -132,7 +137,7 @@ export class BattleView {
     readonly run: Run,
     private audio: AudioSystem,
     private hooks: ViewHooks,
-    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; castleTier?: number; archers?: boolean; buildings?: BuildingId[] },
+    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; castleTier?: number; archers?: boolean; buildings?: BuildingId[]; heroTint?: string | null; towerTint?: string | null; flag?: string | null },
   ) {
     this.theme = themeOf(run.waveIndex);
     this.trailColor = cosmetics.trailColor ? new THREE.Color(cosmetics.trailColor) : null;
@@ -141,6 +146,12 @@ export class BattleView {
     this.castleTier = cosmetics.castleTier ?? 0;
     this.castleArchers = cosmetics.archers ?? false;
     this.buildings = cosmetics.buildings ?? [];
+    // Skins: tinted copies of the shared material for the hero and the towers.
+    this.towerMaterial = cosmetics.towerTint ? this.track(this.material.clone()) : this.material;
+    if (cosmetics.towerTint) this.towerMaterial.color.set(cosmetics.towerTint);
+    this.heroMaterial = cosmetics.heroTint ? this.track(this.material.clone()) : this.material;
+    if (cosmetics.heroTint) this.heroMaterial.color.set(cosmetics.heroTint);
+    this.flagColor = cosmetics.flag ?? null;
     this.roadCells = BattleView.rasterizeRoads();
     this.particles = new Particles(renderer.quality === 'high' ? 900 : 400);
     this.root.add(this.particles.mesh, this.rings.group, this.bolts.group, this.board);
@@ -387,6 +398,15 @@ export class BattleView {
     const haze = w.current === 'fog' ? 1 : w.current === 'sand' ? 0.75 : w.current === 'snow' ? 0.55 : w.current === 'rain' ? 0.45 : w.current === 'ash' ? 0.5 : 0;
     const col = w.current === 'sand' ? '#d8b878' : w.current === 'ash' ? '#6a6068' : w.current === 'rain' ? '#8a96a8' : '#d4d8e0';
     this.renderer.setWeather(haze * this.weatherK, col, w.flash);
+    // Rain hiss or wind under the music; thunder with each lightning flash.
+    const amb = w.current === 'rain' ? 'rain' : w.current === 'sand' || w.current === 'snow' ? 'wind' : 'none';
+    this.audio.setAmbience?.(amb, this.weatherK);
+    if (w.thunderNow) {
+      w.thunderNow = false;
+      setTimeout(() => this.audio.play('thunder', 0.8), 250 + Math.random() * 500);
+      // (The menu backdrop has silent audio and no ambience: don't buzz there.)
+      if (typeof (this.audio as Partial<AudioSystem>).setAmbience === 'function') vibrate(30);
+    }
   }
 
   /** Eases the light towards the time of day of the wave being fought. */
@@ -445,11 +465,20 @@ export class BattleView {
     // Castle, facing its first road.
     const cp = map.paths[0];
     const n = cp.xs.length;
-    this.castle = new THREE.Mesh(castleModel(this.castleColor, this.castleTier, this.castleArchers), this.material);
+    this.castle = new THREE.Mesh(castleModel(this.castleColor, this.castleTier, this.castleArchers, !!this.flagColor), this.material);
     this.castle.position.set(map.castle.x, 0, map.castle.z);
     this.castle.rotation.y = Math.atan2(cp.xs[n - 2] - cp.xs[n - 1], cp.zs[n - 2] - cp.zs[n - 1]);
     this.castle.castShadow = true;
     this.board.add(this.castle);
+    // The castle banner (Style cosmetic), flying from the top of the keep.
+    this.banner = null;
+    if (this.flagColor) {
+      this.banner = new THREE.Mesh(castleBannerModel(this.flagColor), this.material);
+      this.banner.position.set(0, 1.98, 0);
+      this.banner.scale.setScalar(0.5);
+      this.banner.castShadow = true;
+      this.castle.add(this.banner);
+    }
 
     // Spawn caves (closed roads get a boarded-up gate: the rocks are drawn either way).
     map.paths.forEach((p) => {
@@ -643,8 +672,8 @@ export class BattleView {
           this.particles.burst(tower.x + Math.sin(a) * 0.45, hy, tower.z + Math.cos(a) * 0.45, '#ff8a2a', 4, { speed: 1.2, up: 0.6, size: 0.1, gravity: -0.6, life: 0.35 });
         }
       } else if (id === 'alchemist') this.audio.play('poison');
-      else if (id === 'catapult') this.audio.play('ballista', 0.8);
-      else if (id === 'gale') this.audio.play('frost', 0.7);
+      else if (id === 'catapult') this.audio.play('catapult');
+      else if (id === 'gale') this.audio.play('gust', 0.8);
     });
     on('spell', ({ id, x, z, radius, value }) => {
       const c = this.run.map.castle;
@@ -657,31 +686,32 @@ export class BattleView {
         this.rings.spawn(x, z, radius, '#ff9a3a', 0.5);
         this.rings.spawn(x, z, radius * 0.6, '#ffe08a', 0.35);
         this.rig.shake(0.35);
-        this.audio.play('bossRoar', 0.5);
-        this.audio.play('cannon');
+        this.audio.play('meteor');
+        vibrate(60);
       } else if (id === 'freeze') {
         for (const e of this.run.enemies) {
           if (!e.alive) continue;
           this.rings.spawn(e.x, e.z, 0.45, '#bfeaff', 0.6);
           this.particles.burst(e.x, 0.4, e.z, '#dff6ff', 5, { speed: 1, up: 1.2, size: 0.07, life: 0.6 });
         }
-        this.audio.play('frost');
+        this.audio.play('freeze');
       } else if (id === 'blessing') {
         this.particles.burst(c.x, 1.6, c.z, '#ffd84a', 50, { speed: 3, up: 4, size: 0.1, gravity: -1.5, life: 1.2 });
         this.rings.spawn(c.x, c.z, 3, '#ffd84a', 0.8);
-        this.audio.play('reward');
+        this.audio.play('blessing');
       } else {
         this.particles.burst(c.x, 1, c.z, '#7dffb0', 30, { speed: 2, up: 3, size: 0.1, gravity: -1, life: 0.9 });
         this.rings.spawn(c.x, c.z, 1.6, '#7dffb0', 0.6);
         const s = this.project(c.x, 1.6, c.z);
         this.hooks.floatText(s.x, s.y, `+${value} ♥`, 'heal big');
-        this.audio.play('upgrade');
+        this.audio.play('repair');
       }
     });
     on('mineGold', ({ tower, gold }) => {
       const v = this.towerViews.get(tower.id);
       if (v) v.recoil = 1;
       this.particles.burst(tower.x, 0.8, tower.z, '#ffd84a', 12, { speed: 1.2, up: 2.4, size: 0.08, gravity: -2, life: 0.8 });
+      this.audio.play('mineGold');
       const s = this.project(tower.x, 1.2, tower.z);
       this.hooks.floatText(s.x, s.y, `+${gold}`, 'gold');
     });
@@ -975,8 +1005,8 @@ export class BattleView {
     const model = towerModel(t.def.id, t.tier, t.branch);
     if (!v) {
       const group = new THREE.Group();
-      const base = new THREE.Mesh(model.base, this.material);
-      const head = new THREE.Mesh(model.head, this.material);
+      const base = new THREE.Mesh(model.base, this.towerMaterial);
+      const head = new THREE.Mesh(model.head, this.towerMaterial);
       base.castShadow = head.castShadow = true;
       group.add(base, head);
       group.position.set(t.x, 0, t.z);
@@ -1195,7 +1225,7 @@ export class BattleView {
     const hero = this.run.hero;
     if (!hero) return;
     if (this.heroAnim) this.root.remove(this.heroAnim.root);
-    this.heroAnim = new HeroAnimator(hero.def.id, this.material, (x, z) =>
+    this.heroAnim = new HeroAnimator(hero.def.id, this.heroMaterial, (x, z) =>
       this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }), this.heroGear);
     this.root.add(this.heroAnim.root);
   }
@@ -1205,7 +1235,7 @@ export class BattleView {
     if (tier === this.castleTier && archers === this.castleArchers) return;
     this.castleTier = tier;
     this.castleArchers = archers;
-    this.castle.geometry = castleModel(this.castleColor, tier, archers);
+    this.castle.geometry = castleModel(this.castleColor, tier, archers, !!this.flagColor);
     const c = this.run.map.castle;
     this.rings.spawn(c.x, c.z, 1.6, '#ffd84a', 0.8);
     this.particles.burst(c.x, 0.6, c.z, '#ffe680', 24, { speed: 2, up: 3, size: 0.09, life: 0.8 });
@@ -1512,6 +1542,11 @@ export class BattleView {
       this.castle.scale.set(1 + k * 0.08, 1 - k * 0.08, 1 + k * 0.08);
       this.castle.position.x = run.map.castle.x + Math.sin(this.time * 60) * k * 0.05;
     }
+    // The banner flutters in the wind.
+    if (this.banner) {
+      this.banner.rotation.y = 0.25 - this.castle.rotation.y + Math.sin(this.time * 2.2) * 0.18; // faces the camera whichever way the castle does
+      this.banner.scale.x = 0.5 * (1 + Math.sin(this.time * 3.1) * 0.05);
+    }
     // Spot marker pulse.
     if (this.spotMarker.visible) this.spotMarker.scale.setScalar(1 + Math.sin(this.time * 6) * 0.08);
 
@@ -1654,6 +1689,7 @@ export class BattleView {
     for (const m of this.enemyMeshes.values()) m.dispose();
     this.particles.dispose();
     this.weather?.dispose();
+    this.audio.setAmbience?.('none', 0);
     this.renderer.setWeather(0, '#ffffff', 0);
     this.rings.dispose();
     this.bolts.dispose();
