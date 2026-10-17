@@ -196,7 +196,7 @@ export class Tutorial {
     if (w >= 1 && run.hero && !run.hero.dead) {
       if (!this.seen('hero_tap') && !this.flags.heroSelected && mode === 'none') {
         const h = run.hero;
-        return this.show('hero_tap', HINTS.hero_tap, () => this.battle.view.project(h.x, 1.1, h.z), 'above');
+        return this.show('hero_tap', HINTS.hero_tap, () => this.battle.view.project(h.x, h.y + 0.6, h.z), 'above');
       }
       if (run.state === 'playing' && run.heroAbilityReady() && !this.seen('hero_ability') && run.aliveCount() >= 3) {
         return this.show('hero_ability', HINTS.hero_ability, () => this.hud.rectOf('ability'), 'above', 7000);

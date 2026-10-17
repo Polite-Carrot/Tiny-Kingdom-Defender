@@ -466,9 +466,13 @@ export class Battle {
       }
     }
     const hero = run.hero;
-    const heroD = hero ? (hero.x - x) ** 2 + (hero.z - z) ** 2 : Infinity;
+    // The tap lands on the ground; the hero and the castle stand above it, so test where the
+    // tap ray passes at their height instead.
+    const hp = hero ? this.atHeight(x, z, hero.y + 0.35) : null;
+    const heroD = hero && hp ? (hero.x - hp.x) ** 2 + (hero.z - hp.z) ** 2 : Infinity;
     const c = run.map.castle;
-    const onCastle = (c.x - x) ** 2 + (c.z - z) ** 2 < 0.75 * 0.75;
+    const cp = this.atHeight(x, z, 0.7);
+    const onCastle = (c.x - x) ** 2 + (c.z - z) ** 2 < 0.75 * 0.75 || (c.x - cp.x) ** 2 + (c.z - cp.z) ** 2 < 0.75 * 0.75;
     if (hero && !this.heroSelected && ((heroD < 0.5 * 0.5 && heroD <= bestD) || (hero.post < 0 && onCastle))) {
       this.toggleHero();
       return;
@@ -519,6 +523,14 @@ export class Battle {
       return;
     }
     this.deselect();
+  }
+
+  /** Where the camera ray through ground point (x, z) passes height y. */
+  private atHeight(x: number, z: number, y: number): { x: number; z: number } {
+    const cam = this.s.renderer.camera.position;
+    if (cam.y <= y + 0.01) return { x, z };
+    const k = y / cam.y;
+    return { x: x + (cam.x - x) * k, z: z + (cam.z - z) * k };
   }
 
   buildWall(): void {
