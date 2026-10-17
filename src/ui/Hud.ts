@@ -18,8 +18,8 @@ export interface HudCallbacks {
   toggleAuto(): void;
   castSpell(id: SpellId): void;
   nextWave(): void;
-  selectHero(): void;
-  ability(): void;
+  selectHero(slot: number): void;
+  ability(slot: number): void;
   buildPreview(id: TowerId | null): void;
   build(id: TowerId): void;
   upgrade(branch: number): void;
@@ -46,10 +46,13 @@ export class Hud {
   private previewEl: HTMLElement;
   private speedBtn: HTMLButtonElement;
   private autoBtn: HTMLButtonElement;
-  private heroBtn: HTMLButtonElement;
   private heroWrap: HTMLElement;
-  private abilityBtn: HTMLButtonElement;
-  private abilityCd: HTMLElement;
+  /** One hero button and ability button per hero slot. */
+  private heroBtns: HTMLButtonElement[];
+  private abilityBtns: HTMLButtonElement[];
+  private abilityCds: HTMLElement[];
+  private get heroBtn(): HTMLButtonElement { return this.heroBtns[0]; }
+  private get abilityBtn(): HTMLButtonElement { return this.abilityBtns[0]; }
   private rushPill: HTMLElement;
   private ageEl: HTMLElement;
   private ctx: HTMLElement;
@@ -80,8 +83,14 @@ export class Hud {
         <button class="btn icon blue pause-btn" aria-label="Pause">${icon('pause')}</button>
       </div>
       <div class="hud-hero">
-        <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
-        <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
+        <div class="hero-slot" data-slot="0">
+          <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
+          <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
+        </div>
+        <div class="hero-slot" data-slot="1">
+          <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
+          <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
+        </div>
       </div>
       <div class="rush-pill" style="display:none"></div>
       <div class="hud-spells"></div>
@@ -107,9 +116,9 @@ export class Hud {
     this.previewEl = $(this.el, '.wave-preview');
     this.speedBtn = $(this.el, '.speed-btn') as HTMLButtonElement;
     this.heroWrap = $(this.el, '.hud-hero');
-    this.heroBtn = $(this.el, '.hero-btn') as HTMLButtonElement;
-    this.abilityBtn = $(this.el, '.ability-btn') as HTMLButtonElement;
-    this.abilityCd = $(this.abilityBtn, '.cd');
+    this.heroBtns = [...this.el.querySelectorAll<HTMLButtonElement>('.hero-btn')];
+    this.abilityBtns = [...this.el.querySelectorAll<HTMLButtonElement>('.ability-btn')];
+    this.abilityCds = this.abilityBtns.map((b) => $(b, '.cd'));
     this.ctx = $(this.el, '.ctx');
     this.fpsEl = $(this.el, '.fps');
 
@@ -118,8 +127,8 @@ export class Hud {
     this.autoBtn = $(this.el, '.auto-btn') as HTMLButtonElement;
     this.autoBtn.onclick = () => cb.toggleAuto();
     this.nextBtn.onclick = () => cb.nextWave();
-    this.heroBtn.onclick = () => cb.selectHero();
-    this.abilityBtn.onclick = () => cb.ability();
+    this.heroBtns.forEach((b, i) => (b.onclick = () => cb.selectHero(i)));
+    this.abilityBtns.forEach((b, i) => (b.onclick = () => cb.ability(i)));
     this.rushPill = $(this.el, '.rush-pill');
     this.ageEl = $(this.el, '.wave-pill .age');
     $(this.el, '.shop-btn').onclick = () => cb.shop();
@@ -148,17 +157,23 @@ export class Hud {
     const hero = run.hero;
     this.heroWrap.style.display = hero ? '' : 'none';
     this.el.classList.toggle('no-hero', !hero);
+    this.el.classList.toggle('two-heroes', run.heroes.length > 1);
     // Spell bar: one button per unlocked spell.
     const spellsEl = $(this.el, '.hud-spells');
     const spells = SPELLS.filter((s) => run.config.meta.spells?.[s.id] !== undefined);
     spellsEl.innerHTML = spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${ICONS[s.icon]}</span><span class="cd"></span></button>`).join('');
     spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach((b) => (b.onclick = () => this.cb.castSpell(b.dataset.spell as SpellId)));
     this.spellBtns = [...spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]')];
-    if (hero) {
-      (this.heroBtn.querySelector('img') as HTMLImageElement).src = heroThumb(hero.def.id);
-      $(this.abilityBtn, '.ico').innerHTML = ICONS[ABILITY_ICON[hero.def.ability.kind]];
-    }
-    this.setHeroSelected(false);
+    this.heroBtns.forEach((b, i) => {
+      const h = run.heroes[i];
+      (b.parentElement as HTMLElement).style.display = h ? '' : 'none';
+      if (!h) return;
+      (b.querySelector('img') as HTMLImageElement).src = heroThumb(h.def.id);
+      b.setAttribute('aria-label', `Select ${h.def.name}`);
+      $(this.abilityBtns[i], '.ico').innerHTML = ICONS[ABILITY_ICON[h.def.ability.kind]];
+      this.abilityBtns[i].setAttribute('aria-label', `${h.def.name}: ${h.def.ability.name}`);
+    });
+    this.setHeroSelected(-1);
   }
 
   /** Game speed: recharge countdowns show real seconds at this speed. */
@@ -176,8 +191,8 @@ export class Hud {
     this.autoBtn.innerHTML = on ? 'Auto ✓' : 'Auto';
   }
 
-  setHeroSelected(on: boolean): void {
-    this.heroBtn.classList.toggle('sel', on);
+  setHeroSelected(slot: number): void {
+    this.heroBtns.forEach((b, i) => b.classList.toggle('sel', i === slot));
   }
 
   showFps(on: boolean, fps = 0): void {
@@ -251,17 +266,16 @@ export class Hud {
       this.renderPreview();
     }
 
-    // Hero.
-    const hero = run.hero;
-    if (hero) {
-      ($(this.heroBtn, '.hpring') as HTMLElement).style.boxShadow = `inset 0 0 0 4px ${hero.def.color}`;
-      const ready = run.heroAbilityReady();
-      this.abilityBtn.classList.toggle('ready', ready);
+    // Heroes.
+    run.heroes.forEach((hero, i) => {
+      ($(this.heroBtns[i], '.hpring') as HTMLElement).style.boxShadow = `inset 0 0 0 4px ${hero.def.color}`;
+      this.abilityBtns[i].classList.toggle('ready', run.heroAbilityReady(hero));
       const cdFrac = Math.max(0, hero.abilityCd / hero.def.ability.cooldown);
-      this.abilityCd.textContent = hero.abilityCd > 0 ? String(Math.ceil(hero.abilityCd / this.speed)) : '';
-      this.abilityCd.style.background = hero.abilityCd > 0
-        ? `conic-gradient(rgba(20,10,40,.65) ${cdFrac * 360}deg, rgba(0,0,0,0) 0)` : 'none';
-    }
+      const cd = this.abilityCds[i];
+      const txt = hero.abilityCd > 0 ? String(Math.ceil(hero.abilityCd / this.speed)) : '';
+      if (cd.textContent !== txt) cd.textContent = txt;
+      cd.style.background = hero.abilityCd > 0 ? `conic-gradient(rgba(20,10,40,.65) ${cdFrac * 360}deg, rgba(0,0,0,0) 0)` : 'none';
+    });
 
     // Spells: recharge sweep, glow when ready.
     for (const b of this.spellBtns) {

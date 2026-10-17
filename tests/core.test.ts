@@ -209,6 +209,9 @@ describe('kingdom siege', () => {
     const t = run.build([...run.unlockedSpots][0], 'archer')!;
     run.upgrade(t);
     const gold = run.gold;
+    // Thieves that slip through make off with some gold.
+    let stolen = 0;
+    run.events.on('goldStolen', ({ amount }) => (stolen += amount));
     run.callNextWave();
     for (let i = 0; i < 30 * 600 && run.state === 'playing'; i++) run.update(1 / 30);
     expect(run.state).toBe('lost');
@@ -217,7 +220,7 @@ describe('kingdom siege', () => {
     expect(run.waveIndex).toBe(20);
     expect(run.towers).toHaveLength(1);
     expect(run.towers[0].tier).toBe(2);
-    expect(run.gold).toBeGreaterThanOrEqual(gold);
+    expect(run.gold).toBeGreaterThanOrEqual(gold - stolen);
     expect(run.castleHp).toBe(run.castleMaxHp);
     expect(run.state).toBe('prep');
   });

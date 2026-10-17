@@ -1,7 +1,7 @@
 // The siege session on your persistent kingdom: owns the Run (simulation), BattleView (3D),
 // drives the HUD, and saves the kingdom at safe moments.
 
-import { Run, newKingdom, type BaseSnapshot, type Enemy } from './Run';
+import { Run, newKingdom, type BaseSnapshot, type Enemy, type Hero } from './Run';
 import { BattleView } from './BattleView';
 import { Tutorial } from './Tutorial';
 import type { Services } from './Services';
@@ -43,7 +43,8 @@ export class Battle {
   /** Seconds left of a timed cinematic (boss entrance); 0 = none. */
   private cinematicT = 0;
   private acc = 0;
-  private heroSelected = false;
+  /** Slot of the selected hero (-1 = none). */
+  private selHero = -1;
   private startTime = performance.now();
   /** A revive offer or a retreat happened since the last checkpoint (no interstitial then). */
   segmentTrouble = false;
@@ -90,7 +91,7 @@ export class Battle {
         this.hud.castleHit();
         vibrate(35);
       },
-    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings], heroTint: meta.cosmeticTint('hero'), towerTint: meta.cosmeticTint('tower'), flag: meta.flagColor() });
+    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), heroGear2: meta.secondHero() ? gearTierFor(meta.heroLevel(meta.secondHero()!)) : 0, castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings], heroTint: meta.cosmeticTint('hero'), towerTint: meta.cosmeticTint('tower'), flag: meta.flagColor() });
     if (opts.demo) return;
 
     if (!s.save.data.base && !c) this.persist(true);
@@ -173,9 +174,7 @@ export class Battle {
   onPerkChoice: (hero: HeroId) => void = () => {};
 
   /** Hero XP; on a level-up the hero gets stronger at once (and new gear shows if it unlocked). */
-  private giveHeroXp(xp: number): void {
-    const hero = this.run.hero;
-    if (!hero) return;
+  private giveHeroXp(hero: Hero, xp: number): void {
     const { meta, ui, audio } = this.s;
     const r = meta.addHeroXp(hero.def.id, xp);
     if (!r.levelUp) return;
@@ -183,7 +182,7 @@ export class Battle {
     const gear = HERO_GEAR[gearTierFor(r.level)];
     ui.banner(`${hero.def.name} reached level ${r.level}!`, r.newGear ? `New gear: ${gear.name}` : 'Stronger attacks and abilities');
     audio.play('upgrade');
-    this.view.heroLevelUp(r.newGear ? gearTierFor(r.level) : -1);
+    this.view.heroLevelUp(hero.slot, r.newGear ? gearTierFor(r.level) : -1);
     meta.commit();
     if (meta.pendingPerkTier(hero.def.id) >= 0) setTimeout(() => this.onPerkChoice(hero.def.id), 1200);
   }
@@ -269,9 +268,9 @@ export class Battle {
       if (nightOf(index) >= 1) meta.d.life.nightWaves = (meta.d.life.nightWaves ?? 0) + 1;
       if (weatherOf(index) !== 'clear') meta.d.life.weatherWaves = (meta.d.life.weatherWaves ?? 0) + 1;
     });
-    ev.on('heroKill', (e) => {
+    ev.on('heroKill', ({ enemy: e, hero }) => {
       const xp = e.def.boss ? HERO_LEVELS.bossXp : e.elite ? HERO_LEVELS.eliteXp : Math.max(1, e.def.cost * HERO_LEVELS.xpPerCost);
-      this.giveHeroXp(xp);
+      this.giveHeroXp(hero, xp);
     });
     ev.on('synergy', ({ synergy }) => {
       const def = SYNERGY_BY_ID[synergy];
@@ -354,7 +353,7 @@ export class Battle {
       else if (index % SIEGE.ageEvery !== 0 || index === 0) ui.banner(`Wave ${index + 1}`, ageTitle(index));
     });
     ev.on('waveCleared', ({ index, gold }) => {
-      if (this.run.hero) this.giveHeroXp(HERO_LEVELS.waveXpBase + HERO_LEVELS.waveXpPerWave * index);
+      for (const h of this.run.heroes) this.giveHeroXp(h, HERO_LEVELS.waveXpBase + HERO_LEVELS.waveXpPerWave * index);
       const before = meta.towersAvailable();
       meta.recordWaveCleared(index);
       const done = meta.addMissionProgress('wavesCleared', 1);
@@ -465,41 +464,63 @@ export class Battle {
         best = sp.index;
       }
     }
-    const hero = run.hero;
-    // The tap lands on the ground; the hero and the castle stand above it, so test where the
+    // The tap lands on the ground; the heroes and the castle stand above it, so test where the
     // tap ray passes at their height instead.
-    const hp = hero ? this.atHeight(x, z, hero.y + 0.35) : null;
-    const heroD = hero && hp ? (hero.x - hp.x) ** 2 + (hero.z - hp.z) ** 2 : Infinity;
     const c = run.map.castle;
     const cp = this.atHeight(x, z, 0.7);
     const onCastle = (c.x - x) ** 2 + (c.z - z) ** 2 < 0.75 * 0.75 || (c.x - cp.x) ** 2 + (c.z - cp.z) ** 2 < 0.75 * 0.75;
-    if (hero && !this.heroSelected && ((heroD < 0.5 * 0.5 && heroD <= bestD) || (hero.post < 0 && onCastle))) {
-      this.toggleHero();
+    let tapped: Hero | null = null;
+    let tappedD = Math.min(0.5 * 0.5, bestD + 1e-6);
+    for (const h of run.heroes) {
+      const hp = this.atHeight(x, z, h.y + 0.35);
+      const d = (h.x - hp.x) ** 2 + (h.z - hp.z) ** 2;
+      if (d <= tappedD) {
+        tappedD = d;
+        tapped = h;
+      }
+    }
+    // A tap on the castle picks the nearest hero on its walls.
+    if (!tapped && onCastle && this.selHero < 0) {
+      let bd = Infinity;
+      for (const h of run.heroes) {
+        if (h.post >= 0) continue;
+        const d = (h.x - cp.x) ** 2 + (h.z - cp.z) ** 2;
+        if (d < bd) {
+          bd = d;
+          tapped = h;
+        }
+      }
+    }
+    const sel = run.heroes[this.selHero] ?? null;
+    if (tapped && (!sel || tapped === sel || tapped.post >= 0 || !onCastle)) {
+      if (tapped === sel) this.setHeroSelected(-1), this.view.hideRange(), this.s.audio.play('select');
+      else this.toggleHero(tapped.slot);
       return;
     }
     // A selected hero can be stationed on an empty pad, or back on the castle wall.
-    if (this.heroSelected && hero) {
+    if (sel) {
       const post = onCastle ? -1 : best;
-      if ((post >= 0 || onCastle) && post !== hero.post && (post < 0 || (run.isSpotUnlocked(post) && !run.towerAt(post)))) {
-        const cost = run.heroMoveCost();
+      if ((post >= 0 || onCastle) && post !== sel.post && (post < 0 || (run.isSpotUnlocked(post) && !run.towerAt(post) && !run.heroAt(post)))) {
+        const cost = run.heroMoveCost(sel);
         if (run.gold < cost) {
           this.s.audio.play('error');
-          this.s.ui.toast(`Moving ${hero.def.name} costs ${cost} gold`);
+          this.s.ui.toast(`Moving ${sel.def.name} costs ${cost} gold`);
           return;
         }
-        if (run.stationHero(post)) {
-          this.setHeroSelected(false);
+        if (run.stationHero(post, sel)) {
+          this.setHeroSelected(-1);
           this.view.hideRange();
           this.tutorial?.onHeroMoved();
           this.persist();
           return;
         }
       }
-      if (post === hero.post) {
-        this.toggleHero();
+      if (post === sel.post) {
+        this.setHeroSelected(-1);
+        this.view.hideRange();
         return;
       }
-      this.setHeroSelected(false);
+      this.setHeroSelected(-1);
       this.view.hideRange();
     }
     if (best >= 0) {
@@ -514,7 +535,7 @@ export class Battle {
         this.deselect();
         return;
       }
-      this.setHeroSelected(false);
+      this.setHeroSelected(-1);
       this.view.highlightSpot(-1);
       this.view.hideRange();
       this.view.highlightTile(col, row);
@@ -564,7 +585,7 @@ export class Battle {
   }
 
   private selectSpot(spot: number): void {
-    this.setHeroSelected(false);
+    this.setHeroSelected(-1);
     const t = this.run.towerAt(spot);
     this.view.highlightSpot(spot);
     this.s.audio.play('select');
@@ -587,28 +608,29 @@ export class Battle {
     this.view.highlightTile(-1, -1);
     this.view.highlightSpot(-1);
     this.view.hideRange();
-    this.setHeroSelected(false);
+    this.setHeroSelected(-1);
   }
 
-  private setHeroSelected(on: boolean): void {
-    if (this.heroSelected !== on) this.view.heroPostHints(on);
-    this.heroSelected = on;
-    this.view.heroSelected = on;
-    this.hud.setHeroSelected(on);
+  private setHeroSelected(slot: number): void {
+    if ((this.selHero >= 0) !== (slot >= 0)) this.view.heroPostHints(slot >= 0);
+    this.selHero = slot;
+    this.view.selectedHero = slot;
+    this.hud.setHeroSelected(slot);
   }
 
-  toggleHero(): void {
-    if (!this.run.hero) return;
-    const on = !this.heroSelected;
+  /** Selects (or deselects) the hero in a slot. */
+  toggleHero(slot = 0): void {
+    const run = this.run;
+    const h = run.heroes[slot];
+    if (!h) return;
+    const on = this.selHero !== slot;
     this.hud.closeCtx();
     this.view.highlightSpot(-1);
     this.view.hideRange();
-    this.setHeroSelected(on);
+    this.setHeroSelected(on ? slot : -1);
     if (on) {
-      const run = this.run;
-      const h = run.hero!;
-      this.view.showRange(h.x, h.z, run.heroRange(), '#7dff9a');
-      const cost = run.heroMoveCost();
+      this.view.showRange(h.x, h.z, run.heroRange(h), '#7dff9a');
+      const cost = run.heroMoveCost(h);
       const where = h.post < 0 ? 'an empty pad' : 'an empty pad or the castle';
       this.s.ui.toast(cost > 0 ? `Tap ${where} to move ${h.def.name} (${cost} gold)` : `Tap ${where} to station ${h.def.name} there. Free, once!`);
       this.tutorial?.onHeroSelected();
@@ -689,18 +711,19 @@ export class Battle {
     if (this.run.callNextWave()) this.tutorial?.onWaveStarted();
   }
 
-  ability(): void {
-    if (!this.run.hero) return;
+  ability(slot = 0): void {
+    const h = this.run.heroes[slot];
+    if (!h) return;
     if (this.run.state === 'prep') {
       this.s.ui.toast('Start the wave first!');
       return;
     }
-    if (!this.run.heroAbilityReady()) {
+    if (!this.run.heroAbilityReady(h)) {
       this.s.audio.play('error');
       return;
     }
-    if (!this.run.useHeroAbility()) {
-      this.s.ui.toast('No enemies in range of your hero');
+    if (!this.run.useHeroAbility(h)) {
+      this.s.ui.toast(`No enemies in range of ${h.def.name}`);
       this.s.audio.play('error');
     }
   }

@@ -4,7 +4,7 @@
 import type { SaveSystem, SaveData } from '../core/Save';
 import type { Analytics } from '../analytics/Analytics';
 import {
-  metaCost, TOWER_META, META_UPGRADES, CASTLE_GROWTH, UNLOCKS, TREASURY, CHESTS, DAILY_LOGIN, AD_REWARDS, HERO_UNLOCK_COST, COSMETICS,
+  metaCost, TOWER_META, META_UPGRADES, CASTLE_GROWTH, UNLOCKS, TREASURY, CHESTS, DAILY_LOGIN, AD_REWARDS, HERO_UNLOCK_COST, HERO_SLOT2_COST, COSMETICS,
 } from '../data/economy';
 import { MISSION_POOL, MISSIONS_PER_DAY, type MissionDef, type MissionStat } from '../data/missions';
 import { TOWER_UNLOCK_WAVE, UNLOCK_WAVE } from '../data/base';
@@ -103,6 +103,7 @@ export class Meta {
       barricadeHp: has('barracks') ? 1 + KINGDOM_BONUS.barracksHp : 1,
       spells: this.spellsAvailable(),
       heroPerks: this.heroPerks(this.d.selectedHero),
+      hero2: this.secondHero() ? { id: this.secondHero()!, level: this.heroLevel(this.secondHero()!), perks: this.heroPerks(this.secondHero()!) } : null,
     };
   }
 
@@ -512,7 +513,40 @@ export class Meta {
 
   selectHero(id: HeroId): void {
     if (!this.d.unlocks.heroes.includes(id) || !HEROES[id]) return;
+    if (this.d.secondHero === id) this.d.secondHero = this.d.selectedHero;
     this.d.selectedHero = id;
+    this.commit();
+  }
+
+  // --- Second hero slot ----------------------------------------------------------------
+
+  /** The second hero on the field, if the slot is open and a different hero is chosen. */
+  secondHero(): HeroId | null {
+    const id = this.d.secondHero;
+    return this.d.unlocks.heroSlot2 && id && id !== this.d.selectedHero && this.d.unlocks.heroes.includes(id) ? id : null;
+  }
+
+  heroSlot2Available(): boolean {
+    return this.featureUnlocked('heroSlot2');
+  }
+
+  buyHeroSlot2(): boolean {
+    if (this.d.unlocks.heroSlot2 || !this.heroSlot2Available()) return false;
+    if (!this.spend(HERO_SLOT2_COST, 'hero_slot2')) return false;
+    this.d.unlocks.heroSlot2 = true;
+    // Pick a partner straight away if one is owned.
+    const other = this.d.unlocks.heroes.find((h) => h !== this.d.selectedHero);
+    if (other) this.d.secondHero = other;
+    this.analytics.track('upgrade_purchased', { upgrade: 'hero_slot2', level: 1, cost: HERO_SLOT2_COST });
+    this.commit();
+    return true;
+  }
+
+  /** Chooses the second hero ('' clears the slot). */
+  setSecondHero(id: HeroId | ''): void {
+    if (!this.d.unlocks.heroSlot2) return;
+    if (id && (!this.d.unlocks.heroes.includes(id) || id === this.d.selectedHero)) return;
+    this.d.secondHero = id;
     this.commit();
   }
 

@@ -46,7 +46,7 @@ export class AutoPlayer {
     if (this.think > 0) return;
     this.think = 0.5;
     this.act();
-    if (run.heroAbilityReady()) run.useHeroAbility();
+    for (const h of run.heroes) if (run.heroAbilityReady(h)) run.useHeroAbility(h);
   }
 
   private best(filter: (spot: number) => boolean): number {
@@ -68,7 +68,7 @@ export class AutoPlayer {
     for (let guard = 0; guard < 8; guard++) {
       const cycle = this.cycle();
       const nextType = cycle[this.cycleIdx % cycle.length];
-      const free = this.best((i) => run.isSpotUnlocked(i) && !run.towerAt(i) && run.hero?.post !== i);
+      const free = this.best((i) => run.isSpotUnlocked(i) && !run.towerAt(i) && !run.heroAt(i));
       const land = free < 0 ? this.best((i) => !run.isSpotUnlocked(i)) : -1;
       let up: Tower | null = null;
       let upCost = Infinity;

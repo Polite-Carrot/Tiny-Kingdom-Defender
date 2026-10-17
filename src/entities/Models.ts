@@ -691,6 +691,54 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.cone(0.06, 0.24, 6, fur, { y: 0.3, z: -0.27, rx: -1.9 });
       break;
     }
+    case 'thief': {
+      // Sneaky hooded goblin with a bulging loot sack and a dagger.
+      humanoid(b, '#3a3550', '#8fbf5a', { h: 0.95, w: 0.85 });
+      b.cone(0.15, 0.24, 7, '#2a2640', { y: 0.6, z: -0.02, rx: -0.25 });
+      b.box(0.22, 0.05, 0.03, '#1a1626', { y: 0.5, z: 0.11 });
+      for (const sx of [-1, 1]) b.ball(0.02, 0, glowC('#ffe066', 1.6), { x: sx * 0.045, y: 0.5, z: 0.125 });
+      b.ball(0.13, 1, '#a07a4a', { y: 0.36, z: -0.15, sy: 1.15 });
+      b.cyl(0.03, 0.05, 0.05, 6, '#7a5a34', { y: 0.5, z: -0.15 });
+      b.cyl(0.06, 0.06, 0.02, 8, '#ffcf3f', { y: 0.53, z: -0.14 });
+      b.box(0.02, 0.16, 0.035, '#d9dde3', { x: 0.19, y: 0.2, z: 0.07, rx: 0.4 });
+      b.box(0.06, 0.02, 0.03, GOLD, { x: 0.19, y: 0.13, z: 0.04, rx: 0.4 });
+      break;
+    }
+    case 'tunneler': {
+      // Burly mole digger: miner's helmet with a lamp, big claws and a drill nose.
+      b.ball(0.2, 1, '#6a5446', { y: 0.2, sy: 0.85, sz: 1.15 });
+      b.ball(0.14, 1, '#7a6252', { y: 0.3, z: 0.12 });
+      b.cone(0.07, 0.18, 8, '#c9d2df', { y: 0.27, z: 0.3, rx: Math.PI / 2 });
+      for (let k = 0; k < 3; k++) b.torus(0.05 - k * 0.012, 0.01, 4, 10, '#8a92a0', { y: 0.27, z: 0.24 + k * 0.05 });
+      b.cyl(0.13, 0.15, 0.08, 10, '#e0a030', { y: 0.42, z: 0.08 });
+      b.ball(0.13, 1, '#e8b040', { y: 0.44, z: 0.08, sy: 0.55 });
+      b.ball(0.035, 0, glowC('#fff3b0', 2.2), { y: 0.46, z: 0.21 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.022, 0, '#1a1218', { x: sx * 0.06, y: 0.34, z: 0.24 });
+        b.box(0.1, 0.05, 0.12, '#f0d8b8', { x: sx * 0.2, y: 0.08, z: 0.14, ry: sx * 0.4 });
+        for (let k = 0; k < 3; k++) b.cone(0.012, 0.06, 3, '#e8e0d0', { x: sx * (0.17 + k * 0.03), y: 0.06, z: 0.22, rx: 1.4 });
+      }
+      break;
+    }
+    case 'siege': {
+      // Goblin siege cart: wooden frame on four wheels, a throwing arm with a rock in its bucket.
+      b.box(0.5, 0.08, 0.62, WOOD_D, { y: 0.16 });
+      b.box(0.46, 0.05, 0.58, '#9a6a3f', { y: 0.22 });
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        b.cyl(0.11, 0.11, 0.05, 10, '#5a3a24', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rz: Math.PI / 2 });
+        b.cyl(0.04, 0.04, 0.07, 6, '#8a92a0', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rz: Math.PI / 2 });
+      }
+      for (const sx of [-1, 1]) b.box(0.05, 0.34, 0.05, WOOD_D, { x: sx * 0.16, y: 0.4, z: -0.05 });
+      b.cyl(0.03, 0.03, 0.38, 6, '#8a92a0', { y: 0.54, z: -0.05, rz: Math.PI / 2 });
+      b.box(0.06, 0.06, 0.62, '#b5803f', { y: 0.62, z: -0.08, rx: -0.55 });
+      b.cyl(0.09, 0.07, 0.06, 8, WOOD_D, { y: 0.8, z: -0.36 });
+      b.dodec(0.08, '#8a8278', { y: 0.86, z: -0.36 });
+      b.box(0.3, 0.12, 0.08, '#c73a3a', { y: 0.3, z: 0.29 });
+      b.box(0.08, 0.08, 0.02, GOLD, { y: 0.3, z: 0.335 });
+      b.ball(0.07, 0, '#8a8278', { x: 0.14, y: 0.3, z: -0.22 });
+      b.ball(0.06, 0, '#7a7268', { x: 0.08, y: 0.28, z: -0.28 });
+      break;
+    }
     case 'golem': {
       // Hulking ice golem: crystal torso, block fists, glowing core and icicles.
       const ice = '#9fd6f0', deep = '#6fb4d8';

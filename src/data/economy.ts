@@ -72,6 +72,9 @@ export const AD_REWARDS = {
   checkpointMult: 2,
 };
 
+/** Coins for the second hero slot. */
+export const HERO_SLOT2_COST = 3000;
+
 export const HERO_UNLOCK_COST: Record<string, number> = {
   ranger: 0,
   knight: 600,

@@ -101,8 +101,10 @@ export const SIEGE_COINS = {
 };
 
 /** Best wave reached (0-based count of waves cleared) needed to unlock things. */
-export const UNLOCK_WAVE: Record<'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist' | 'challenge' | 'kingdom' | 'realms' | 'mine' | 'catapult' | 'gale' | 'beacon', number> = {
+export const UNLOCK_WAVE: Record<'heroSlot2' | 'cannon' | 'frost' | 'shop' | 'missions' | 'dailyLogin' | 'treasury' | 'chests' | 'heroes' | 'lightning' | 'mage' | 'ballista' | 'flame' | 'alchemist' | 'challenge' | 'kingdom' | 'realms' | 'mine' | 'catapult' | 'gale' | 'beacon', number> = {
   mine: 18,
+  /** A second hero slot (also bought with coins in the Heroes menu). */
+  heroSlot2: 40,
   catapult: 25,
   gale: 30,
   beacon: 35,
@@ -148,6 +150,9 @@ export const ENEMY_FIRST_WAVE: Partial<Record<EnemyId, number>> = {
   knight: 8,
   shaman: 13,
   shield: 17,
+  thief: 15,
+  tunneler: 27,
+  siege: 33,
   // Each Age brings its own creatures (they only appear in that Age's waves).
   scarab: 20,
   wraith: 22,

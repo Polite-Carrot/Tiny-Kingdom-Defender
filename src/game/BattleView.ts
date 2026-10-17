@@ -32,6 +32,7 @@ export interface ViewHooks {
 
 const ENEMY_COLORS: Record<EnemyId, string> = {
   grunt: '#7fb24f', runner: '#e0913a', knight: '#b9c2cf', bat: '#5b3f73', shaman: '#6a4aa0', shield: '#b0884f', minion: '#c0392b',
+  thief: '#3a3550', tunneler: '#6a5446', siege: '#9a6a3f',
   scarab: '#2f6f7a', wraith: '#d9c08a', wolf: '#dfe8f0', golem: '#9fd6f0', fireimp: '#ff7a2a', magmaslug: '#e0582b', slugling: '#ff8a4a',
   boss_ogre: '#8aa05a', boss_scorpion: '#c9a063', boss_yeti: '#eef3f7', boss_dragon: '#b8322a',
 };
@@ -88,15 +89,18 @@ export class BattleView {
   /** Glowing links between towers in a synergy. */
   private synergyLines: THREE.LineSegments | null = null;
   private synergyKey = '';
-  private heroGear = 0;
+  /** Gear tier shown on each hero (by slot). */
+  private heroGears: number[] = [];
   private castleTier = 0;
   private castleArchers = false;
   /** Rigged, animated hero. */
-  private heroAnim: HeroAnimator | null = null;
+  private heroAnims: HeroAnimator[] = [];
   /** Soft coloured glow under the hero. */
-  private heroAura: THREE.Mesh | null = null;
+  private heroAuras: THREE.Mesh[] = [];
+  /** Siege Engine rocks in flight (visual only; the sim lands them). */
+  private rocks: { mesh: THREE.Mesh; x0: number; z0: number; x1: number; z1: number; t: number; dur: number }[] = [];
+  private rockGeo: THREE.BufferGeometry | null = null;
   private heroRing!: THREE.Mesh;
-  private heroBar!: THREE.Mesh;
   private moveMarker!: THREE.Mesh;
   private allyMesh!: THREE.Mesh;
   private allyRing!: THREE.Mesh;
@@ -127,7 +131,8 @@ export class BattleView {
   private roadCells: Map<number, number>;
   private padColor = new THREE.Color();
   private padHighlight = -1;
-  heroSelected = false;
+  /** Slot of the selected hero (-1 = none). */
+  selectedHero = -1;
   private unsub: (() => void)[] = [];
   private trailColor: THREE.Color | null;
 
@@ -137,12 +142,12 @@ export class BattleView {
     readonly run: Run,
     private audio: AudioSystem,
     private hooks: ViewHooks,
-    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; castleTier?: number; archers?: boolean; buildings?: BuildingId[]; heroTint?: string | null; towerTint?: string | null; flag?: string | null },
+    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; heroGear2?: number; castleTier?: number; archers?: boolean; buildings?: BuildingId[]; heroTint?: string | null; towerTint?: string | null; flag?: string | null },
   ) {
     this.theme = themeOf(run.waveIndex);
     this.trailColor = cosmetics.trailColor ? new THREE.Color(cosmetics.trailColor) : null;
     this.castleColor = cosmetics.castleColor;
-    this.heroGear = cosmetics.heroGear ?? 0;
+    this.heroGears = [cosmetics.heroGear ?? 0, cosmetics.heroGear2 ?? 0];
     this.castleTier = cosmetics.castleTier ?? 0;
     this.castleArchers = cosmetics.archers ?? false;
     this.buildings = cosmetics.buildings ?? [];
@@ -587,24 +592,21 @@ export class BattleView {
     this.spotMarker.visible = false;
     this.root.add(this.spotMarker);
 
-    // Hero.
-    const hero = this.run.hero;
+    // Heroes.
     this.heroRing = new THREE.Mesh(markerGeo, this.track(new THREE.MeshBasicMaterial({ color: '#7dff9a', transparent: true, depthWrite: false, toneMapped: false })));
     this.heroRing.visible = false;
     this.moveMarker = new THREE.Mesh(markerGeo, this.track(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, depthWrite: false })));
     this.moveMarker.visible = false;
     this.root.add(this.heroRing, this.moveMarker);
-    if (hero) {
-      this.makeHeroAnimator();
-      const auraGeo = this.track(new THREE.CircleGeometry(0.5, 32));
-      auraGeo.rotateX(-Math.PI / 2);
-      this.heroAura = new THREE.Mesh(auraGeo, this.track(new THREE.MeshBasicMaterial({
+    const auraGeo = this.track(new THREE.CircleGeometry(0.5, 32));
+    auraGeo.rotateX(-Math.PI / 2);
+    for (const hero of this.run.heroes) {
+      this.makeHeroAnimator(hero.slot);
+      const aura = new THREE.Mesh(auraGeo, this.track(new THREE.MeshBasicMaterial({
         color: new THREE.Color(hero.def.color).multiplyScalar(1.4), transparent: true, opacity: 0.32, depthWrite: false, map: this.auraTexture(),
       })));
-      this.root.add(this.heroAura);
-      this.heroBar = new THREE.Mesh(quad, this.track(new THREE.MeshBasicMaterial({ color: '#59e05a', depthTest: false, toneMapped: false })));
-      this.heroBar.renderOrder = 11;
-      this.root.add(this.heroBar);
+      this.heroAuras[hero.slot] = aura;
+      this.root.add(aura);
     }
     this.allyMesh = new THREE.Mesh(heroModel('champion'), this.material);
     this.allyMesh.visible = false;
@@ -804,14 +806,14 @@ export class BattleView {
       this.hooks.castleHit();
     });
     on('heroAttack', ({ hero }) => {
-      this.heroAnim?.attack();
+      this.heroAnims[hero.slot]?.attack();
       if (hero.def.range <= 1.5) this.audio.play('heroHit');
       else if (hero.def.damageType === 'magic') this.audio.play('frost', 0.6);
       else this.audio.play('arrow', 0.8);
     });
     on('heroAbility', (ev) => {
       const { hero, x, z, radius } = ev;
-      this.heroAnim?.ability();
+      this.heroAnims[hero.slot]?.ability();
       const kind = hero.def.ability.kind;
       if (kind === 'arrowRain') {
         for (let i = 0; i < 30; i++) {
@@ -921,9 +923,32 @@ export class BattleView {
       this.particles.burst(tower.x, 0.8, tower.z, '#e0faff', 14, { speed: 1.4, up: 1.5, size: 0.08, life: 0.6 });
       this.audio.play('frost', 1);
     });
+    on('siegeThrow', ({ enemy, tower, flight }) => {
+      if (!this.rockGeo) this.rockGeo = this.track(new THREE.DodecahedronGeometry(0.11));
+      const mesh = new THREE.Mesh(this.rockGeo, this.material);
+      mesh.castShadow = true;
+      this.root.add(mesh);
+      this.rocks.push({ mesh, x0: enemy.x, z0: enemy.z, x1: tower.x, z1: tower.z, t: 0, dur: flight });
+      this.audio.play('catapult', 0.7);
+    });
+    on('siegeHit', ({ tower }) => {
+      this.particles.burst(tower.x, 0.9, tower.z, '#b8a890', 16, { speed: 2, up: 2, size: 0.1, gravity: 4, life: 0.6 });
+      this.rings.spawn(tower.x, tower.z, 0.8, '#ffd84a', 0.4);
+      this.audio.play('cannon', 0.8);
+      const sp = this.project(tower.x, 1.6, tower.z);
+      this.hooks.floatText(sp.x, sp.y, 'Stunned!', 'immune');
+    });
+    on('goldStolen', ({ enemy, amount }) => {
+      if (amount <= 0) return;
+      const c = this.run.map.castle;
+      const sp = this.project(c.x, 1.4, c.z);
+      this.hooks.floatText(sp.x, sp.y, `-${amount} gold stolen!`, 'boss');
+      this.particles.burst(enemy.x, 0.4, enemy.z, '#ffd84a', 12, { speed: 1.6, up: 2, size: 0.07, life: 0.6 });
+      this.audio.play('error');
+    });
     on('heroMoved', ({ hero: h }) => {
       // A puff of light: the hero takes up their new post.
-      this.heroAnim?.respawn();
+      this.heroAnims[h.slot]?.respawn();
       this.rings.spawn(h.x, h.z, 0.9, h.def.color, 0.5);
       this.particles.burst(h.x, h.y + 0.3, h.z, '#ffffff', 14, { speed: 1.5, up: 2.5, size: 0.07, life: 0.6 });
       this.audio.play('build');
@@ -1078,7 +1103,7 @@ export class BattleView {
     if (on) {
       const run = this.run;
       for (const sp of run.map.buildSpots) {
-        if (run.isSpotUnlocked(sp.index) && !run.towerAt(sp.index) && run.hero?.post !== sp.index) this.pads.setColorAt(sp.index, new THREE.Color('#8dff9a'));
+        if (run.isSpotUnlocked(sp.index) && !run.towerAt(sp.index) && !run.heroAt(sp.index)) this.pads.setColorAt(sp.index, new THREE.Color('#8dff9a'));
       }
     }
     if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
@@ -1225,13 +1250,15 @@ export class BattleView {
     return m;
   }
 
-  private makeHeroAnimator(): void {
-    const hero = this.run.hero;
+  private makeHeroAnimator(slot: number): void {
+    const hero = this.run.heroes[slot];
     if (!hero) return;
-    if (this.heroAnim) this.root.remove(this.heroAnim.root);
-    this.heroAnim = new HeroAnimator(hero.def.id, this.heroMaterial, (x, z) =>
-      this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }), this.heroGear);
-    this.root.add(this.heroAnim.root);
+    const old = this.heroAnims[slot];
+    if (old) this.root.remove(old.root);
+    const anim = new HeroAnimator(hero.def.id, this.heroMaterial, (x, z) =>
+      this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }), this.heroGears[slot] ?? 0);
+    this.heroAnims[slot] = anim;
+    this.root.add(anim.root);
   }
 
   /** Castle upgrades bought mid-siege: swap in the bigger castle. */
@@ -1246,13 +1273,13 @@ export class BattleView {
   }
 
   /** Level-up burst; `newGear` ≥ 0 re-dresses the hero in that gear tier. */
-  heroLevelUp(newGear: number): void {
-    const h = this.run.hero;
+  heroLevelUp(slot: number, newGear: number): void {
+    const h = this.run.heroes[slot];
     if (!h) return;
     if (newGear >= 0) {
-      this.heroGear = newGear;
-      this.makeHeroAnimator();
-      this.heroAnim?.respawn();
+      this.heroGears[slot] = newGear;
+      this.makeHeroAnimator(slot);
+      this.heroAnims[slot]?.respawn();
     }
     const col = newGear >= 0 ? HERO_GEAR[newGear].color : '#ffe680';
     this.rings.spawn(h.x, h.z, 0.9, col, 0.6);
@@ -1477,22 +1504,33 @@ export class BattleView {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
-    // Hero.
-    const hero = run.hero;
-    if (hero && this.heroAnim) {
-      // The animator plays the death fall itself, so the hero stays visible until it ends.
-      this.heroAnim.root.visible = this.heroAnim.update(dt, this.time, hero);
-      // The hero stands at a post like a tower: no health to show.
-      this.heroBar.visible = false;
-      if (this.heroAura) {
-        this.heroAura.visible = true;
-        this.heroAura.position.set(hero.x, hero.y + 0.025, hero.z);
-        this.heroAura.scale.setScalar(1 + Math.sin(this.time * 3) * 0.06);
+    // Siege rocks arc through the air.
+    for (let i = this.rocks.length - 1; i >= 0; i--) {
+      const r = this.rocks[i];
+      r.t += dt;
+      const k = Math.min(1, r.t / r.dur);
+      r.mesh.position.set(r.x0 + (r.x1 - r.x0) * k, 0.7 + Math.sin(k * Math.PI) * 1.8 + 0.3 * k, r.z0 + (r.z1 - r.z0) * k);
+      r.mesh.rotation.set(r.t * 7, r.t * 5, 0);
+      if (k >= 1) {
+        this.root.remove(r.mesh);
+        this.rocks.splice(i, 1);
+      }
+    }
+    // Heroes: they stand at their posts like towers, so there is no health to show.
+    this.heroRing.visible = false;
+    for (const hero of run.heroes) {
+      const anim = this.heroAnims[hero.slot];
+      if (!anim) continue;
+      anim.root.visible = anim.update(dt, this.time, hero);
+      const aura = this.heroAuras[hero.slot];
+      if (aura) {
+        aura.position.set(hero.x, hero.y + 0.025, hero.z);
+        aura.scale.setScalar(1 + Math.sin(this.time * 3 + hero.slot) * 0.06);
       }
       _m.compose(_p.set(hero.x, hero.y + 0.015, hero.z), _q.identity(), _s.set(0.6, 1, 0.6));
       if (shadows < this.shadows.instanceMatrix.count) this.shadows.setMatrixAt(shadows++, _m);
-      this.heroRing.visible = this.heroSelected;
-      if (this.heroRing.visible) {
+      if (this.selectedHero === hero.slot) {
+        this.heroRing.visible = true;
         this.heroRing.position.set(hero.x, hero.y + 0.05, hero.z);
         this.heroRing.scale.setScalar(1.1 + Math.sin(this.time * 6) * 0.08);
       }
@@ -1664,6 +1702,14 @@ export class BattleView {
         v.ice.visible = t.frozen > 0;
         if (v.ice.visible) v.ice.scale.set(1, 0.9 + Math.min(1, t.frozen) * 0.15, 1);
       }
+      // Knocked out by a siege rock: the tower wobbles with stars circling it.
+      if (t.dazed > 0) {
+        v.group.rotation.z = Math.sin(this.time * 18) * 0.06 * Math.min(1, t.dazed);
+        if (Math.random() < dt * 10) {
+          const a = this.time * 4 + Math.random();
+          this.particles.burst(t.x + Math.cos(a) * 0.3, 1.5, t.z + Math.sin(a) * 0.3, '#ffe066', 1, { speed: 0.2, up: 0.3, size: 0.07, gravity: 0, life: 0.4 });
+        }
+      } else if (v.group.rotation.z !== 0) v.group.rotation.z = 0;
       // Precious materials sparkle.
       if (t.tier >= 6 && Math.random() < dt * (t.tier - 4) * 0.6) {
         this.particles.burst(t.x + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 1.2, t.z + (Math.random() - 0.5) * 0.6, materialFor(t.tier).accent, 1, { speed: 0.2, up: 0.8, size: 0.05, gravity: -0.5, life: 0.8 });

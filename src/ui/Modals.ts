@@ -9,7 +9,7 @@ import { TOWERS, TOWER_ORDER, isSupport, type TowerId } from '../data/towers';
 import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, PERKS, PERK_TIERS, xpForLevel, gearTierFor, type AbilityKind, type HeroId } from '../data/heroes';
 
 const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
-import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
+import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, HERO_SLOT2_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
 import { summarise } from '../analytics/Analytics';
 import type { RewardedPlacement } from '../data/ads';
 import type { ChestReward, MetaUpgradeKey } from '../game/Meta';
@@ -23,7 +23,7 @@ import { BUILDINGS, BUILDING_BY_ID, type BuildingId } from '../data/kingdom';
 import { MASTERY, masteryTitle } from '../data/mastery';
 import { ageTitle } from '../game/Siege';
 import { MAPS, MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
-import { GRID_SIZE } from '../data/base';
+import { GRID_SIZE, UNLOCK_WAVE } from '../data/base';
 import { SPELLS, SPELL_RULES, spellPower, spellCooldown, type SpellId } from '../data/spells';
 
 // --- Helpers --------------------------------------------------------------------------
@@ -359,15 +359,24 @@ export function heroes(game: Game): void {
   game.s.ui.modal((m) => {
     const render = () => {
       const d = meta.d;
-      m.innerHTML = `<div class="ribbon">Heroes</div>${currencyBar(game)}<div class="list">${HERO_ORDER.map((id) => {
+      const slot2 = d.unlocks.heroSlot2;
+      const partner = meta.secondHero();
+      const slotRow = slot2
+        ? `<div class="slot2-row on">${icon('swords', 'inline')}<b>Two heroes:</b> your <b>Leader</b> and a <b>Partner</b> both join every siege.</div>`
+        : meta.heroSlot2Available()
+          ? `<div class="slot2-row"><div>${icon('swords', 'inline')}<b>Second hero slot</b><br/><small>Bring a Partner hero into every siege.</small></div><button class="btn small gold ${d.coins < HERO_SLOT2_COST ? 'disabled' : ''}" data-slot2>${costHtml(HERO_SLOT2_COST)}</button></div>`
+          : `<div class="slot2-row locked">${icon('lock', 'inline')}A second hero slot opens at wave ${UNLOCK_WAVE.heroSlot2}.</div>`;
+      m.innerHTML = `<div class="ribbon">Heroes</div>${currencyBar(game)}${slotRow}<div class="list">${HERO_ORDER.map((id) => {
         const h = HEROES[id];
         const owned = d.unlocks.heroes.includes(id);
         const sel = d.selectedHero === id;
+        const isPartner = partner === id;
         const cost = HERO_UNLOCK_COST[id];
-        const btn = sel ? `<button class="btn small gold disabled" disabled>Selected</button>` : owned ? `<button class="btn small blue" data-sel="${id}">Select</button>` : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-buy="${id}">${costHtml(cost)}</button>`;
+        let btn = sel ? `<button class="btn small gold disabled" disabled>${slot2 ? 'Leader' : 'Selected'}</button>` : owned ? `<button class="btn small blue" data-sel="${id}">${slot2 ? 'Lead' : 'Select'}</button>` : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-buy="${id}">${costHtml(cost)}</button>`;
+        if (slot2 && owned && !sel) btn += isPartner ? `<button class="btn small purple" data-partner="">Partner ✓</button>` : `<button class="btn small" data-partner="${id}">Partner</button>`;
         const bar = (label: string, v: number) => `<div class="hstat"><span>${label}</span><i><b style="width:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></b></i></div>`;
         const dps = h.damage / h.cooldown;
-        return `<div class="hero-card ${sel ? 'sel' : ''} ${owned ? '' : 'locked'}" style="--hc:${h.color}">
+        return `<div class="hero-card ${sel || isPartner ? 'sel' : ''} ${owned ? '' : 'locked'}" style="--hc:${h.color}">
           <div class="portrait"><img src="${heroThumb(id)}" alt=""/>${owned ? '' : `<span class="lock">${ICONS.lock}</span>`}</div>
           <div class="body">
             <div class="name">${h.name} <span class="muted">${h.title}</span></div>
@@ -380,7 +389,8 @@ export function heroes(game: Game): void {
               return `<div class="hlevel"><span class="lv">Lv ${lvl}</span><span class="gear" style="--gc:${gear.color}">${gear.name}</span><i><b style="width:${Math.round(frac * 100)}%"></b></i><span class="muted">${nextGear ? `${nextGear.name} gear at Lv ${nextGear.level}` : 'Max gear'}</span></div>`;
             })() : ''}
             <div class="desc">${h.description}</div>
-            <div class="hstats">${bar('HP', h.hp / 560)}${bar('DPS', dps / 60)}${bar('Range', h.range / 3)}${bar('Speed', h.speed / 3.6)}</div>
+            <div class="hstats">${bar('DPS', dps / 50)}${bar('Range', h.postRange / 3.4)}</div>
+            <div class="desc" style="font-weight:800">${h.hitsAir ? 'Hits flyers too' : 'Ground enemies only'}</div>
             <div class="ability"><span class="aico">${ICONS[ABILITY_ICONS[h.ability.kind]]}</span><span><b>${h.ability.name}</b> ${h.ability.description}</span></div>
             ${owned ? perkRow(game, id) : ''}
           </div>
@@ -390,6 +400,22 @@ export function heroes(game: Game): void {
         meta.selectHero(b.dataset.sel as typeof d.selectedHero);
         render();
       }));
+      m.querySelectorAll<HTMLButtonElement>('[data-partner]').forEach((b) => (b.onclick = () => {
+        meta.setSecondHero(b.dataset.partner as HeroId | '');
+        game.s.audio.play('select');
+        render();
+      }));
+      m.querySelector<HTMLButtonElement>('[data-slot2]')?.addEventListener('click', () => {
+        if (meta.buyHeroSlot2()) {
+          game.s.audio.play('upgrade');
+          game.s.ui.toast(meta.secondHero() ? `${HEROES[meta.secondHero()!].name} joins as your Partner!` : 'Second hero slot open! Pick a Partner.');
+        } else {
+          game.s.audio.play('error');
+          game.s.ui.toast('Not enough coins');
+        }
+        render();
+        refreshCoins(game);
+      });
       m.querySelectorAll<HTMLButtonElement>('[data-perk]').forEach((b) => (b.onclick = () => {
         const id = b.dataset.perk as HeroId;
         perkChoice(game, id, meta.pendingPerkTier(id), render);
@@ -886,6 +912,9 @@ function enemyTips(e: EnemyDef): string[] {
   if (e.speed >= 1.5) t.push('Fast: slow it with Frost, or hold it with a barricade.');
   if (e.burrow) t.push('Burrows under the sand: towers can only hit it when it surfaces, but burning and poison keep working.');
   if (e.freezeTowers) t.push('Freezes nearby towers: kill it fast with a Ballista or your hero, or keep towers spread out.');
+  if (e.steal) t.push('Steals gold instead of hurting the castle: a barricade or Frost holds it long enough to catch.');
+  if (e.tunnel) t.push('Tunnels under the first half of its road: put towers near the castle end to meet it when it surfaces.');
+  if (e.siege) t.push('Knocks nearby towers out with rocks: out-range it with a Ballista or Catapult, or let your heroes focus it.');
   if (e.split) t.push('Splits when killed: splash damage (Cannon, Alchemist, Flame) mops up the pieces.');
   if (e.dotImmune) t.push('Immune to burning and poison.');
   if (e.heal) t.push('Heals nearby allies: target it first with "Strongest" targeting or your hero.');

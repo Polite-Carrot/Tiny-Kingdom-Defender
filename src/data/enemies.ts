@@ -2,6 +2,7 @@
 
 export type EnemyId =
   | 'grunt' | 'runner' | 'knight' | 'bat' | 'shaman' | 'shield'
+  | 'thief' | 'tunneler' | 'siege'
   | 'scarab' | 'wraith' | 'wolf' | 'golem' | 'fireimp' | 'magmaslug' | 'slugling'
   | 'boss_ogre' | 'boss_scorpion' | 'boss_yeti' | 'boss_dragon'
   | 'minion';
@@ -35,6 +36,12 @@ export interface EnemyDef {
   burrow?: { interval: number; duration: number };
   /** Freezes the nearest tower in range for a while. */
   freezeTowers?: { interval: number; radius: number; duration: number };
+  /** Steals gold if it gets through (this many times its kill bounty) instead of hurting the castle. */
+  steal?: { bountyMult: number };
+  /** Starts underground and surfaces at this fraction of the road, moving faster while hidden. */
+  tunnel?: { surfaceAt: number; speedMult: number };
+  /** Lobs rocks at the nearest tower in range, knocking it out for a while. */
+  siege?: { interval: number; radius: number; duration: number; flight: number };
   /** Splits into smaller enemies when killed. */
   split?: { id: EnemyId; count: number };
   /** Immune to burning and poison. */
@@ -77,6 +84,22 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     id: 'shield', name: 'Shield-bearer', description: 'Shields allies right behind it.',
     hp: 140, speed: 0.75, armor: 0.3, magicResist: 0, flying: false, bounty: 10, leakDamage: 2, cost: 4, scale: 1.2,
     shield: { reduction: 0.45, range: 1.6 },
+  },
+  // Raiders that turn up in every Age.
+  thief: {
+    id: 'thief', name: 'Thief', description: 'Quick and sneaky. Steals gold instead of hurting the castle if it slips through.',
+    hp: 38, speed: 1.75, armor: 0, magicResist: 0, flying: false, bounty: 6, leakDamage: 0, cost: 1.6, scale: 0.9,
+    steal: { bountyMult: 5 },
+  },
+  tunneler: {
+    id: 'tunneler', name: 'Tunneller', description: 'Digs under the road where towers cannot reach, then bursts up halfway along.',
+    hp: 95, speed: 0.95, armor: 0.2, magicResist: 0, flying: false, bounty: 9, leakDamage: 2, cost: 3, scale: 1.05,
+    tunnel: { surfaceAt: 0.5, speedMult: 1.5 },
+  },
+  siege: {
+    id: 'siege', name: 'Siege Engine', description: 'A goblin catapult cart. Lobs rocks that knock the nearest tower out for a few seconds.',
+    hp: 260, speed: 0.5, armor: 0.45, magicResist: 0.1, flying: false, bounty: 16, leakDamage: 3, cost: 6.5, scale: 1.3,
+    siege: { interval: 6, radius: 3.2, duration: 3, flight: 0.9 },
   },
   // Age of Sands.
   scarab: {
@@ -138,7 +161,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   },
 };
 
-export const REGULAR_ENEMIES: EnemyId[] = ['grunt', 'runner', 'knight', 'bat', 'shaman', 'shield', 'scarab', 'wraith', 'wolf', 'golem', 'fireimp', 'magmaslug'];
+export const REGULAR_ENEMIES: EnemyId[] = ['grunt', 'runner', 'knight', 'bat', 'shaman', 'shield', 'thief', 'tunneler', 'siege', 'scarab', 'wraith', 'wolf', 'golem', 'fireimp', 'magmaslug'];
 export const BOSS_BY_CHAPTER: EnemyId[] = ['boss_ogre', 'boss_scorpion', 'boss_yeti', 'boss_dragon'];
 
 export const ENEMY_RULES = {

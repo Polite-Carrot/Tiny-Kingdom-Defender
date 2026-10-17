@@ -119,3 +119,75 @@ describe('stationed hero', () => {
     expect(h.post).toBe(-1);
   });
 });
+
+describe('raiders: thief, tunneller, siege engine', () => {
+  const run1 = (snap = newKingdom()) => new Run({ snapshot: { ...snap, gold: 500 }, meta: newMeta().metaBonuses(), availableTowers: ['archer'], seed: 3 });
+
+  it('a thief that slips through steals gold and leaves the castle alone', () => {
+    const run = run1();
+    run.callNextWave();
+    const e = run.spawnEnemy('thief', 0, run.map.paths[0].length - 0.05, run.currentWave, 1);
+    const hp = run.castleHp, gold = run.gold;
+    let stolen = 0;
+    run.events.on('goldStolen', ({ amount }) => (stolen = amount));
+    run.update(1 / 30);
+    expect(e.alive).toBe(false);
+    expect(stolen).toBeGreaterThan(0);
+    expect(run.castleHp).toBe(hp);
+    expect(run.gold).toBeLessThan(gold);
+  });
+
+  it('a tunneller travels hidden and surfaces halfway', () => {
+    const run = run1();
+    run.callNextWave();
+    const e = run.spawnEnemy('tunneler', 0, 0, run.currentWave, 1);
+    expect(e.hidden).toBe(true);
+    const half = run.map.paths[0].length * 0.5;
+    for (let i = 0; i < 30 * 60 && e.alive && e.dist < half + 0.2; i++) run.update(1 / 30);
+    expect(e.hidden).toBe(false);
+  });
+
+  it('a siege engine knocks out a nearby tower for a while', () => {
+    const run = run1();
+    run.callNextWave();
+    const t = run.build([...run.unlockedSpots][0], 'archer')!;
+    // Park the engine right next to the tower.
+    let best = 0, bd = Infinity;
+    for (let d = 0; d < run.map.paths[0].length; d += 0.1) {
+      const p = run.map.pointAt(0, d, { x: 0, z: 0, dx: 0, dz: 0 });
+      const dd = Math.hypot(p.x - t.x, p.z - t.z);
+      if (dd < bd) { bd = dd; best = d; }
+    }
+    const e = run.spawnEnemy('siege', 0, best, run.currentWave, 50);
+    e.freezeTimer = 0;
+    let hit = false;
+    run.events.on('siegeHit', ({ tower }) => (hit = tower === t));
+    for (let i = 0; i < 30 * 2 && !hit; i++) run.update(1 / 30);
+    expect(hit).toBe(true);
+    expect(t.dazed).toBeGreaterThan(0);
+  });
+});
+
+describe('second hero slot', () => {
+  it('opens at its wave for coins and brings a partner into the siege', () => {
+    const meta = newMeta();
+    meta.d.coins = 100000;
+    meta.d.unlocks.heroes = ['ranger', 'knight'];
+    expect(meta.buyHeroSlot2()).toBe(false);
+    meta.d.progress.bestWave = 40;
+    expect(meta.buyHeroSlot2()).toBe(true);
+    expect(meta.secondHero()).toBe('knight');
+    const run = new Run({ snapshot: newKingdom(), meta: meta.metaBonuses(), availableTowers: ['archer'] });
+    expect(run.heroes.map((h) => h.def.id)).toEqual(['ranger', 'knight']);
+    // Both start on the castle walls, in different spots, and can't share a pad.
+    const [a, b] = run.heroes;
+    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(0.3);
+    const pad = [...run.unlockedSpots][0];
+    expect(run.stationHero(pad, a)).toBe(true);
+    expect(run.stationHero(pad, b)).toBe(false);
+    // Saved with the kingdom.
+    const back = new Run({ snapshot: run.snapshot(), meta: meta.metaBonuses(), availableTowers: ['archer'] });
+    expect(back.heroes[0].post).toBe(pad);
+    expect(back.heroes[1].post).toBe(-1);
+  });
+});

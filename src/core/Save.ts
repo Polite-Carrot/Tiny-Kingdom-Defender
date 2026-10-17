@@ -73,8 +73,10 @@ export interface SaveData {
   progress: { bestWave: number; bestCheckpoint: number; retreats: number; checkpointsPaid: number; /** Highest wave whose new-Age/road announcement was shown. */ frontierSeen: number };
   towerLevels: Record<TowerId, number>;
   meta: { castleHp: number; battlements: number; warChest: number; heroPower: number };
-  unlocks: { lightning: boolean; heroes: HeroId[] };
+  unlocks: { lightning: boolean; heroes: HeroId[]; heroSlot2: boolean };
   selectedHero: HeroId;
+  /** The second hero ('' = none). */
+  secondHero: HeroId | '';
   /** Experience earned by each hero. */
   heroXp: Partial<Record<HeroId, number>>;
   cosmetics: { owned: string[]; castle: string; trail: string; hero: string; tower: string; flag: string };
@@ -121,8 +123,9 @@ export function defaultSave(now = Date.now()): SaveData {
     progress: { bestWave: 0, bestCheckpoint: 0, retreats: 0, checkpointsPaid: 0, frontierSeen: 0 },
     towerLevels: { archer: 0, cannon: 0, frost: 0, lightning: 0, mage: 0, ballista: 0, flame: 0, alchemist: 0, catapult: 0, gale: 0, mine: 0, beacon: 0 },
     meta: { castleHp: 0, battlements: 0, warChest: 0, heroPower: 0 },
-    unlocks: { lightning: false, heroes: ['ranger'] },
+    unlocks: { lightning: false, heroes: ['ranger'], heroSlot2: false },
     selectedHero: 'ranger',
+    secondHero: '',
     heroXp: {},
     cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none', hero: 'hero_none', tower: 'tower_none', flag: 'flag_none' },
     settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false, vibration: true },
