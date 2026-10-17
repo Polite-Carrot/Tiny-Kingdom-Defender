@@ -7,7 +7,8 @@ export type SfxName =
   | 'sell' | 'click' | 'waveStart' | 'waveClear' | 'victory' | 'defeat' | 'arrowRain' | 'meteor' | 'taunt' | 'heal'
   | 'bossRoar' | 'error' | 'chest' | 'reward' | 'select' | 'heroHit' | 'immune' | 'star' | 'aura'
   | 'arcane' | 'ballista' | 'flame' | 'poison'
-  | 'catapult' | 'gust' | 'mineGold' | 'freeze' | 'blessing' | 'repair' | 'thunder' | 'nightfall' | 'dawn' | 'checkpoint';
+  | 'catapult' | 'gust' | 'mineGold' | 'freeze' | 'blessing' | 'repair' | 'thunder' | 'nightfall' | 'dawn' | 'checkpoint'
+  | 'chestRattle';
 
 export type MusicTrack = 'menu' | 'meadow' | 'desert' | 'snow' | 'volcano' | 'none';
 
@@ -253,6 +254,12 @@ export class AudioSystem {
       case 'immune':
         this.tone(1200, 0.3, 'sine', 0.1);
         this.tone(1800, 0.3, 'sine', 0.06, { delay: 0.05 });
+        break;
+      case 'chestRattle':
+        // Wood knocking and coins jingling inside.
+        this.noiseHit(0.08, 0.22, 500, 'lowpass');
+        this.tone(140, 0.08, 'triangle', 0.14);
+        [0, 1, 2].forEach((i) => this.tone(mtof(88 + i * 3), 0.05, 'square', 0.025, { delay: 0.03 + i * 0.035, filter: 5000 }));
         break;
       case 'chest':
         this.noiseHit(0.3, 0.3, 900, 'lowpass');

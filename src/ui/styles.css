@@ -199,10 +199,52 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 .daily-cell.big { grid-column: span 2; }
 .daily-cell small { display: block; font-size: 11px; opacity: .7; }
 
-.chest-anim { width: 140px; height: 140px; margin: 0 auto; animation: chestShake .6s ease-in-out 2; }
-.chest-anim.open { animation: chestOpen .5s cubic-bezier(.2,1.8,.4,1) forwards; }
-@keyframes chestShake { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-8deg) scale(1.05); } 75% { transform: rotate(8deg) scale(1.05); } }
-@keyframes chestOpen { from { transform: scale(1); } 50% { transform: scale(1.3); } to { transform: scale(1.1); } }
+/* Chest opening */
+.modal .ribbon.purple { position: relative; z-index: 4; }
+.chest-stage { --cw: #b5803f; --cwd: #8a5a2a; --cm: #8a92a0; --cmd: #5d6470; --seam: 0; position: relative; width: 200px; height: 170px; margin: 4px auto 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.chest-stage.kind-milestone { --cw: #7a4fd6; --cwd: #563599; --cm: #f2c94c; --cmd: #b8901f; }
+.chest-stage.kind-daily { --cw: #d9573f; --cwd: #a63a28; --cm: #ffcf3f; --cmd: #c09018; }
+.chest-box { position: absolute; inset: 0; transform-origin: 50% 90%; }
+.chest-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.chest-lid { transform-box: fill-box; transform-origin: 50% 100%; }
+.chest-inside { opacity: 0; }
+.chest-seam { opacity: var(--seam); transition: opacity .25s; filter: drop-shadow(0 0 6px #ffd84a); }
+.chest-box.drop { animation: chestDrop .55s cubic-bezier(.3,1.6,.5,1) both; }
+.chest-box.shake1 { animation: chestRattle .32s ease-in-out; }
+.chest-box.shake2 { animation: chestRattle .32s ease-in-out; --amp: 9deg; }
+.chest-box.shake3 { animation: chestRattle .36s ease-in-out; --amp: 14deg; }
+.chest-box.shake2 .chest-lid, .chest-box.shake3 .chest-lid { animation: lidHop .32s ease-in-out; }
+.chest-stage.open .chest-box { animation: chestPop .5s cubic-bezier(.2,1.8,.4,1); }
+.chest-stage.open .chest-lid { animation: lidOpen .55s cubic-bezier(.2,1.5,.4,1) forwards; }
+.chest-stage.open .chest-inside { opacity: 1; transition: opacity .15s; }
+.chest-stage.open .chest-seam { opacity: 0; }
+.chest-rays { position: absolute; left: 50%; top: 42%; width: 340px; height: 340px; margin: -170px 0 0 -170px; border-radius: 50%; opacity: 0; transform: scale(.3);
+  background: repeating-conic-gradient(rgba(255,226,122,.55) 0deg 9deg, rgba(255,226,122,0) 9deg 24deg);
+  -webkit-mask: radial-gradient(circle, #000 20%, transparent 68%); mask: radial-gradient(circle, #000 20%, transparent 68%); pointer-events: none; }
+.chest-glow { position: absolute; left: 50%; top: 40%; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; background: radial-gradient(circle, #fff8d0 0%, rgba(255,216,74,.6) 30%, rgba(255,216,74,0) 70%); opacity: 0; transform: scale(.2); pointer-events: none; }
+.chest-stage.open .chest-rays { animation: raysIn .6s ease-out forwards, raysSpin 9s linear infinite; }
+.chest-stage.open .chest-glow { animation: glowFlash 1.1s ease-out forwards; }
+.chest-fx { position: absolute; left: 50%; top: 0; width: 0; height: 0; pointer-events: none; z-index: 3; }
+.chest-fx .spark { position: absolute; left: 0; top: 70px; width: 9px; height: 9px; margin: -4.5px; border-radius: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); transform: rotate(45deg); animation: sparkFly .8s cubic-bezier(.2,.8,.4,1) forwards; }
+.chest-fx .loot { position: absolute; left: 0; top: 0; width: 30px; height: 30px; margin: -15px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
+.chest-fx .loot svg { width: 100%; height: 100%; display: block; }
+.chest-tip { text-align: center; font-weight: 800; font-size: 13px; opacity: .55; margin-top: -4px; height: 18px; }
+.reveal { opacity: 0; transform: translateY(8px); transition: opacity .3s, transform .3s; }
+.reveal.on { opacity: 1; transform: none; }
+.reward-row.pop { animation: rowPop .35s cubic-bezier(.2,1.8,.4,1); }
+.chest-stage ~ .actions { opacity: 0; pointer-events: none; transition: opacity .3s .6s; }
+.chest-stage ~ .actions.on { opacity: 1; pointer-events: auto; }
+@keyframes chestDrop { 0% { transform: translateY(-120px) scale(.8, 1.15); opacity: 0; } 55% { transform: translateY(0) scale(1.18, .82); opacity: 1; } 75% { transform: scale(.94, 1.06); } 100% { transform: none; } }
+@keyframes chestRattle { 0%,100% { transform: none; } 20% { transform: rotate(calc(var(--amp, 5deg) * -1)) translateY(-2px); } 45% { transform: rotate(var(--amp, 5deg)) translateY(-4px); } 70% { transform: rotate(calc(var(--amp, 5deg) * -.6)); } 85% { transform: scale(1.06, .94); } }
+@keyframes lidHop { 0%,100% { transform: none; } 40% { transform: translateY(-7px) rotate(-3deg); } 70% { transform: translateY(-2px); } }
+@keyframes lidOpen { 0% { transform: none; } 35% { transform: translateY(-48px) rotate(-16deg) scaleY(.9); } 100% { transform: translate(-14px, -40px) rotate(-24deg) scaleY(.72); } }
+@keyframes chestPop { 0% { transform: scale(1.12, .86); } 50% { transform: scale(.95, 1.08); } 100% { transform: none; } }
+@keyframes raysIn { to { opacity: 1; transform: scale(1); } }
+@keyframes raysSpin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes glowFlash { 0% { opacity: 0; transform: scale(.2); } 25% { opacity: 1; transform: scale(1.25); } 100% { opacity: .55; transform: scale(1); } }
+@keyframes sparkFly { 0% { transform: translate(0, 0) rotate(45deg) scale(1.3); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(225deg) scale(.2); opacity: 0; } }
+@keyframes rowPop { 0% { transform: scale(1); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .chest-stage.open .chest-rays { animation: raysIn .01s forwards; } }
 
 /* Settings */
 .setting { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-weight: 800; }

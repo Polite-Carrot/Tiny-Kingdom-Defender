@@ -13,6 +13,7 @@ import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_
 import { summarise } from '../analytics/Analytics';
 import type { RewardedPlacement } from '../data/ads';
 import type { ChestReward, MetaUpgradeKey } from '../game/Meta';
+import { vibrate } from '../core/Haptics';
 import type { ModalHandle } from './UI';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { ENEMIES, BOSS_BY_CHAPTER, type EnemyDef, type EnemyId } from '../data/enemies';
@@ -465,23 +466,158 @@ export function daily(game: Game): void {
 
 // --- Chests ------------------------------------------------------------------------------------------
 
+/** A chest drawn in parts so the lid can open: base, lid, the glowing seam and the gold inside. */
+function chestSvg(): string {
+  return `<svg class="chest-svg" viewBox="0 0 160 140" aria-hidden="true">
+    <ellipse cx="80" cy="128" rx="58" ry="8" fill="#000" opacity=".18"/>
+    <g class="chest-base">
+      <path d="M22 64h116v54a6 6 0 01-6 6H28a6 6 0 01-6-6z" fill="var(--cw)"/>
+      <path d="M22 84h116M22 104h116" stroke="var(--cwd)" stroke-width="3"/>
+      <path d="M22 64h116v8H22z" fill="var(--cwd)"/>
+      <rect x="34" y="64" width="12" height="60" fill="var(--cm)"/><rect x="114" y="64" width="12" height="60" fill="var(--cm)"/>
+      <rect x="18" y="116" width="124" height="8" rx="4" fill="var(--cm)"/>
+      <circle cx="40" cy="96" r="2.5" fill="var(--cmd)"/><circle cx="120" cy="96" r="2.5" fill="var(--cmd)"/>
+      <rect x="68" y="64" width="24" height="26" rx="5" fill="var(--cm)"/><rect x="76" y="72" width="8" height="12" rx="3" fill="#3a2a30"/>
+    </g>
+    <g class="chest-inside">
+      <path d="M26 66Q80 52 134 66z" fill="#3a2410"/>
+      <ellipse cx="80" cy="64" rx="46" ry="9" fill="#ffd84a"/><ellipse cx="72" cy="61" rx="18" ry="4" fill="#fff3b0"/>
+    </g>
+    <rect class="chest-seam" x="22" y="61" width="116" height="5" rx="2.5" fill="#fff3b0"/>
+    <g class="chest-lid">
+      <path d="M20 66V46Q20 18 80 18Q140 18 140 46V66z" fill="var(--cw)"/>
+      <path d="M26 40Q30 24 80 24" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".25"/>
+      <path d="M34 66V24.5h12V66zM114 66V24.5h12V66z" fill="var(--cm)"/>
+      <rect x="18" y="58" width="124" height="9" rx="4" fill="var(--cm)"/>
+      <path d="M70 58h20v12a10 10 0 01-20 0z" fill="var(--cm)"/><circle cx="80" cy="66" r="3.5" fill="var(--cmd)"/>
+    </g>
+  </svg>`;
+}
+
+/** Chest opening: it drops in, rattles harder and harder with light leaking out, then bursts open
+ *  and the coins and shards fly out into the reward rows. Tap the chest to skip ahead. */
 export function chestReveal(game: Game, reward: ChestReward): void {
-  game.s.audio.play('chest');
+  const { audio } = game.s;
+  const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   game.s.ui.modal((m, h) => {
     m.innerHTML = `<div class="ribbon purple">${reward.kind === 'milestone' ? 'Milestone Chest' : reward.kind === 'daily' ? 'Day 7 Chest' : 'Free Chest'}</div>
-      <div class="chest-anim">${ICONS.chest}</div>
-      <div class="reveal" style="opacity:0;transition:opacity .3s">
-        <div class="reward-row">${icon('coin')}+${reward.coins}</div>
-        <div class="reward-row">${icon('gem')}+${reward.shards} <span style="font-size:14px">shards</span></div>
+      <div class="chest-stage kind-${reward.kind}">
+        <div class="chest-rays"></div><div class="chest-glow"></div>
+        <div class="chest-box">${chestSvg()}</div>
+        <div class="chest-fx"></div>
+      </div>
+      <div class="chest-tip">Tap the chest!</div>
+      <div class="reveal">
+        <div class="reward-row r-coins">${icon('coin')}+<span class="n">0</span></div>
+        ${reward.shards > 0 ? `<div class="reward-row r-shards">${icon('gem')}+<span class="n">0</span> <span style="font-size:14px">shards</span></div>` : ''}
       </div>
       <div class="actions"><button class="btn ok">Awesome!</button></div>`;
-    const chestEl = $(m, '.chest-anim');
-    setTimeout(() => {
-      chestEl.classList.add('open');
-      ($(m, '.reveal') as HTMLElement).style.opacity = '1';
-      flyCoins(game, $(m, '.reveal'), reward.coins);
-    }, 1200);
-    $(m, '.ok').onclick = () => h.close();
+    const stage = $(m, '.chest-stage');
+    const box = $(m, '.chest-box');
+    const fx = $(m, '.chest-fx');
+    const reveal = $(m, '.reveal');
+    const timers: number[] = [];
+    const later = (ms: number, f: () => void) => timers.push(window.setTimeout(f, ms));
+    let opened = false;
+
+    const shake = (n: number) => {
+      box.classList.remove('drop', 'shake1', 'shake2', 'shake3');
+      void box.offsetWidth; // restart the animation
+      box.classList.add(`shake${n}`);
+      stage.style.setProperty('--seam', String(0.25 + n * 0.25));
+      audio.play('chestRattle');
+    };
+
+    const countUp = (row: Element | null, value: number) => {
+      const n = row?.querySelector('.n');
+      if (!n || !row) return;
+      row.classList.add('pop');
+      const t0 = performance.now();
+      const step = (t: number) => {
+        const k = Math.min(1, (t - t0) / 650);
+        n.textContent = fmt(Math.round(value * (1 - Math.pow(1 - k, 3))));
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+
+    // Loot arcs out of the chest and lands in its reward row.
+    const flyLoot = (kind: 'coin' | 'gem', count: number, row: Element | null, delay: number) => {
+      if (!row) return;
+      const s = box.getBoundingClientRect();
+      const r = row.querySelector('.ico')!.getBoundingClientRect();
+      const fr = fx.getBoundingClientRect();
+      const x0 = s.left + s.width / 2 - fr.left, y0 = s.top + s.height * 0.4 - fr.top;
+      const x1 = r.left + r.width / 2 - fr.left, y1 = r.top + r.height / 2 - fr.top;
+      for (let i = 0; i < count; i++) {
+        const e = el('div', 'loot', ICONS[kind]);
+        fx.append(e);
+        const spread = (i - (count - 1) / 2) * 26 + (Math.random() - 0.5) * 14;
+        const peak = Math.min(y0, y1) - 70 - Math.random() * 40;
+        const a = e.animate([
+          { transform: `translate(${x0}px, ${y0}px) scale(.3) rotate(0deg)`, opacity: 0 },
+          { transform: `translate(${x0 + spread}px, ${peak}px) scale(1.15) rotate(${180 + i * 40}deg)`, opacity: 1, offset: 0.45 },
+          { transform: `translate(${x1}px, ${y1}px) scale(.7) rotate(${360 + i * 40}deg)`, opacity: 1 },
+        ], { duration: 700, delay: delay + i * 55, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'both' });
+        a.onfinish = () => e.remove();
+      }
+    };
+
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      timers.forEach(clearTimeout);
+      box.classList.remove('shake1', 'shake2', 'shake3', 'drop');
+      stage.classList.add('open');
+      $(m, '.chest-tip').style.visibility = 'hidden';
+      audio.play('chest');
+      vibrate([30, 40, 60], 0);
+      // A burst of sparks.
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
+        const d = 70 + Math.random() * 70;
+        const sp = el('i', 'spark');
+        sp.style.setProperty('--dx', `${Math.cos(a) * d}px`);
+        sp.style.setProperty('--dy', `${Math.sin(a) * d * 0.8 - 30}px`);
+        sp.style.setProperty('--c', ['#fff3b0', '#ffd84a', '#ffffff', '#ffb347'][i % 4]);
+        sp.style.animationDelay = `${Math.random() * 80}ms`;
+        fx.append(sp);
+        sp.addEventListener('animationend', () => sp.remove());
+      }
+      reveal.classList.add('on');
+      const coinsRow = m.querySelector('.r-coins'), shardsRow = m.querySelector('.r-shards');
+      if (calm) {
+        countUp(coinsRow, reward.coins);
+        countUp(shardsRow, reward.shards);
+      } else {
+        flyLoot('coin', 6, coinsRow, 150);
+        flyLoot('gem', Math.min(4, reward.shards), shardsRow, 330);
+        later(150 + 700, () => countUp(coinsRow, reward.coins));
+        later(330 + 700, () => countUp(shardsRow, reward.shards));
+      }
+      later(calm ? 300 : 1300, () => flyCoins(game, reveal, reward.coins));
+      $(m, '.actions').classList.add('on');
+    };
+
+    stage.onclick = open;
+    if (calm) {
+      open();
+    } else {
+      box.classList.add('drop');
+      later(80, () => audio.play('build'));
+      later(650, () => shake(1));
+      later(1150, () => shake(2));
+      later(1600, () => shake(3));
+      later(2050, open);
+    }
+    $(m, '.ok').onclick = () => {
+      timers.forEach(clearTimeout);
+      if (!opened) {
+        // Closing before it opened still pays (the reward is already banked).
+        refreshCoins(game);
+      }
+      h.close();
+    };
   });
 }
 
