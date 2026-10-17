@@ -76,3 +76,46 @@ describe('weather', () => {
     expect(weatherOf(25)).toBe(weatherOf(25));
   });
 });
+
+describe('stationed hero', () => {
+  const heroRun = (snap = newKingdom()) => {
+    const meta = newMeta();
+    return new Run({ snapshot: snap, meta: { ...meta.metaBonuses(), heroId: 'knight' }, availableTowers: ['archer'], seed: 4 });
+  };
+
+  it('starts on the castle wall and moves to a pad for free once, then for gold', () => {
+    const run = heroRun();
+    const h = run.hero!;
+    const c = run.map.castle;
+    expect(h.post).toBe(-1);
+    expect(Math.hypot(h.x - c.x, h.z - c.z)).toBeLessThan(0.5);
+    expect(h.y).toBeGreaterThan(0.5);
+    const [a, b] = [...run.unlockedSpots];
+    const gold = run.gold;
+    expect(run.stationHero(a)).toBe(true);
+    expect(run.gold).toBe(gold);
+    expect(h.post).toBe(a);
+    // The hero's pad can't take a tower.
+    expect(run.build(a, 'archer')).toBeNull();
+    const cost = run.heroMoveCost();
+    expect(cost).toBeGreaterThan(0);
+    expect(run.stationHero(b)).toBe(true);
+    expect(run.gold).toBe(gold - cost);
+    // Saved and restored with the kingdom.
+    const back = heroRun(run.snapshot());
+    expect(back.hero!.post).toBe(b);
+    expect(back.heroMoveCost()).toBe(cost);
+  });
+
+  it('fights from the post and never falls', () => {
+    const run = heroRun();
+    run.callNextWave();
+    let attacks = 0;
+    run.events.on('heroAttack', () => attacks++);
+    for (let i = 0; i < 60 * 40; i++) run.update(1 / 60);
+    const h = run.hero!;
+    expect(attacks).toBeGreaterThan(0);
+    expect(h.dead).toBe(false);
+    expect(h.post).toBe(-1);
+  });
+});

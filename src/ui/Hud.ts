@@ -151,7 +151,7 @@ export class Hud {
     // Spell bar: one button per unlocked spell.
     const spellsEl = $(this.el, '.hud-spells');
     const spells = SPELLS.filter((s) => run.config.meta.spells?.[s.id] !== undefined);
-    spellsEl.innerHTML = spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${s.icon}</span><span class="cd"></span></button>`).join('');
+    spellsEl.innerHTML = spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${ICONS[s.icon]}</span><span class="cd"></span></button>`).join('');
     spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach((b) => (b.onclick = () => this.cb.castSpell(b.dataset.spell as SpellId)));
     this.spellBtns = [...spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]')];
     if (hero) {
@@ -161,7 +161,11 @@ export class Hud {
     this.setHeroSelected(false);
   }
 
+  /** Game speed: recharge countdowns show real seconds at this speed. */
+  private speed = 1;
+
   setSpeed(s: number): void {
+    this.speed = s;
     this.speedBtn.textContent = `${s}x`;
     this.speedBtn.classList.toggle('fast', s > 1);
     this.speedBtn.classList.toggle('faster', s > 2);
@@ -250,15 +254,12 @@ export class Hud {
     // Hero.
     const hero = run.hero;
     if (hero) {
-      this.heroBtn.classList.toggle('isdead', hero.dead);
-      if (hero.dead) $(this.heroBtn, '.dead').textContent = String(Math.ceil(hero.respawn));
-      const frac = hero.dead ? 0 : hero.hp / hero.maxHp;
-      ($(this.heroBtn, '.hpring') as HTMLElement).style.boxShadow = `inset 0 0 0 4px ${frac > 0.5 ? '#59e05a' : frac > 0.25 ? '#ffcf3f' : '#ef5b4c'}`;
+      ($(this.heroBtn, '.hpring') as HTMLElement).style.boxShadow = `inset 0 0 0 4px ${hero.def.color}`;
       const ready = run.heroAbilityReady();
       this.abilityBtn.classList.toggle('ready', ready);
       const cdFrac = Math.max(0, hero.abilityCd / hero.def.ability.cooldown);
-      this.abilityCd.textContent = hero.abilityCd > 0 && !hero.dead ? String(Math.ceil(hero.abilityCd)) : '';
-      this.abilityCd.style.background = hero.abilityCd > 0 || hero.dead
+      this.abilityCd.textContent = hero.abilityCd > 0 ? String(Math.ceil(hero.abilityCd / this.speed)) : '';
+      this.abilityCd.style.background = hero.abilityCd > 0
         ? `conic-gradient(rgba(20,10,40,.65) ${cdFrac * 360}deg, rgba(0,0,0,0) 0)` : 'none';
     }
 
@@ -269,13 +270,13 @@ export class Hud {
       const full = spellCooldown(id, run.config.meta.spells?.[id] ?? 0);
       b.classList.toggle('ready', cd <= 0 && run.state === 'playing');
       const cdEl = b.querySelector('.cd') as HTMLElement;
-      const txt = cd > 0 ? String(Math.ceil(cd)) : '';
+      const txt = cd > 0 ? String(Math.ceil(cd / this.speed)) : '';
       if (cdEl.textContent !== txt) cdEl.textContent = txt;
       cdEl.style.background = cd > 0 ? `conic-gradient(rgba(20,10,40,.65) ${(cd / full) * 360}deg, rgba(0,0,0,0) 0)` : 'none';
     }
 
     // Gold Rush indicator (from saves made while it was a rewarded placement).
-    const rushTxt = run.blessingT > 0 ? `💰 Gold Blessing · ${Math.ceil(run.blessingT)}s` : run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
+    const rushTxt = run.blessingT > 0 ? `${ICONS.blessing.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} Gold Blessing · ${Math.ceil(run.blessingT)}s` : run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
     if (this.rushPill.dataset.t !== rushTxt) {
       this.rushPill.dataset.t = rushTxt;
       this.rushPill.innerHTML = rushTxt;
@@ -514,9 +515,9 @@ export class Hud {
     const active = t.synergies.map((id) => SYNERGY_BY_ID[id]);
     const possible = SYNERGIES.filter((s) => s.towers.includes(t.def.id) && !t.synergies.includes(s.id));
     const beacon = t.buffedBy >= 0 ? this.run?.towers.find((o) => o.id === t.buffedBy) : undefined;
-    const lit = beacon ? `<span class="syn on" style="--sc:#ffe08a">☀ Beacon +${Math.round(beacon.stats.buff * 100)}%${beacon.stats.haste ? ` · +${Math.round(beacon.stats.haste * 100)}% speed` : ''}</span>` : '';
+    const lit = beacon ? `<span class="syn on" style="--sc:#ffe08a">${icon('holy', 'inline')}Beacon +${Math.round(beacon.stats.buff * 100)}%${beacon.stats.haste ? ` · +${Math.round(beacon.stats.haste * 100)}% speed` : ''}</span>` : '';
     if (!active.length && !possible.length) return lit ? `<div class="syns">${lit}</div>` : '';
-    const chips = lit + active.map((s) => `<span class="syn on" style="--sc:${s.color}" title="${s.description}">⚡ ${s.name}</span>`).join('');
+    const chips = lit + active.map((s) => `<span class="syn on" style="--sc:${s.color}" title="${s.description}">${icon('bolt', 'inline')}${s.name}</span>`).join('');
     const hints = possible.map((s) => {
       const other = s.towers[0] === t.def.id ? s.towers[1] : s.towers[0];
       return `<span class="syn" style="--sc:${s.color}" title="${s.description}">+ ${TOWERS[other].name} → ${s.name}</span>`;

@@ -13,17 +13,16 @@ export interface MapDef {
   /** Best wave (in any realm) needed to found a kingdom here. */
   unlockWave: number;
   roads: Road[];
-  icon: string;
 }
 
 export const MAPS: MapDef[] = [
   {
-    id: 'vale', name: 'Kingdom Vale', icon: '🏰', unlockWave: 0,
+    id: 'vale', name: 'Kingdom Vale', unlockWave: 0,
     description: 'Your first kingdom. A winding west road, with more opening from the north-east and south.',
     roads: ROADS,
   },
   {
-    id: 'serpent', name: 'Serpent Pass', icon: '🐍', unlockWave: 20,
+    id: 'serpent', name: 'Serpent Pass', unlockWave: 20,
     description: 'One endless switchback road: lots of room to line it with towers, but short gates open late.',
     roads: [
       { name: 'Serpent Road', openWave: 0, points: [[-1, 1], [12, 1], [12, 4], [2, 4], [2, 7], [12, 7], [12, 10], [7, 10], [7, 12]] },
@@ -32,7 +31,7 @@ export const MAPS: MapDef[] = [
     ],
   },
   {
-    id: 'winds', name: 'Four Winds', icon: '🧭', unlockWave: 35,
+    id: 'winds', name: 'Four Winds', unlockWave: 35,
     description: 'The castle stands at the crossroads. Short roads close in from all four sides.',
     roads: [
       { name: 'North Road', openWave: 0, points: [[7, -1], [7, 2], [4, 2], [4, 5], [7, 5], [7, 7]] },
@@ -42,7 +41,7 @@ export const MAPS: MapDef[] = [
     ],
   },
   {
-    id: 'crooked', name: 'Crooked Keep', icon: '⛰️', unlockWave: 50,
+    id: 'crooked', name: 'Crooked Keep', unlockWave: 50,
     description: 'A keep tucked into a corner. Roads wind across the whole realm to reach it.',
     roads: [
       { name: 'Long Road', openWave: 0, points: [[15, 1], [10, 1], [10, 5], [4, 5], [4, 8], [9, 8], [9, 11], [3, 11]] },

@@ -104,7 +104,7 @@ export class HeroAnimator {
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
     this.facing += d * Math.min(1, dt * 14);
-    this.root.position.set(h.x, 0, h.z);
+    this.root.position.set(h.x, h.y, h.z);
     this.root.rotation.y = this.facing;
 
     if (h.dead && this.deathT < 0) this.deathT = 1; // came in already dead (e.g. after a reload)
@@ -168,7 +168,8 @@ export class HeroAnimator {
       else scale = Math.max(0.01, easeOutBack(this.respawnT));
     }
 
-    this.applyPose(p, scale);
+    // A little smaller on the castle wall, so the keep still reads as the castle.
+    this.applyPose(p, scale * (h.post < 0 ? 0.72 : 1));
     const flap = Math.sin(time * (moving ? 11 : 5));
     for (const w of this.wings) w.rotation.set(-0.8, 0.2 + flap * 0.45, 0, 'YXZ');
     return true;

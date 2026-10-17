@@ -1,11 +1,12 @@
 // Renders the procedural 3D models into small PNG portraits for the UI (wave preview, cards, shop).
 
 import * as THREE from 'three';
-import { towerModel, enemyModel, heroModel, castleModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, castleModel, buildingModel } from '../entities/Models';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { TOWER_ORDER, type TowerId } from '../data/towers';
 import { HERO_ORDER, type HeroId } from '../data/heroes';
 import { COSMETICS } from '../data/economy';
+import { BUILDINGS, type BuildingId } from '../data/kingdom';
 
 const thumbs = new Map<string, string>();
 let shotFn: ((key: string, parts: { geo: THREE.BufferGeometry; y?: number }[], yaw?: number, pitch?: number, zoom?: number) => void) | null = null;
@@ -25,6 +26,7 @@ export function towerThumb(id: TowerId, tier = 1, branch = -1): string {
 }
 export const enemyThumb = (id: EnemyId) => thumb(`enemy-${id}`);
 export const heroThumb = (id: HeroId) => thumb(`hero-${id}`);
+export const buildingThumb = (id: BuildingId) => thumb(`building-${id}`);
 
 export function renderThumbnails(): void {
   const size = 128;
@@ -73,5 +75,6 @@ export function renderThumbnails(): void {
   for (const id of Object.keys(ENEMIES) as EnemyId[]) shot(`enemy-${id}`, [{ geo: enemyModel(id) }], 0.5, 0.25, 1.15);
   for (const id of HERO_ORDER) shot(`hero-${id}`, [{ geo: heroModel(id) }], 0.4, 0.2, 1.25);
   shot('hero-champion', [{ geo: heroModel('champion') }], 0.4, 0.2, 1.2);
+  for (const b of BUILDINGS) shot(`building-${b.id}`, [{ geo: buildingModel(b.id) }], 0.7, 0.4, 1.05);
   for (const c of COSMETICS) if (c.kind === 'castle') shot(`castle-${c.id}`, [{ geo: castleModel(c.color) }], 0.6, 0.4, 1.0);
 }

@@ -6,7 +6,7 @@ import {
   TOWERS, TOWER_RULES, MAX_LEVEL, BRANCH_TIER, towerStats, totalInvested, upgradeCost, isSupport,
   type TowerDef, type TowerId, type TowerStats, type TargetMode, type DamageType,
 } from '../data/towers';
-import { HEROES, REINFORCEMENT, HERO_LEVELS, type HeroDef, type HeroId } from '../data/heroes';
+import { HEROES, REINFORCEMENT, HERO_LEVELS, HERO_POST, type HeroDef, type HeroId } from '../data/heroes';
 import { TOWER_META, AD_REWARDS, BATTLEMENTS } from '../data/economy';
 import { SIEGE, BARRICADE } from '../data/base';
 import { Emitter } from '../core/Emitter';
@@ -71,6 +71,10 @@ export interface BaseSnapshot {
   goldRushWaves: number;
   /** Barricades standing on the road (optional in older saves). */
   barricades?: { col: number; row: number; hp: number; maxHp: number }[];
+  /** The pad the hero is stationed on (-1 or absent: the castle wall). */
+  heroPost?: number;
+  /** Whether the free placement has been used. */
+  heroPlaced?: boolean;
 }
 
 export interface Barricade {
@@ -223,6 +227,10 @@ export interface Projectile {
 export interface Hero {
   def: HeroDef;
   x: number; z: number;
+  /** Height the hero stands at (on the castle wall or a pad). */
+  y: number;
+  /** Where the hero is stationed: -1 = the castle wall, else a build pad. */
+  post: number;
   tx: number; tz: number;
   hp: number; maxHp: number;
   damage: number;
@@ -275,8 +283,7 @@ export type RunEvents = {
   castleHit: { damage: number; hp: number };
   heroAttack: { hero: Hero; target: Enemy };
   heroAbility: { hero: Hero; x: number; z: number; radius: number; /** Shadow Strike: x,z of each enemy struck, in order. */ points?: number[] };
-  heroDeath: Hero;
-  heroRespawn: Hero;
+  heroMoved: { hero: Hero; cost: number };
   burrow: { enemy: Enemy; hidden: boolean };
   heroKill: Enemy;
   castleFire: void;
@@ -331,6 +338,8 @@ export class Run {
   readonly barricades: Barricade[] = [];
   readonly projectiles: Projectile[] = [];
   readonly hero: Hero | null;
+  /** The hero's free placement on a pad has been used (later moves cost gold). */
+  heroPlaced = false;
   readonly ally: Ally = { active: false, x: 0, z: 0, timer: 0, cooldown: 0, facing: 0, attackAnim: 0 };
   readonly stats: RunStats = { kills: 0, flyingKills: 0, bossKills: 0, goldEarned: 0, towersBuilt: 0, upgrades: 0, heroAbilityUses: 0, earlyCalls: 0, maxTowers: 0, leaks: 0 };
 
@@ -401,12 +410,15 @@ export class Run {
     const heroId = config.mods?.noHero ? null : config.meta.heroId;
     if (heroId) {
       const def = HEROES[heroId];
-      const p = this.defaultHeroPosition();
       const { hp, damage } = this.heroScale(config.meta);
+      const post = snap.heroPost ?? -1;
+      const p = this.heroPostPosition(post >= 0 && this.unlockedSpots.has(post) && !this.towerAt(post) ? post : -1);
+      this.heroPlaced = !!snap.heroPlaced;
       this.hero = {
-        def, x: p.x, z: p.z, tx: p.x, tz: p.z, hp: def.hp * hp, maxHp: def.hp * hp, damage: def.damage * damage,
-        cooldown: 0, abilityCd: 3, dead: false, respawn: 0, facing: 0, moving: false, contactTimer: 0, attackAnim: 0,
+        def, x: p.x, y: p.y, z: p.z, post: p.post, tx: p.x, tz: p.z, hp: def.hp * hp, maxHp: def.hp * hp, damage: def.damage * damage,
+        cooldown: 0, abilityCd: 3, dead: false, respawn: 0, facing: p.facing, moving: false, contactTimer: 0, attackAnim: 0,
       };
+      this.refreshSynergies(true);
     } else {
       this.hero = null;
     }
@@ -440,7 +452,7 @@ export class Run {
     const has = (p: PerkId) => meta.heroPerks?.includes(p) ?? false;
     const legend = has('legend') ? 1.3 : 1;
     return {
-      hp: power * (1 + HERO_LEVELS.hpPerLevel * l) * (has('vigor') ? 1.35 : 1) * legend,
+      hp: power * (1 + HERO_LEVELS.hpPerLevel * l),
       damage: power * (1 + HERO_LEVELS.damagePerLevel * l) * (has('brawler') ? 1.2 : 1) * legend,
       ability: power * (1 + HERO_LEVELS.abilityPerLevel * l) * (has('empower') ? 1.4 : 1),
       cooldown: Math.max(HERO_LEVELS.cooldownMin, 1 - HERO_LEVELS.cooldownPerLevel * l) * (has('focus') ? 0.75 : 1),
@@ -451,9 +463,54 @@ export class Run {
     return this.config.meta.heroPerks?.includes(p) ?? false;
   }
 
-  /** The hero's attack range (Eagle Eye adds a quarter). */
+  /** The hero's attack range from their post (Eagle Eye adds a quarter). */
   heroRange(): number {
-    return this.hero ? this.hero.def.range * (this.heroHasPerk('eagleEye') ? 1.25 : 1) : 0;
+    return this.hero ? this.hero.def.postRange * (this.heroHasPerk('eagleEye') ? 1.25 : 1) : 0;
+  }
+
+  /** Where a hero stands at a post: -1 is the wall walk above the castle gate, else a build pad. */
+  heroPostPosition(post: number): { x: number; y: number; z: number; post: number; facing: number } {
+    const c = this.map.castle;
+    if (post >= 0) {
+      const s = this.map.buildSpots[post];
+      return { x: s.x, y: HERO_POST.padHeight, z: s.z, post, facing: Math.atan2(c.x - s.x, c.z - s.z) + Math.PI };
+    }
+    // Face down the main road, from the wall above the gate.
+    const p = this.map.paths[0];
+    const n = p.xs.length;
+    const facing = Math.atan2(p.xs[n - 2] - p.xs[n - 1], p.zs[n - 2] - p.zs[n - 1]);
+    return { x: c.x + Math.sin(facing) * HERO_POST.wallOffset, y: HERO_POST.wallHeight, z: c.z + Math.cos(facing) * HERO_POST.wallOffset, post: -1, facing };
+  }
+
+  /** Gold to move the hero once the free placement is used. */
+  heroMoveCost(): number {
+    return this.heroPlaced ? Math.round(HERO_POST.moveCost * (1 + this.currentWave * HERO_POST.moveCostPerWave)) : 0;
+  }
+
+  /** Can the hero be stationed here (an unlocked, empty pad, or -1 for the castle)? */
+  canStationHero(post: number): boolean {
+    const h = this.hero;
+    if (!h || post === h.post) return false;
+    if (post >= 0 && (!this.unlockedSpots.has(post) || this.towerAt(post))) return false;
+    return this.gold >= this.heroMoveCost();
+  }
+
+  /** Moves the hero to a post. The first move is free; later ones cost gold. */
+  stationHero(post: number): boolean {
+    const h = this.hero;
+    if (!h || !this.canStationHero(post)) return false;
+    const cost = this.heroMoveCost();
+    if (cost > 0) this.addGold(-cost);
+    this.heroPlaced = true;
+    const p = this.heroPostPosition(post);
+    h.x = h.tx = p.x;
+    h.y = p.y;
+    h.z = h.tz = p.z;
+    h.post = p.post;
+    h.facing = p.facing;
+    this.refreshSynergies(true);
+    this.events.emit('heroMoved', { hero: h, cost });
+    return true;
   }
 
   /** Damage dealt by the hero (credits kills to them for XP). */
@@ -483,6 +540,8 @@ export class Run {
       goldRushUsed: this.goldRushUsed,
       goldRushWaves: this.goldRushWaves,
       barricades: this.barricades.map((b) => ({ col: b.col, row: b.row, hp: Math.round(b.hp), maxHp: Math.round(b.maxHp) })),
+      heroPost: this.hero?.post ?? -1,
+      heroPlaced: this.heroPlaced,
     };
   }
 
@@ -632,7 +691,7 @@ export class Run {
   build(spot: number, id: TowerId): Tower | null {
     if (this.state !== 'prep' && this.state !== 'playing') return null;
     const s = this.map.buildSpots[spot];
-    if (!s || this.towerAt(spot) || !this.isTowerAvailable(id) || !this.unlockedSpots.has(spot)) return null;
+    if (!s || this.towerAt(spot) || this.hero?.post === spot || !this.isTowerAvailable(id) || !this.unlockedSpots.has(spot)) return null;
     const def = TOWERS[id];
     if (this.gold < def.cost) return null;
     this.addGold(-def.cost);
@@ -737,6 +796,12 @@ export class Run {
       t.stats.damage *= 1 + best.stats.buff;
       if (best.stats.haste > 0) t.stats.cooldown *= 1 - best.stats.haste;
     }
+    // Rally: the hero inspires the towers around their post.
+    const h = this.hero;
+    if (h && this.heroHasPerk('vigor')) {
+      const r = this.heroRange();
+      for (const t of this.towers) if (!isSupport(t.def.id) && (t.x - h.x) ** 2 + (t.z - h.z) ** 2 <= r * r) t.stats.damage *= 1 + HERO_POST.rally;
+    }
   }
 
   setTargetMode(t: Tower, mode: TargetMode): void {
@@ -785,11 +850,7 @@ export class Run {
     this.goldRushUsed = false;
     this.goldRushWaves = 0;
     this.ally.active = false;
-    if (this.hero) {
-      this.hero.dead = false;
-      this.hero.hp = this.hero.maxHp;
-      this.hero.abilityCd = 0;
-    }
+    if (this.hero) this.hero.abilityCd = 0;
     this.state = 'prep';
     this.events.emit('retreat', { fromWave: from, toWave: to });
     return to;
@@ -912,16 +973,8 @@ export class Run {
     return true;
   }
 
-  moveHero(x: number, z: number): void {
-    const h = this.hero;
-    if (!h || h.dead) return;
-    const lim = (this.map.size - 1) / 2 + 0.4;
-    h.tx = Math.max(-lim, Math.min(lim, x));
-    h.tz = Math.max(-lim, Math.min(lim, z));
-  }
-
   heroAbilityReady(): boolean {
-    return !!this.hero && !this.hero.dead && this.hero.abilityCd <= 0 && this.state === 'playing';
+    return !!this.hero && this.hero.abilityCd <= 0 && this.state === 'playing';
   }
 
   useHeroAbility(): boolean {
@@ -946,10 +999,8 @@ export class Run {
         points.push(e.x, e.z);
         this.heroDamage(e, ab.damage * power, h.def.damageType);
       }
-      const last = targets[targets.length - 1];
-      h.x = h.tx = last.x + last.dirZ * 0.45;
-      h.z = h.tz = last.z - last.dirX * 0.45;
-      h.facing = Math.atan2(last.x - h.x, last.z - h.z);
+      // Kage strikes and is back at their post in a blink.
+      points.push(h.x, h.z);
       h.attackAnim = 0.25;
       this.events.emit('heroAbility', { hero: h, x: h.x, z: h.z, radius: ab.radius, points });
       return true;
@@ -981,7 +1032,6 @@ export class Run {
       if (ab.kind === 'quake' && e.alive) this.applySlow(e, 0.4, ab.duration);
     }
     if (ab.kind === 'holyLight') {
-      h.hp = h.maxHp;
       this.castleHp = Math.min(this.castleMaxHp, this.castleHp + (ab.count ?? 3));
     }
     this.events.emit('heroAbility', { hero: h, x: cx, z: cz, radius: ab.radius });
@@ -1045,17 +1095,12 @@ export class Run {
     this.checkWaves();
   }
 
-  private defaultHeroPosition(): { x: number; z: number } {
-    const p = this.map.paths[0];
-    const pt = this.map.pointAt(0, p.length * 0.55, this.tmp);
-    return { x: pt.x + pt.dz * 0.9, z: pt.z - pt.dx * 0.9 };
-  }
-
   private startWave(): void {
     const n = this.waveIndex;
     const wave = this.waveDef(n);
     if (!wave) return;
     if (this.holdingFor >= 0) return;
+    if (this.hero && this.heroHasPerk('phoenix')) this.hero.abilityCd = 0;
     const newAge = n > 0 && n % SIEGE.ageEvery === 0;
     const roads = activeRoads().map((r, i) => (r.openWave === n && n > 0 ? i : -1)).filter((i) => i >= 0);
     if (newAge && this.announcedWave !== n) {
@@ -1356,6 +1401,7 @@ export class Run {
           this.addGold(g);
           this.events.emit('mineGold', { tower: t, gold: g });
         }
+        if (this.hero && this.heroHasPerk('guardian')) this.castleHp = Math.min(this.castleMaxHp, this.castleHp + HERO_POST.guardianHp);
         this.events.emit('waveCleared', { index: w, gold });
         if ((w + 1) % SIEGE.checkpointEvery === 0 && w + 1 > this.lastCheckpoint) {
           this.lastCheckpoint = w + 1;
@@ -1750,65 +1796,22 @@ export class Run {
     }
   }
 
+  /** The hero stands at their post like a tower: they never walk or fall. */
   private updateHero(dt: number): void {
     const h = this.hero;
     if (!h) return;
     h.attackAnim = Math.max(0, h.attackAnim - dt);
-    if (h.dead) {
-      h.respawn -= dt;
-      if (h.respawn <= 0) {
-        h.dead = false;
-        h.hp = h.maxHp;
-        const p = this.defaultHeroPosition();
-        h.x = h.tx = p.x;
-        h.z = h.tz = p.z;
-        this.events.emit('heroRespawn', h);
-      }
-      return;
-    }
-    if (h.abilityCd > 0 && this.state === 'playing') h.abilityCd -= dt;
-    const dx = h.tx - h.x, dz = h.tz - h.z;
-    const d = Math.hypot(dx, dz);
-    h.moving = d > 0.05;
-    if (h.moving) {
-      const step = Math.min(d, h.def.speed * (this.heroHasPerk('swift') ? 1.3 : 1) * dt);
-      h.x += (dx / d) * step;
-      h.z += (dz / d) * step;
-      h.facing = Math.atan2(dx, dz);
-    }
     if (this.state !== 'playing') return;
-
-    // Contact damage from adjacent ground enemies.
-    let contact = false;
-    for (const e of this.enemies) {
-      if (!e.alive || e.def.flying) continue;
-      if ((e.x - h.x) ** 2 + (e.z - h.z) ** 2 < 0.55 * 0.55) {
-        contact = true;
-        h.hp -= (e.def.boss ? ENEMY_RULES.bossContactDps : ENEMY_RULES.contactDps) * (this.heroHasPerk('guardian') ? 0.6 : 1) * dt;
-      }
-    }
-    if (contact) h.contactTimer = 2;
-    else if ((h.contactTimer -= dt) <= 0) h.hp = Math.min(h.maxHp, h.hp + h.def.regen * (this.heroHasPerk('vigor') ? 1.5 : 1) * dt);
-    if (h.hp <= 0) {
-      h.dead = true;
-      h.respawn = h.def.respawnTime * (this.heroHasPerk('phoenix') ? 0.5 : 1);
-      this.events.emit('heroDeath', h);
-      return;
-    }
-
+    if (h.abilityCd > 0) h.abilityCd -= dt;
     h.cooldown -= dt;
     if (h.cooldown > 0) return;
     const target = this.findTarget(h.x, h.z, this.heroRange(), h.def.hitsAir, true, 'closest');
     if (!target) return;
-    h.cooldown = h.def.cooldown * (this.heroHasPerk('swift') ? 0.85 : 1);
+    h.cooldown = h.def.cooldown * (this.heroHasPerk('swift') ? 0.8 : 1);
     h.attackAnim = 0.25;
-    if (!h.moving) h.facing = Math.atan2(target.x - h.x, target.z - h.z);
+    h.facing = Math.atan2(target.x - h.x, target.z - h.z);
     this.events.emit('heroAttack', { hero: h, target });
-    if (h.def.range <= 1.5) {
-      this.heroDamage(target, h.damage, h.def.damageType);
-    } else {
-      this.launch(h.def.damageType === 'magic' ? 'heroBolt' : 'heroArrow', h.x, 0.8, h.z, target, 14, h.damage, h.def.damageType, 0, -1, {});
-    }
+    this.launch(h.def.damageType === 'magic' ? 'heroBolt' : 'heroArrow', h.x, h.y + 0.8, h.z, target, 14, h.damage, h.def.damageType, 0, -1, {});
   }
 
   private updateAlly(dt: number): void {

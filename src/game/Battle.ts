@@ -338,7 +338,7 @@ export class Battle {
     if (free > 0) return `${free} cleared pad${free > 1 ? 's are' : ' is'} still empty: one more tower could have made the difference.`;
     const low = run.towers.reduce((a, t) => (!a || t.tier < a.tier ? t : a), null as null | (typeof run.towers)[number]);
     if (low && low.tier < MAX_TIER) return `Upgrade your weakest tower (the ${low.def.name}, tier ${low.tier}).`;
-    if (run.hero) return 'Move your hero to where enemies bunch up and use the ability on the boss.';
+    if (run.hero) return 'Station your hero beside the busiest road and save the ability for the boss.';
     return 'Mix tower types: frost slows enemies so cannons and mages land every hit.';
   }
 
@@ -354,7 +354,7 @@ export class Battle {
       else if (index % SIEGE.ageEvery !== 0 || index === 0) ui.banner(`Wave ${index + 1}`, ageTitle(index));
     });
     ev.on('waveCleared', ({ index, gold }) => {
-      if (this.run.hero && !this.run.hero.dead) this.giveHeroXp(HERO_LEVELS.waveXpBase + HERO_LEVELS.waveXpPerWave * index);
+      if (this.run.hero) this.giveHeroXp(HERO_LEVELS.waveXpBase + HERO_LEVELS.waveXpPerWave * index);
       const before = meta.towersAvailable();
       meta.recordWaveCleared(index);
       const done = meta.addMissionProgress('wavesCleared', 1);
@@ -466,20 +466,37 @@ export class Battle {
       }
     }
     const hero = run.hero;
-    const heroD = hero && !hero.dead ? (hero.x - x) ** 2 + (hero.z - z) ** 2 : Infinity;
-    if (heroD < 0.5 * 0.5 && heroD <= bestD) {
+    const heroD = hero ? (hero.x - x) ** 2 + (hero.z - z) ** 2 : Infinity;
+    const c = run.map.castle;
+    const onCastle = (c.x - x) ** 2 + (c.z - z) ** 2 < 0.75 * 0.75;
+    if (hero && !this.heroSelected && ((heroD < 0.5 * 0.5 && heroD <= bestD) || (hero.post < 0 && onCastle))) {
       this.toggleHero();
       return;
     }
-    // A selected hero moves wherever the player taps next.
-    if (this.heroSelected && hero && !hero.dead) {
-      run.moveHero(x, z);
-      this.view.showMoveMarker(hero.tx, hero.tz);
-      this.s.audio.play('select');
+    // A selected hero can be stationed on an empty pad, or back on the castle wall.
+    if (this.heroSelected && hero) {
+      const post = onCastle ? -1 : best;
+      if ((post >= 0 || onCastle) && post !== hero.post && (post < 0 || (run.isSpotUnlocked(post) && !run.towerAt(post)))) {
+        const cost = run.heroMoveCost();
+        if (run.gold < cost) {
+          this.s.audio.play('error');
+          this.s.ui.toast(`Moving ${hero.def.name} costs ${cost} gold`);
+          return;
+        }
+        if (run.stationHero(post)) {
+          this.setHeroSelected(false);
+          this.view.hideRange();
+          this.tutorial?.onHeroMoved();
+          this.persist();
+          return;
+        }
+      }
+      if (post === hero.post) {
+        this.toggleHero();
+        return;
+      }
       this.setHeroSelected(false);
       this.view.hideRange();
-      this.tutorial?.onHeroMoved();
-      return;
     }
     if (best >= 0) {
       this.selectSpot(best);
@@ -562,20 +579,26 @@ export class Battle {
   }
 
   private setHeroSelected(on: boolean): void {
+    if (this.heroSelected !== on) this.view.heroPostHints(on);
     this.heroSelected = on;
     this.view.heroSelected = on;
     this.hud.setHeroSelected(on);
   }
 
   toggleHero(): void {
-    if (!this.run.hero || this.run.hero.dead) return;
+    if (!this.run.hero) return;
     const on = !this.heroSelected;
     this.hud.closeCtx();
     this.view.highlightSpot(-1);
     this.view.hideRange();
     this.setHeroSelected(on);
     if (on) {
-      this.view.showRange(this.run.hero.x, this.run.hero.z, this.run.heroRange(), '#7dff9a');
+      const run = this.run;
+      const h = run.hero!;
+      this.view.showRange(h.x, h.z, run.heroRange(), '#7dff9a');
+      const cost = run.heroMoveCost();
+      const where = h.post < 0 ? 'an empty pad' : 'an empty pad or the castle';
+      this.s.ui.toast(cost > 0 ? `Tap ${where} to move ${h.def.name} (${cost} gold)` : `Tap ${where} to station ${h.def.name} there. Free, once!`);
       this.tutorial?.onHeroSelected();
     }
     this.s.audio.play('select');

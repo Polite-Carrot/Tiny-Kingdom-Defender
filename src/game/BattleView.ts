@@ -880,7 +880,7 @@ export class BattleView {
     });
     on('eliteKill', (e) => {
       const s = this.project(e.x, 1.0, e.z);
-      this.hooks.floatText(s.x, s.y - 20, `+${ELITE_RULES.gems} 💎`, 'gem big');
+      this.hooks.floatText(s.x, s.y - 20, `+${ELITE_RULES.gems} ◆`, 'gem big');
       this.particles.burst(e.x, 0.5, e.z, ELITES[e.elite!].color, 18, { speed: 2.2, up: 2.5, size: 0.09, life: 0.7 });
     });
     on('castleFire', () => this.audio.play('arrow', 0.5));
@@ -921,14 +921,12 @@ export class BattleView {
       this.particles.burst(tower.x, 0.8, tower.z, '#e0faff', 14, { speed: 1.4, up: 1.5, size: 0.08, life: 0.6 });
       this.audio.play('frost', 1);
     });
-    on('heroRespawn', (h) => {
+    on('heroMoved', ({ hero: h }) => {
+      // A puff of light: the hero takes up their new post.
       this.heroAnim?.respawn();
       this.rings.spawn(h.x, h.z, 0.9, h.def.color, 0.5);
-      this.particles.burst(h.x, 0.3, h.z, '#ffffff', 14, { speed: 1.5, up: 2.5, size: 0.07, life: 0.6 });
-    });
-    on('heroDeath', (h) => {
-      this.heroAnim?.die();
-      this.particles.burst(h.x, 0.4, h.z, '#ffffff', 16, { speed: 2, up: 3, size: 0.08 });
+      this.particles.burst(h.x, h.y + 0.3, h.z, '#ffffff', 14, { speed: 1.5, up: 2.5, size: 0.07, life: 0.6 });
+      this.audio.play('build');
     });
     on('bossMechanic', ({ enemy, kind }) => {
       const s = this.project(enemy.x, 1.6, enemy.z);
@@ -1074,10 +1072,16 @@ export class BattleView {
     if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
   }
 
-  showMoveMarker(x: number, z: number): void {
-    this.moveMarker.position.set(x, 0.06, z);
-    this.moveMarker.visible = true;
-    this.moveMarker.scale.setScalar(1.4);
+  /** While the hero is selected, the empty pads they could move to glow green. */
+  heroPostHints(on: boolean): void {
+    this.refreshPads();
+    if (on) {
+      const run = this.run;
+      for (const sp of run.map.buildSpots) {
+        if (run.isSpotUnlocked(sp.index) && !run.towerAt(sp.index) && run.hero?.post !== sp.index) this.pads.setColorAt(sp.index, new THREE.Color('#8dff9a'));
+      }
+    }
+    if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
   }
 
   project(x: number, y: number, z: number): { x: number; y: number } {
@@ -1478,29 +1482,19 @@ export class BattleView {
     if (hero && this.heroAnim) {
       // The animator plays the death fall itself, so the hero stays visible until it ends.
       this.heroAnim.root.visible = this.heroAnim.update(dt, this.time, hero);
-      if (this.heroAura) this.heroAura.visible = !hero.dead;
-      this.heroBar.visible = !hero.dead && hero.hp < hero.maxHp;
-      if (!hero.dead) {
-        if (this.heroAura) {
-          this.heroAura.visible = true;
-          this.heroAura.position.set(hero.x, 0.025, hero.z);
-          this.heroAura.scale.setScalar(1 + Math.sin(this.time * 3) * 0.06);
-        }
-        _m.compose(_p.set(hero.x, 0.015, hero.z), _q.identity(), _s.set(0.6, 1, 0.6));
-        if (shadows < this.shadows.instanceMatrix.count) this.shadows.setMatrixAt(shadows++, _m);
-        const frac = hero.hp / hero.maxHp;
-        this.heroBar.position.set(hero.x, 1.15, hero.z).addScaledVector(_right, -(0.5 * (1 - frac)) / 2);
-        this.heroBar.quaternion.copy(cam.quaternion);
-        this.heroBar.scale.set(0.5 * frac, 0.06, 1);
+      // The hero stands at a post like a tower: no health to show.
+      this.heroBar.visible = false;
+      if (this.heroAura) {
+        this.heroAura.visible = true;
+        this.heroAura.position.set(hero.x, hero.y + 0.025, hero.z);
+        this.heroAura.scale.setScalar(1 + Math.sin(this.time * 3) * 0.06);
       }
-      this.heroRing.visible = this.heroSelected && !hero.dead;
+      _m.compose(_p.set(hero.x, hero.y + 0.015, hero.z), _q.identity(), _s.set(0.6, 1, 0.6));
+      if (shadows < this.shadows.instanceMatrix.count) this.shadows.setMatrixAt(shadows++, _m);
+      this.heroRing.visible = this.heroSelected;
       if (this.heroRing.visible) {
-        this.heroRing.position.set(hero.x, 0.05, hero.z);
+        this.heroRing.position.set(hero.x, hero.y + 0.05, hero.z);
         this.heroRing.scale.setScalar(1.1 + Math.sin(this.time * 6) * 0.08);
-      }
-      if (this.moveMarker.visible) {
-        this.moveMarker.scale.multiplyScalar(Math.pow(0.2, dt));
-        if (this.moveMarker.scale.x < 0.5 || !hero.moving) this.moveMarker.visible = false;
       }
     }
 

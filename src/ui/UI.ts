@@ -1,7 +1,7 @@
 // Screen / modal / toast / floating-text manager for the DOM overlay.
 
 import { el } from './dom';
-import { ICONS } from './icons';
+import { ICONS, icon } from './icons';
 
 export interface ModalHandle {
   el: HTMLElement;
@@ -125,7 +125,7 @@ export class UI {
   /** Achievement card that slides in at the top; queued so several never overlap. */
   achievement(name: string, desc: string, coins: number, gems: number): void {
     this.achQueue.push(() => {
-      const card = el('div', 'ach-card', `<div class="ach-ico">🏆</div><div class="ach-body"><small>Achievement unlocked</small><b>${name}</b><span>${desc}</span></div><div class="ach-reward">+${coins} 🪙${gems ? `<br/>+${gems} 💎` : ''}</div>`);
+      const card = el('div', 'ach-card', `<div class="ach-ico">${ICONS.trophy}</div><div class="ach-body"><small>Achievement unlocked</small><b>${name}</b><span>${desc}</span></div><div class="ach-reward">+${coins} ${icon('coin', 'inline')}${gems ? `<br/>+${gems} ${icon('gem', 'inline')}` : ''}</div>`);
       this.fxLayer.append(card);
       requestAnimationFrame(() => card.classList.add('on'));
       setTimeout(() => card.classList.remove('on'), 3000);

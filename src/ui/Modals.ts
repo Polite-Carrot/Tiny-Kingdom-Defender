@@ -2,7 +2,7 @@
 
 import { el, $, fmt, fmtTime } from './dom';
 import { icon, ICONS } from './icons';
-import { towerThumb, heroThumb, thumb, enemyThumb } from './Thumbnails';
+import { towerThumb, heroThumb, thumb, enemyThumb, buildingThumb } from './Thumbnails';
 import type { Game } from '../game/Game';
 import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, isSupport, type TowerId } from '../data/towers';
@@ -131,7 +131,7 @@ export function fallen(game: Game, fromWave: number, toWave: number, near: NearM
       ${nearMissHtml(near)}
       <div style="text-align:center;font-weight:800">Your army regroups at the last checkpoint: <b>wave ${toWave + 1}</b>.</div>
       <div class="muted" style="text-align:center;margin-top:6px">Every tower, upgrade and piece of gold is kept. Rebuild, upgrade, and push further!</div>
-      <div class="tip">💡 ${b.lossTip()}</div>
+      <div class="tip">${icon('bulb', 'inline')}${b.lossTip()}</div>
       <div class="actions">
         ${meta.featureUnlocked('shop') ? `<button class="btn gold shopbtn">${icon('shop')} Shop</button>` : ''}
         <button class="btn big regroup">Regroup</button>
@@ -247,7 +247,7 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
           const btn = !open ? `<button class="btn small disabled" disabled>Wave ${sp.unlockWave}</button>`
             : cost === null ? `<button class="btn small gold disabled" disabled>MAX</button>`
             : `<button class="btn small ${d.coins < cost ? 'disabled' : ''}" data-spell="${sp.id}">${costHtml(cost)}</button>`;
-          return `<div class="list-item ${open ? '' : 'locked-row'}"><div class="thumb bld">${sp.icon}</div>
+          return `<div class="list-item ${open ? '' : 'locked-row'}"><div class="thumb bld" style="--sc:${sp.color}">${ICONS[sp.icon]}</div>
             <div class="body"><div class="name">${sp.name} ${open ? `<span class="muted">Lv ${lvl}</span>` : ''}</div><div class="desc">${sp.description}</div>
             <div class="desc" style="font-weight:800">${spellPower(sp.id, lvl).text} · recharges in ${Math.round(spellCooldown(sp.id, lvl))}s</div>
             <div class="levelpips">${Array.from({ length: SPELL_RULES.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div></div>${btn}</div>`;
@@ -728,7 +728,7 @@ export function trophies(game: Game): void {
         <div class="tbody"><b>${a.name}</b><span>${a.description}</span>
           <i class="tbar"><b style="width:${Math.round(frac * 100)}%"></b></i>
           <small>${got ? 'Unlocked' : `${fmt(Math.floor(p))} / ${fmt(a.target)}`}</small></div>
-        <div class="treward">${got ? '✓' : `+${a.reward.coins} 🪙${a.reward.gems ? `<br/>+${a.reward.gems} 💎` : ''}`}</div>
+        <div class="treward">${got ? '✓' : `+${a.reward.coins} ${icon('coin', 'inline')}${a.reward.gems ? `<br/>+${a.reward.gems} ${icon('gem', 'inline')}` : ''}`}</div>
       </div>`;
     }).join('');
     m.innerHTML = `<div class="ribbon purple">Trophy Room</div>
@@ -781,7 +781,7 @@ export function bestiary(game: Game): void {
         <div class="bimg"><img src="${enemyThumb(id)}" alt=""/></div>
         <div class="bbody"><b>${e.name}${e.boss ? ' <span class="btag">BOSS</span>' : ''}</b><span class="where">${where}</span>
           <span class="bdesc">${e.description}</span>
-          <div class="bstats"><span>❤ ${e.hp}</span><span>👟 ${e.speed}</span><span>🛡 ${pct(e.armor)}</span><span>✨ ${pct(e.magicResist)}</span>${e.flying ? '<span>🪽 Flies</span>' : ''}</div>
+          <div class="bstats"><span>${icon('heart', 'inline')}${e.hp}</span><span>${icon('boot', 'inline')}${e.speed}</span><span>${icon('shield', 'inline')}${pct(e.armor)}</span><span>${icon('sparkle', 'inline')}${pct(e.magicResist)}</span>${e.flying ? `<span>${icon('wing', 'inline')}Flies</span>` : ''}</div>
           <ul class="btips">${enemyTips(e).map((t) => `<li>${t}</li>`).join('')}</ul>
           <small class="muted">Seen ${fmt(rec!.seen)} · Defeated ${fmt(rec!.killed)}</small></div>
       </div>`;
@@ -804,7 +804,7 @@ export function challenge(game: Game): void {
   const c = meta.challengeFor();
   const st = meta.challengeState();
   game.s.ui.modal((m, h) => {
-    const twists = c.twists.map((t) => `<div class="twist"><span class="tw-ico">${TWISTS[t].icon}</span><div><b>${TWISTS[t].name}</b><small>${TWISTS[t].description}</small></div></div>`).join('');
+    const twists = c.twists.map((t) => `<div class="twist"><span class="tw-ico">${ICONS[TWISTS[t].icon]}</span><div><b>${TWISTS[t].name}</b><small>${TWISTS[t].description}</small></div></div>`).join('');
     const arsenal = c.towers ? `<div class="ch-towers">${c.towers.map((t) => `<img src="${towerThumb(t)}" alt="${TOWERS[t].name}" title="${TOWERS[t].name}"/>`).join('')}</div>` : '';
     const hist = st.history.slice(-7).map((x) => `<div class="hbar" title="${x.day}"><i style="height:${Math.max(6, (x.score / Math.max(1, st.best)) * 100)}%"></i><small>${x.score}</small></div>`).join('');
     const played = st.attempted;
@@ -844,7 +844,7 @@ export function challengeResult(game: Game, score: number, res: { coins: number;
       ${nearMissHtml(near)}
       <div class="reward-row coins-row">${icon('coin')}<span class="amt">+${res.coins}</span></div>
       ${res.chest ? `<div style="text-align:center;font-weight:900">${icon('chest')} Personal best chest!</div>` : ''}
-      <div class="tip">💡 ${tip}</div>
+      <div class="tip">${icon('bulb', 'inline')}${tip}</div>
       <div class="muted" style="text-align:center">A new challenge arrives in ${fmtTime(untilMidnight())}.</div>
       <div class="actions"><button class="btn big ok">${icon('home')} Main menu</button></div>`;
     $(m, '.ok').onclick = () => {
@@ -886,7 +886,7 @@ export function town(game: Game): void {
         const btn = built ? `<button class="btn small gold disabled" disabled>Built ✓</button>`
           : !open ? `<button class="btn small disabled" disabled>Wave ${b.unlockWave}</button>`
           : `<button class="btn small ${d.coins < b.cost ? 'disabled' : ''}" data-b="${b.id}">${costHtml(b.cost)}</button>`;
-        return `<div class="list-item ${built ? 'built' : ''} ${open ? '' : 'locked-row'}"><div class="thumb bld">${b.icon}</div>
+        return `<div class="list-item ${built ? 'built' : ''} ${open ? '' : 'locked-row'}"><div class="thumb"><img src="${buildingThumb(b.id)}" alt=""/></div>
           <div class="body"><div class="name">${b.name}</div><div class="desc">${b.description}</div></div>${btn}</div>`;
       }).join('');
       const n = d.buildings.length;
@@ -935,7 +935,7 @@ export function welcomeBack(game: Game, info: NonNullable<ReturnType<Game['s']['
       <div class="muted" style="text-align:center;margin-top:-6px">in the Royal Treasury</div>
       <div class="stack slot" style="margin-top:10px"></div>
       ${ready.length ? `<div class="ready-list">${ready.join('')}</div>` : ''}
-      <div class="goal">🎯 <b>Next goal:</b> ${info.goal}</div>
+      <div class="goal">${icon('target', 'inline')}<b>Next goal:</b> ${info.goal}</div>
       <div class="actions"><button class="btn collect">${info.treasury > 0 ? `Collect ${info.treasury}` : 'Continue'}</button></div>`;
     let collected = false;
     const collect = (mult: number, from: HTMLElement) => {
@@ -995,7 +995,7 @@ export function realms(game: Game): void {
         : !open ? `<button class="btn small disabled" disabled>${icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px"')} W${def.unlockWave}</button>`
         : `<button class="btn small" data-map="${def.id}">${base ? 'Go' : 'Found'}</button>`;
       return `<div class="list-item realm ${here ? 'built' : ''} ${open ? '' : 'locked-row'}"><div class="thumb">${mapSketch(def)}</div>
-        <div class="body"><div class="name">${def.icon} ${def.name}</div><div class="desc">${def.description}</div><div class="desc" style="font-weight:900">${status}</div></div>${btn}</div>`;
+        <div class="body"><div class="name">${def.name}</div><div class="desc">${def.description}</div><div class="desc" style="font-weight:900">${status}</div></div>${btn}</div>`;
     }).join('');
     m.innerHTML = `<div class="ribbon">${icon('map')} Realms</div>
       <div class="muted" style="text-align:center;margin:-4px 0 8px">Each realm is its own kingdom with its own roads, towers and best wave. Your upgrades, heroes, mastery and town come with you.</div>
@@ -1020,7 +1020,7 @@ function perkRow(game: Game, id: HeroId): string {
     const p = picks[i];
     if (lvl >= t.level && (p === 0 || p === 1)) {
       const perk = PERKS[t.options[p]];
-      return `<span class="perk on" title="${perk.description}">${perk.icon} ${perk.name}</span>`;
+      return `<span class="perk on" title="${perk.description}">${icon(perk.icon, 'inline')}${perk.name}</span>`;
     }
     if (lvl >= t.level) return `<span class="perk pending">★ Lv ${t.level}</span>`;
     return `<span class="perk locked">Lv ${t.level}</span>`;
@@ -1039,7 +1039,7 @@ export function perkChoice(game: Game, id: HeroId, tier: number, onDone?: () => 
       <div class="muted" style="text-align:center;margin-bottom:10px">Level ${t.level} reached. Choose one: it's kept forever for ${h.name}.</div>
       <div class="perk-choice">${t.options.map((pid, i) => {
         const p = PERKS[pid];
-        return `<button class="perk-card" data-opt="${i}"><span class="pi">${p.icon}</span><b>${p.name}</b><span>${p.description}</span></button>`;
+        return `<button class="perk-card" data-opt="${i}"><span class="pi">${ICONS[p.icon]}</span><b>${p.name}</b><span>${p.description}</span></button>`;
       }).join('')}</div>`;
     m.querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) => (b.onclick = () => {
       meta.choosePerk(id, tier, Number(b.dataset.opt) as 0 | 1);
@@ -1100,7 +1100,7 @@ export function stats(game: Game): void {
         <div class="body"><div class="name">${TOWERS[fav].name}</div><div class="desc">Mastery ${meta.masteryLevel(fav)} · ${fmt(meta.masteryXp(fav))} XP</div></div></div>
       <div class="stat-section">Realms</div>
       <div class="list">${MAPS.map((r) => `<div class="list-item ${meta.mapUnlocked(r.id) ? '' : 'locked-row'}"><div class="thumb">${mapSketch(r)}</div>
-        <div class="body"><div class="name">${r.icon} ${r.name}</div><div class="desc">${meta.mapUnlocked(r.id) ? `Best wave ${meta.mapBest(r.id)}` : `Opens at wave ${r.unlockWave}`}</div></div></div>`).join('')}</div>`;
+        <div class="body"><div class="name">${r.name}</div><div class="desc">${meta.mapUnlocked(r.id) ? `Best wave ${meta.mapBest(r.id)}` : `Opens at wave ${r.unlockWave}`}</div></div></div>`).join('')}</div>`;
   });
 }
 

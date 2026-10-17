@@ -89,7 +89,7 @@ export class TitleScreen {
     const realm = MAP_BY_ID[meta.mapId()];
     Modals.hub(g, `${icon('town')} Kingdom`, [
       { label: 'Town', icon: icon('town'), dot: meta.notifications().town, locked: this.lockText('kingdom'), sub: `${meta.d.buildings.length}/7 built`, open: () => Modals.town(g) },
-      { label: 'Realms', icon: icon('map'), locked: this.lockText('realms'), sub: `${realm.icon} ${realm.name}`, open: () => Modals.realms(g) },
+      { label: 'Realms', icon: icon('map'), locked: this.lockText('realms'), sub: realm.name, open: () => Modals.realms(g) },
     ]);
   }
 
@@ -139,7 +139,7 @@ export class TitleScreen {
     const wave = base ? base.wave : 0;
     const card = $(this.el, '.kingdom-card');
     const realm = MAP_BY_ID[meta.mapId()];
-    const realmTag = meta.featureUnlocked('realms') ? `${realm.icon} ${realm.name} · ` : '';
+    const realmTag = meta.featureUnlocked('realms') ? `${realm.name} · ` : '';
     card.innerHTML = base
       ? `<b>${realmTag}${ageTitle(wave)}</b> · Wave ${wave + 1}<br/><span>⚑ Checkpoint ${base.checkpoint ?? checkpointOf(wave)} · Best ${meta.mapBest(meta.mapId())} · ${base.towers.length} towers</span>`
       : `<b>${realmTag}Found your kingdom</b><br/><span>Build, upgrade and hold out for as long as you can</span>`;

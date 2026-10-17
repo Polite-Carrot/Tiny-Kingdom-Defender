@@ -10,17 +10,16 @@ export interface BuildingDef {
   /** Best wave needed before it can be built. */
   unlockWave: number;
   cost: number;
-  icon: string;
 }
 
 export const BUILDINGS: BuildingDef[] = [
-  { id: 'farm', name: 'Farmstead', description: 'Treasury earns 25% more while you are away', unlockWave: 5, cost: 300, icon: '🌾' },
-  { id: 'blacksmith', name: 'Blacksmith', description: 'All towers deal 5% more damage', unlockWave: 10, cost: 600, icon: '⚒️' },
-  { id: 'market', name: 'Market', description: '+8% gold from defeated enemies', unlockWave: 15, cost: 900, icon: '🛒' },
-  { id: 'chapel', name: 'Chapel', description: '+3 castle HP', unlockWave: 20, cost: 1200, icon: '⛪' },
-  { id: 'wizard', name: 'Wizard Tower', description: 'Your hero deals 10% more damage and has 10% more HP', unlockWave: 30, cost: 1700, icon: '🔮' },
-  { id: 'windmill', name: 'Windmill', description: '+20% coins for every wave cleared', unlockWave: 40, cost: 2300, icon: '🌬️' },
-  { id: 'barracks', name: 'Barracks', description: 'Barricades have 30% more HP', unlockWave: 50, cost: 3000, icon: '🛡️' },
+  { id: 'farm', name: 'Farmstead', description: 'Treasury earns 25% more while you are away', unlockWave: 5, cost: 300 },
+  { id: 'blacksmith', name: 'Blacksmith', description: 'All towers deal 5% more damage', unlockWave: 10, cost: 600 },
+  { id: 'market', name: 'Market', description: '+8% gold from defeated enemies', unlockWave: 15, cost: 900 },
+  { id: 'chapel', name: 'Chapel', description: '+3 castle HP', unlockWave: 20, cost: 1200 },
+  { id: 'wizard', name: 'Wizard Tower', description: 'Your hero deals 10% more damage', unlockWave: 30, cost: 1700 },
+  { id: 'windmill', name: 'Windmill', description: '+20% coins for every wave cleared', unlockWave: 40, cost: 2300 },
+  { id: 'barracks', name: 'Barracks', description: 'Barricades have 30% more HP', unlockWave: 50, cost: 3000 },
 ];
 
 export const BUILDING_BY_ID = Object.fromEntries(BUILDINGS.map((b) => [b.id, b])) as Record<BuildingId, BuildingDef>;

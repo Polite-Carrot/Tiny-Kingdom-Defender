@@ -1,13 +1,15 @@
 // Spells: cast from the bar during a wave, then recharge. They unlock as your best wave grows
 // and get stronger (and recharge faster) with permanent upgrades bought in the Shop.
 
+import type { IconName } from '../ui/icons';
+
 export type SpellId = 'meteor' | 'freeze' | 'blessing' | 'repair';
 
 export interface SpellDef {
   id: SpellId;
   name: string;
   description: string;
-  icon: string;
+  icon: IconName;
   color: string;
   /** Best wave needed to use it. */
   unlockWave: number;
@@ -18,10 +20,10 @@ export interface SpellDef {
 }
 
 export const SPELLS: SpellDef[] = [
-  { id: 'meteor', name: 'Meteor', description: 'A blazing meteor crashes into the thickest crowd of enemies.', icon: '☄️', color: '#ff7a2a', unlockWave: 8, cooldown: 60, baseCost: 120 },
-  { id: 'freeze', name: 'Deep Freeze', description: 'Every enemy on the field is frozen solid for a few seconds.', icon: '❄️', color: '#9fdcf5', unlockWave: 14, cooldown: 80, baseCost: 150 },
-  { id: 'blessing', name: 'Gold Blessing', description: 'Enemies drop double gold for a while.', icon: '💰', color: '#ffd84a', unlockWave: 22, cooldown: 100, baseCost: 180 },
-  { id: 'repair', name: 'Mend Walls', description: 'Masons patch up the castle, restoring some HP.', icon: '🧱', color: '#7dffb0', unlockWave: 32, cooldown: 140, baseCost: 220 },
+  { id: 'meteor', name: 'Meteor', description: 'A blazing meteor crashes into the thickest crowd of enemies.', icon: 'meteor', color: '#ff7a2a', unlockWave: 8, cooldown: 60, baseCost: 120 },
+  { id: 'freeze', name: 'Deep Freeze', description: 'Every enemy on the field is frozen solid for a few seconds.', icon: 'freeze', color: '#9fdcf5', unlockWave: 14, cooldown: 80, baseCost: 150 },
+  { id: 'blessing', name: 'Gold Blessing', description: 'Enemies drop double gold for a while.', icon: 'blessing', color: '#ffd84a', unlockWave: 22, cooldown: 100, baseCost: 180 },
+  { id: 'repair', name: 'Mend Walls', description: 'Masons patch up the castle, restoring some HP.', icon: 'repair', color: '#7dffb0', unlockWave: 32, cooldown: 140, baseCost: 220 },
 ];
 
 export const SPELL_BY_ID = Object.fromEntries(SPELLS.map((s) => [s.id, s])) as Record<SpellId, SpellDef>;

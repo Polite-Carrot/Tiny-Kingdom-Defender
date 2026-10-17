@@ -1,6 +1,7 @@
 // Daily Challenge: everyone gets the same siege each day (start wave, Age, gold and twists),
 // decided from the date. One scored attempt a day; the score is the number of waves survived.
 
+import type { IconName } from '../ui/icons';
 import type { TowerId } from './towers';
 
 export type TwistId = 'swift' | 'tough' | 'goldRush' | 'arsenal' | 'noHero' | 'glass' | 'elites' | 'thrifty';
@@ -9,18 +10,18 @@ export interface TwistDef {
   id: TwistId;
   name: string;
   description: string;
-  icon: string;
+  icon: IconName;
 }
 
 export const TWISTS: Record<TwistId, TwistDef> = {
-  swift: { id: 'swift', name: 'Swift Foes', description: 'Enemies move 30% faster', icon: '💨' },
-  tough: { id: 'tough', name: 'Iron Hide', description: 'Enemies have 40% more HP but drop 25% more gold', icon: '🛡️' },
-  goldRush: { id: 'goldRush', name: 'Gold Rush', description: 'Double gold from enemies, but they have 25% more HP', icon: '💰' },
-  arsenal: { id: 'arsenal', name: 'Limited Arsenal', description: 'Only three tower types may be built', icon: '🏹' },
-  noHero: { id: 'noHero', name: 'Heroes Away', description: 'No hero, but towers deal 20% more damage', icon: '🚫' },
-  glass: { id: 'glass', name: 'Glass Castle', description: 'The castle has only 8 HP', icon: '🏰' },
-  elites: { id: 'elites', name: 'Elite Horde', description: 'Elite enemies appear four times as often', icon: '⭐' },
-  thrifty: { id: 'thrifty', name: 'Lean Times', description: 'Start with 35% less gold', icon: '🪙' },
+  swift: { id: 'swift', name: 'Swift Foes', description: 'Enemies move 30% faster', icon: 'fast' },
+  tough: { id: 'tough', name: 'Iron Hide', description: 'Enemies have 40% more HP but drop 25% more gold', icon: 'shield' },
+  goldRush: { id: 'goldRush', name: 'Gold Rush', description: 'Double gold from enemies, but they have 25% more HP', icon: 'blessing' },
+  arsenal: { id: 'arsenal', name: 'Limited Arsenal', description: 'Only three tower types may be built', icon: 'tower' },
+  noHero: { id: 'noHero', name: 'Heroes Away', description: 'No hero, but towers deal 20% more damage', icon: 'noHero' },
+  glass: { id: 'glass', name: 'Glass Castle', description: 'The castle has only 8 HP', icon: 'castle' },
+  elites: { id: 'elites', name: 'Elite Horde', description: 'Elite enemies appear four times as often', icon: 'star' },
+  thrifty: { id: 'thrifty', name: 'Lean Times', description: 'Start with 35% less gold', icon: 'coin' },
 };
 
 /** Twists that must not appear together. */
