@@ -267,9 +267,9 @@ body.landscape .logo { font-size: clamp(30px, 6vh, 50px); }
 
 .hud-actions { position: absolute; display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
 .hud-actions { right: calc(var(--sar) + 10px); bottom: calc(var(--sab) + 10px); justify-content: flex-end; }
-.hud-hero { position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 10px); display: flex; flex-direction: column-reverse; gap: 8px; align-items: flex-start; pointer-events: none; }
+.hud-hero { position: absolute; left: calc(var(--sal) + 8px); bottom: calc(var(--sab) + 10px); display: flex; flex-direction: row; gap: 8px; align-items: flex-end; pointer-events: none; }
 .hero-slot { display: flex; gap: 8px; align-items: flex-end; }
-body.landscape .hud-hero { left: calc(var(--sal) + 10px); align-items: center; }
+body.landscape .hud-hero { left: calc(var(--sal) + 10px); flex-direction: column-reverse; align-items: center; }
 body.landscape .hero-slot { flex-direction: column-reverse; align-items: center; }
 .rush-pill { position: absolute; top: calc(var(--sat) + 60px); left: calc(var(--sal) + 8px); background: linear-gradient(180deg, #ffe27a, #e09a12); color: #4a2c00; font-weight: 900; font-size: 13px; padding: 6px 10px; border-radius: 12px; box-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 12px rgba(255,210,90,.8); pointer-events: none; }
 body.landscape .rush-pill { top: calc(var(--sat) + 120px); }
@@ -284,10 +284,6 @@ body.landscape .rush-pill { top: calc(var(--sat) + 120px); }
 .hero-btn .hpring { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
 .hero-btn .dead { position: absolute; inset: 0; display: none; place-items: center; background: rgba(30,20,40,.7); border-radius: 50%; color: #fff; font-weight: 900; font-size: 20px; }
 .hero-btn.isdead .dead { display: grid; }
-.ability-btn { position: relative; width: 56px; height: 56px; border-radius: 16px; background: var(--purple); box-shadow: inset 0 -5px 0 var(--purple-d), 0 4px 0 rgba(0,0,0,.3); padding: 0; color: #fff; font-weight: 900; }
-.ability-btn .ico { width: 34px; height: 34px; margin: auto; }
-.ability-btn .cd { position: absolute; inset: 0; border-radius: inherit; display: grid; place-items: center; font-size: 18px; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
-.ability-btn.ready { animation: adPulse 1.2s infinite; box-shadow: inset 0 -5px 0 var(--purple-d), 0 4px 0 rgba(0,0,0,.3), 0 0 16px rgba(190,150,255,.9); }
 
 .next-wave { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .wave-preview { display: flex; gap: 4px; background: rgba(30,22,50,.72); padding: 4px 8px; border-radius: 14px; color: #fff; font-weight: 900; font-size: 13px; align-items: center; }
@@ -570,8 +566,6 @@ body.landscape .modal.frontier { width: 330px; }
 /* Spell bar */
 .hud-spells { position: absolute; left: calc(var(--sal) + 10px); bottom: calc(var(--sab) + 92px); display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; }
 .hud.no-hero .hud-spells { bottom: calc(var(--sab) + 12px); }
-.hud.two-heroes .hud-spells { bottom: calc(var(--sab) + 164px); }
-body.landscape .hud.two-heroes .hud-spells { bottom: calc(var(--sab) + 10px); }
 body.landscape .hud-spells { left: calc(var(--sal) + 92px); bottom: calc(var(--sab) + 10px); flex-direction: row; }
 body.landscape .hud.no-hero .hud-spells { left: calc(var(--sal) + 10px); }
 .spell-btn { pointer-events: auto; position: relative; width: 50px; height: 50px; border: 0; border-radius: 50%; padding: 0; background: radial-gradient(circle at 50% 35%, #fff 0%, var(--sc) 70%); box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 4px 0 rgba(0,0,0,.3); cursor: pointer; }
@@ -635,3 +629,8 @@ body.landscape .hud.no-hero .hud-spells { left: calc(var(--sal) + 10px); }
 .hud-cam .btn { pointer-events: auto; width: 44px; min-width: 44px; min-height: 44px; padding: 0; }
 .hud-cam .btn .ico { width: 26px; height: 26px; }
 body.landscape .hud.ctx-open .hud-cam { display: none; }
+
+/* Hero abilities ride in the spell column, ringed in the hero's colour. */
+.spell-btn.ability-btn { box-shadow: 0 0 0 3px var(--sc), 0 4px 0 rgba(0,0,0,.3); background: radial-gradient(circle at 50% 35%, #c9a8ff 0%, #7a4fd6 80%); }
+.spell-btn.ability-btn.ready { box-shadow: 0 0 0 3px var(--sc), 0 4px 0 rgba(0,0,0,.3), 0 0 16px #b48cff; }
+.spell-btn.ability-btn .ico { filter: drop-shadow(0 2px 0 rgba(40,20,80,.45)); }

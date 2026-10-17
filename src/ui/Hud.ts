@@ -89,11 +89,9 @@ export class Hud {
       <div class="hud-hero">
         <div class="hero-slot" data-slot="0">
           <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
-          <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
         </div>
         <div class="hero-slot" data-slot="1">
           <button class="hero-btn" aria-label="Select hero"><img alt=""/><div class="hpring"></div><div class="dead">0</div></button>
-          <button class="ability-btn" aria-label="Hero ability"><span class="ico"></span><span class="cd"></span></button>
         </div>
       </div>
       <div class="rush-pill" style="display:none"></div>
@@ -125,8 +123,8 @@ export class Hud {
     this.speedBtn = $(this.el, '.speed-btn') as HTMLButtonElement;
     this.heroWrap = $(this.el, '.hud-hero');
     this.heroBtns = [...this.el.querySelectorAll<HTMLButtonElement>('.hero-btn')];
-    this.abilityBtns = [...this.el.querySelectorAll<HTMLButtonElement>('.ability-btn')];
-    this.abilityCds = this.abilityBtns.map((b) => $(b, '.cd'));
+    this.abilityBtns = [];
+    this.abilityCds = [];
     this.ctx = $(this.el, '.ctx');
     this.fpsEl = $(this.el, '.fps');
 
@@ -136,7 +134,7 @@ export class Hud {
     this.autoBtn.onclick = () => cb.toggleAuto();
     this.nextBtn.onclick = () => cb.nextWave();
     this.heroBtns.forEach((b, i) => (b.onclick = () => cb.selectHero(i)));
-    this.abilityBtns.forEach((b, i) => (b.onclick = () => cb.ability(i)));
+
     this.rushPill = $(this.el, '.rush-pill');
     $(this.el, '.cam-rotate').onclick = () => cb.rotateView();
     $(this.el, '.cam-centre').onclick = () => cb.recentreView();
@@ -171,7 +169,12 @@ export class Hud {
     // Spell bar: one button per unlocked spell.
     const spellsEl = $(this.el, '.hud-spells');
     const spells = SPELLS.filter((s) => run.config.meta.spells?.[s.id] !== undefined);
-    spellsEl.innerHTML = spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${ICONS[s.icon]}</span><span class="cd"></span></button>`).join('');
+    // Heroes' abilities sit with the spells, nearest the hero portraits.
+    const abilities = run.heroes.map((h, i) => `<button class="spell-btn ability-btn" data-ability="${i}" style="--sc:${h.def.color}" aria-label="${h.def.name}: ${h.def.ability.name}" title="${h.def.ability.name}: ${h.def.ability.description}"><span class="ico">${ICONS[ABILITY_ICON[h.def.ability.kind]]}</span><span class="cd"></span></button>`).join('');
+    spellsEl.innerHTML = abilities + spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${ICONS[s.icon]}</span><span class="cd"></span></button>`).join('');
+    this.abilityBtns = [...spellsEl.querySelectorAll<HTMLButtonElement>('[data-ability]')];
+    this.abilityCds = this.abilityBtns.map((b) => $(b, '.cd'));
+    this.abilityBtns.forEach((b, i) => (b.onclick = () => this.cb.ability(i)));
     spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach((b) => (b.onclick = () => this.cb.castSpell(b.dataset.spell as SpellId)));
     this.spellBtns = [...spellsEl.querySelectorAll<HTMLButtonElement>('[data-spell]')];
     this.heroBtns.forEach((b, i) => {
@@ -180,8 +183,6 @@ export class Hud {
       if (!h) return;
       (b.querySelector('img') as HTMLImageElement).src = heroThumb(h.def.id);
       b.setAttribute('aria-label', `Select ${h.def.name}`);
-      $(this.abilityBtns[i], '.ico').innerHTML = ICONS[ABILITY_ICON[h.def.ability.kind]];
-      this.abilityBtns[i].setAttribute('aria-label', `${h.def.name}: ${h.def.ability.name}`);
     });
     this.setHeroSelected(-1);
   }

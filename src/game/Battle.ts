@@ -545,6 +545,12 @@ export class Battle {
         this.deselect();
         return;
       }
+      // Same tile again: close it.
+      const [wc, wr] = this.hud.wallTile;
+      if (this.hud.mode === 'wall' && wc === col && wr === row) {
+        this.deselect();
+        return;
+      }
       this.setHeroSelected(-1);
       this.view.highlightSpot(-1);
       this.view.hideRange();
@@ -595,6 +601,11 @@ export class Battle {
   }
 
   private selectSpot(spot: number): void {
+    // Tapping the spot that's already open closes its panel.
+    if (this.hud.mode !== 'none' && this.hud.mode !== 'wall' && this.hud.selectedSpot === spot) {
+      this.deselect();
+      return;
+    }
     this.setHeroSelected(-1);
     const t = this.run.towerAt(spot);
     this.view.highlightSpot(spot);
