@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
-import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, propModel, barricadeModel, masteryModel, castleBannerModel } from '../entities/Models';
+import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, foundationModel, propModel, barricadeModel, masteryModel, castleBannerModel } from '../entities/Models';
 import { MASTERY } from '../data/mastery';
 import type { BuildingId } from '../data/kingdom';
 import { HeroAnimator } from './HeroAnimator';
@@ -97,6 +97,9 @@ export class BattleView {
   private heroAnims: HeroAnimator[] = [];
   /** Soft coloured glow under the hero. */
   private heroAuras: THREE.Mesh[] = [];
+  private foundations!: THREE.InstancedMesh;
+  /** Foundations still rising after being laid (0..1). */
+  private foundationRise = new Map<number, number>();
   /** Siege Engine rocks in flight (visual only; the sim lands them). */
   private rocks: { mesh: THREE.Mesh; x0: number; z0: number; x1: number; z1: number; t: number; dur: number }[] = [];
   private rockGeo: THREE.BufferGeometry | null = null;
@@ -340,10 +343,14 @@ export class BattleView {
     // Build pads (instanced so they can be highlighted individually).
     this.pads = new THREE.InstancedMesh(padModel(), this.material, Math.max(1, map.buildSpots.length));
     this.boardDisposables.push({ dispose: () => this.pads.dispose() });
+    // Open ground gets stone foundations instead of a round pad once they are laid.
+    this.foundations = new THREE.InstancedMesh(foundationModel(), this.material, Math.max(1, map.buildSpots.length));
+    this.boardDisposables.push({ dispose: () => this.foundations.dispose() });
     this.padColor.set(t.pad);
     this.refreshPads();
     this.pads.receiveShadow = true;
-    this.board.add(this.pads);
+    this.foundations.receiveShadow = true;
+    this.board.add(this.pads, this.foundations);
     this.buildOvergrowth();
     this.buildCastleAndCaves();
     this.buildLanterns();
@@ -397,10 +404,11 @@ export class BattleView {
     const want = weatherOf(run.state === 'prep' ? run.waveIndex : run.currentWave);
     const w = this.weather;
     const target = want !== 'clear' && want === w.current ? 1 : 0;
-    this.weatherK += Math.sign(target - this.weatherK) * Math.min(Math.abs(target - this.weatherK), dt * 0.35);
+    // Weather rolls in and out over several seconds rather than all at once.
+    this.weatherK += Math.sign(target - this.weatherK) * Math.min(Math.abs(target - this.weatherK), dt * 0.15);
     if (this.weatherK <= 0.001 && want !== w.current) w.setKind(want);
     w.update(dt, this.weatherK);
-    const haze = w.current === 'fog' ? 1 : w.current === 'sand' ? 0.75 : w.current === 'snow' ? 0.55 : w.current === 'rain' ? 0.45 : w.current === 'ash' ? 0.5 : 0;
+    const haze = w.current === 'fog' ? 0.7 : w.current === 'sand' ? 0.6 : w.current === 'snow' ? 0.45 : w.current === 'rain' ? 0.35 : w.current === 'ash' ? 0.4 : 0;
     const col = w.current === 'sand' ? '#d8b878' : w.current === 'ash' ? '#6a6068' : w.current === 'rain' ? '#8a96a8' : '#d4d8e0';
     this.renderer.setWeather(haze * this.weatherK, col, w.flash);
     // Rain hiss or wind under the music; thunder with each lightning flash.
@@ -505,14 +513,27 @@ export class BattleView {
     const map = this.run.map;
     map.buildSpots.forEach((sp, i) => {
       const open = this.run.isSpotUnlocked(sp.index);
-      const shown = open || map.isClassic(sp.index);
-      _m.makeTranslation(sp.x, shown ? 0 : -5, sp.z);
-      if (!shown) _m.scale(_s.setScalar(0.001));
-      this.pads.setMatrixAt(i, _m);
-      this.pads.setColorAt(i, open ? this.padColor : locked);
+      const classic = map.isClassic(sp.index);
+      const rise = this.foundationRise.get(i);
+      for (const [mesh, shown] of [[this.pads, classic], [this.foundations, open && !classic]] as const) {
+        _m.makeTranslation(sp.x, shown ? 0 : -5, sp.z);
+        if (!shown) _m.scale(_s.setScalar(0.001));
+        else if (mesh === this.foundations && rise !== undefined) _m.scale(_s.set(1, Math.max(0.02, rise), 1));
+        mesh.setMatrixAt(i, _m);
+      }
+      this.setPadColor(i, open ? this.padColor : locked);
     });
-    this.pads.instanceMatrix.needsUpdate = true;
-    if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
+    for (const mesh of [this.pads, this.foundations]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  /** Tints a build spot (round pad or foundations alike). */
+  private setPadColor(i: number, c: THREE.Color): void {
+    this.pads.setColorAt(i, c);
+    this.foundations.setColorAt(i, c);
+    if (this.foundations.instanceColor) this.foundations.instanceColor.needsUpdate = true;
   }
 
   /** Bushes and rocks covering land that hasn't been cleared yet. */
@@ -988,6 +1009,8 @@ export class BattleView {
     });
     on('landCleared', ({ spot }) => {
       const sp = this.run.map.buildSpots[spot];
+      // Foundations rise out of the ground.
+      if (!this.run.map.isClassic(spot)) this.foundationRise.set(spot, 0);
       this.refreshPads();
       this.buildOvergrowth();
       if (!this.run.map.isClassic(spot)) this.buildProps();
@@ -1088,7 +1111,7 @@ export class BattleView {
     this.padHighlight = index;
     if (index >= 0) {
       const s = this.run.map.buildSpots[index];
-      this.pads.setColorAt(index, new THREE.Color('#fff3a0'));
+      this.setPadColor(index, new THREE.Color('#fff3a0'));
       this.spotMarker.position.set(s.x, 0.12, s.z);
       this.spotMarker.visible = true;
     } else {
@@ -1103,7 +1126,7 @@ export class BattleView {
     if (on) {
       const run = this.run;
       for (const sp of run.map.buildSpots) {
-        if (run.isSpotUnlocked(sp.index) && !run.towerAt(sp.index) && !run.heroAt(sp.index)) this.pads.setColorAt(sp.index, new THREE.Color('#8dff9a'));
+        if (run.isSpotUnlocked(sp.index) && !run.towerAt(sp.index) && !run.heroAt(sp.index)) this.setPadColor(sp.index, new THREE.Color('#8dff9a'));
       }
     }
     if (this.pads.instanceColor) this.pads.instanceColor.needsUpdate = true;
@@ -1504,6 +1527,15 @@ export class BattleView {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
+    // Freshly laid foundations rise into place.
+    if (this.foundationRise.size) {
+      for (const [i, k] of this.foundationRise) {
+        const nk = Math.min(1, k + dt * 2.5);
+        if (nk >= 1) this.foundationRise.delete(i);
+        else this.foundationRise.set(i, nk);
+      }
+      this.refreshPads();
+    }
     // Siege rocks arc through the air.
     for (let i = this.rocks.length - 1; i >= 0; i--) {
       const r = this.rocks[i];
@@ -1576,7 +1608,9 @@ export class BattleView {
     }
     // The banner flutters in the wind.
     if (this.banner) {
-      this.banner.rotation.y = 0.25 - this.castle.rotation.y + Math.sin(this.time * 2.2) * 0.18; // faces the camera whichever way the castle does
+      // Faces the camera whichever way the castle and the view are turned.
+      const cam = this.renderer.camera.position, cc = this.run.map.castle;
+      this.banner.rotation.y = Math.atan2(cam.x - cc.x, cam.z - cc.z) + 0.25 - this.castle.rotation.y + Math.sin(this.time * 2.2) * 0.18;
       this.banner.scale.x = 0.5 * (1 + Math.sin(this.time * 3.1) * 0.05);
     }
     // Spot marker pulse.

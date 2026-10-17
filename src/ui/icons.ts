@@ -47,6 +47,8 @@ export const ICONS = {
   bulb: `<svg viewBox="0 0 32 32"><path d="M16 3a9 9 0 00-5 16.5V23h10v-3.5A9 9 0 0016 3z" fill="#ffd84a"/><path d="M13 8a5 5 0 00-3 4.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/><rect x="11" y="23" width="10" height="3" rx="1" fill="#c9d2df"/><rect x="12" y="26" width="8" height="3" rx="1.5" fill="#8a7fa6"/></svg>`,
   boot: `<svg viewBox="0 0 32 32"><path d="M9 3h9v15l9 4c2 1 2 3 2 5v1H5V24c2-2 4-5 4-9z" fill="#9a6a3f"/><rect x="5" y="26" width="24" height="3" rx="1.5" fill="#5a3a24"/><rect x="9" y="3" width="9" height="4" fill="#b5803f"/></svg>`,
   wing: `<svg viewBox="0 0 32 32"><path d="M4 26C4 14 12 5 28 4c-2 4-5 6-9 7 3 0 6 0 8-1-2 4-6 6-10 7 2 1 5 1 7 0-3 4-8 7-14 7-2 0-4 1-6 2z" fill="#fff8ea" stroke="#c9d2df" stroke-width="1.5"/></svg>`,
+  rotate: `<svg viewBox="0 0 32 32"><path d="M25 16a9 9 0 11-3.2-6.9" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M23 3.5l-.5 7.5-7.4-1.2" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 18l5-6 5 6z" fill="#ffd84a"/></svg>`,
+  centre: `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="none" stroke="#fff" stroke-width="3"/><circle cx="16" cy="16" r="3.5" fill="#ffd84a"/><path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>`,
   home: `<svg viewBox="0 0 32 32"><path d="M4 15L16 4l12 11v13H20v-8h-8v8H4z" fill="#fff"/></svg>`,
 };
 

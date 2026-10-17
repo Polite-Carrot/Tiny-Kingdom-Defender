@@ -148,9 +148,10 @@ export class Renderer {
     // Weather: thicker, tinted fog and dimmer light; lightning flashes it all bright.
     const fog = this.scene.fog as THREE.Fog;
     const h = this.haze;
-    fog.near = this.fogRange.near * (1 - 0.7 * h);
-    fog.far = fog.near + (this.fogRange.far - this.fogRange.near) * (1 - 0.88 * h);
-    fog.color.lerp(this.hazeColor.clone().multiplyScalar(1 - 0.7 * k), h * 0.75);
+    // Kept light enough that the board always reads clearly through it.
+    fog.near = this.fogRange.near * (1 - 0.4 * h);
+    fog.far = fog.near + (this.fogRange.far - this.fogRange.near) * (1 - 0.5 * h);
+    fog.color.lerp(this.hazeColor.clone().multiplyScalar(1 - 0.7 * k), h * 0.5);
     this.sun.intensity *= 1 - 0.3 * h;
     this.hemi.intensity *= 1 - 0.15 * h;
     if (this.flash > 0) {

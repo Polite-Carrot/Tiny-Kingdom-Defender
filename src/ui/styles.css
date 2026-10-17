@@ -445,6 +445,8 @@ body.landscape .modal.frontier { width: 330px; }
 .frontier-towers img { width: 46px; height: 46px; }
 .modal.frontier .ready-btn { margin-top: 10px; width: 100%; }
 .modal.frontier .ready-btn small { display: block; font-size: 12px; opacity: .85; }
+.modal.frontier .build-first-btn { margin-top: 8px; width: 100%; }
+.modal.frontier .build-first-btn small { display: block; font-size: 11px; opacity: .85; }
 
 /* Hero roster cards. */
 .hero-card { display: grid; grid-template-columns: 84px 1fr auto; gap: 10px; align-items: center; background: #fff; border-radius: 18px; padding: 8px; margin-bottom: 8px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.08); border: 3px solid transparent; }
@@ -615,3 +617,21 @@ body.landscape .hud.no-hero .hud-spells { left: calc(var(--sal) + 10px); }
 .slot2-row.locked { opacity: .7; justify-content: flex-start; }
 .slot2-row small { font-weight: 700; opacity: .75; }
 .hero-card .act { display: flex; flex-direction: column; gap: 6px; }
+
+/* Realm picker on the main menu */
+.realm-pick { display: flex; align-items: center; gap: 6px; }
+.rp-arrow { width: 40px; height: 52px; border: 0; border-radius: 14px; background: rgba(30,22,50,.72); color: #fff; font: 900 30px/1 inherit; padding: 0 0 4px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); cursor: pointer; }
+.rp-arrow.disabled { opacity: .35; pointer-events: none; }
+.rp-arrow:active { transform: translateY(2px); }
+.rp-cur { display: flex; align-items: center; gap: 10px; min-width: 200px; height: 52px; padding: 4px 14px 4px 6px; border: 0; border-radius: 16px; background: linear-gradient(#fff8ea, #f3e6cc); color: var(--ink); box-shadow: inset 0 -4px 0 rgba(0,0,0,.12), 0 3px 0 rgba(0,0,0,.25); cursor: pointer; text-align: left; font: inherit; }
+.rp-map { width: 44px; height: 44px; flex: none; }
+.rp-map svg { width: 100%; height: 100%; display: block; }
+.rp-text { display: flex; flex-direction: column; line-height: 1.15; }
+.rp-text b { font-size: 16px; }
+.rp-text small { font-size: 11px; font-weight: 800; opacity: .65; }
+
+/* Camera controls: turn the view, and snap back to the standard view */
+.hud-cam { position: absolute; right: calc(var(--sar) + 8px); top: calc(var(--sat) + 64px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.hud-cam .btn { pointer-events: auto; width: 44px; min-width: 44px; min-height: 44px; padding: 0; }
+.hud-cam .btn .ico { width: 26px; height: 26px; }
+body.landscape .hud.ctx-open .hud-cam { display: none; }

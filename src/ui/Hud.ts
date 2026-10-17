@@ -31,6 +31,10 @@ export interface HudCallbacks {
   repairWall(): void;
   removeWall(): void;
   shop(): void;
+  /** Camera: turn the view 90°, snap back to the standard view, and whether it's been moved. */
+  rotateView(): void;
+  recentreView(): void;
+  viewMoved(): boolean;
 }
 
 const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' } as const;
@@ -93,6 +97,10 @@ export class Hud {
         </div>
       </div>
       <div class="rush-pill" style="display:none"></div>
+      <div class="hud-cam">
+        <button class="btn icon blue cam-rotate" aria-label="Turn the view">${icon('rotate')}</button>
+        <button class="btn icon gold cam-centre" aria-label="Centre the view" style="display:none">${icon('centre')}</button>
+      </div>
       <div class="hud-spells"></div>
       <div class="hud-actions">
         <div class="next-wave">
@@ -130,6 +138,8 @@ export class Hud {
     this.heroBtns.forEach((b, i) => (b.onclick = () => cb.selectHero(i)));
     this.abilityBtns.forEach((b, i) => (b.onclick = () => cb.ability(i)));
     this.rushPill = $(this.el, '.rush-pill');
+    $(this.el, '.cam-rotate').onclick = () => cb.rotateView();
+    $(this.el, '.cam-centre').onclick = () => cb.recentreView();
     this.ageEl = $(this.el, '.wave-pill .age');
     $(this.el, '.shop-btn').onclick = () => cb.shop();
   }
@@ -252,12 +262,14 @@ export class Hud {
     }
 
     // Next-wave button.
-    const canCall = run.state === 'prep' || run.nextWaveTimer >= 0;
+    const holding = run.holdingFor >= 0;
+    const canCall = run.state === 'prep' || run.nextWaveTimer >= 0 || holding;
     let label: string;
-    if (run.state === 'prep') label = `${ICONS.play} ${run.waveIndex > 0 ? 'Resume' : 'Start'}`;
+    if (holding) label = `${ICONS.play} Start wave ${run.holdingFor + 1}`;
+    else if (run.state === 'prep') label = `${ICONS.play} ${run.waveIndex > 0 ? 'Resume' : 'Start'}`;
     else if (canCall) label = `Next <span class="cost">+${run.earlyCallBonus()}${ICONS.coin}</span>`;
     else label = 'Incoming…';
-    const key = `${run.state}|${canCall}|${run.earlyCallBonus()}|${run.waveIndex}`;
+    const key = `${run.state}|${canCall}|${run.earlyCallBonus()}|${run.waveIndex}|${run.holdingFor}`;
     if (key !== this.lastWaveKey) {
       this.lastWaveKey = key;
       this.nextBtn.innerHTML = label.replace(ICONS.coin, `<span class="ico" style="width:18px;height:18px">${ICONS.coin}</span>`);
@@ -288,6 +300,12 @@ export class Hud {
       if (cdEl.textContent !== txt) cdEl.textContent = txt;
       cdEl.style.background = cd > 0 ? `conic-gradient(rgba(20,10,40,.65) ${(cd / full) * 360}deg, rgba(0,0,0,0) 0)` : 'none';
     }
+
+    // The centre button shows once the view has been turned, zoomed or panned.
+    const moved = this.cb.viewMoved();
+    const centre = $(this.el, '.cam-centre');
+    if ((centre.style.display !== 'none') !== moved) centre.style.display = moved ? '' : 'none';
+    this.el.classList.toggle('ctx-open', this.ctxMode !== 'none');
 
     // Gold Rush indicator (from saves made while it was a rewarded placement).
     const rushTxt = run.blessingT > 0 ? `${ICONS.blessing.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} Gold Blessing · ${Math.ceil(run.blessingT)}s` : run.goldRushWaves > 0 ? `${ICONS.coin.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-4px"')} 2× gold · ${run.goldRushWaves} wave${run.goldRushWaves > 1 ? 's' : ''}` : '';
@@ -413,10 +431,13 @@ export class Hud {
   private renderLand(): void {
     const run = this.run!;
     const cost = run.clearLandCost();
+    const classic = run.map.isClassic(this.ctxSpot);
     this.ctx.innerHTML = `
-      <div class="ctx-head"><span class="name">${run.map.isClassic(this.ctxSpot) ? 'Overgrown land' : 'Open ground'}</span><button class="x" aria-label="Close">✕</button></div>
-      <div class="ctx-info" style="margin:0 0 8px">Clear it to get a new build pad. Any square off the road can be cleared. Each clearing costs more, so choose spots that cover the roads well.</div>
-      <div class="ctx-row"><button class="btn land-btn ${run.gold < cost ? 'disabled' : ''}">Clear land <span class="cost">${icon('coin')}${cost}</span></button></div>`;
+      <div class="ctx-head"><span class="name">${classic ? 'Overgrown pad' : 'Open ground'}</span><button class="x" aria-label="Close">✕</button></div>
+      <div class="ctx-info" style="margin:0 0 8px">${classic
+        ? 'Clear away the overgrowth to free this build pad.'
+        : 'No pad here yet. Lay stone <b>Foundations</b> and you can build a tower on top.'} Each new spot costs more than the last, so pick ones that cover the roads well.</div>
+      <div class="ctx-row"><button class="btn land-btn ${run.gold < cost ? 'disabled' : ''}">${classic ? 'Clear land' : 'Lay Foundations'} <span class="cost">${icon('coin')}${cost}</span></button></div>`;
     $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
     $(this.ctx, '.land-btn').onclick = () => this.cb.clearLand();
   }

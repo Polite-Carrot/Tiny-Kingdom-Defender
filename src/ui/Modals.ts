@@ -1139,7 +1139,7 @@ export function welcomeBack(game: Game, info: NonNullable<ReturnType<Game['s']['
 // --- Realms (maps) ------------------------------------------------------------------------------
 
 /** A tiny top-down sketch of a realm's roads and castle. */
-function mapSketch(def: MapDef): string {
+export function mapSketch(def: MapDef): string {
   const N = GRID_SIZE + 2;
   const s = (v: number) => ((v + 1) / N) * 100;
   const lines = def.roads.map((r, i) => `<polyline points="${r.points.map(([c, rr]) => `${s(c) + 3.3},${s(rr) + 3.3}`).join(' ')}" fill="none" stroke="${i === 0 ? '#c9a66b' : '#8f8070'}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" ${i ? 'stroke-dasharray="4 4"' : ''}/>`).join('');

@@ -191,3 +191,19 @@ describe('second hero slot', () => {
     expect(back.heroes[1].post).toBe(-1);
   });
 });
+
+describe('building before a new Age', () => {
+  it('the siege can be built on while it holds before a new Age, and starts on request', () => {
+    const snap = { ...newKingdom(), wave: 20, checkpoint: 20, gold: 2000 };
+    const run = new Run({ snapshot: snap, meta: newMeta().metaBonuses(), availableTowers: ['archer'], announceFrontiers: true });
+    run.callNextWave();
+    expect(run.holdingFor).toBe(20);
+    // Holding: no enemies come, but towers can still go up.
+    for (let i = 0; i < 30 * 5; i++) run.update(1 / 30);
+    expect(run.aliveCount()).toBe(0);
+    expect(run.build([...run.unlockedSpots][0], 'archer')).not.toBeNull();
+    run.continueFrontier();
+    expect(run.holdingFor).toBe(-1);
+    expect(run.waveIndex).toBe(21);
+  });
+});

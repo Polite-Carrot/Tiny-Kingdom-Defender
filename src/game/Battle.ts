@@ -150,18 +150,28 @@ export class Battle {
         <div class="ribbon ${roads.length ? 'lose' : 'purple'}">${roads.length && newAge ? `${title}` : title}</div>
         ${lines.join('')}
         ${towers.length ? `<div class="frontier-towers">${towers.map((t) => `<div><img src="${towerThumb(t)}" alt=""/><span>New tower<br/><b>${TOWERS[t].name}</b></span></div>`).join('')}</div>` : ''}`;
-      const go = el('button', 'btn big ready-btn', `Ready! <small>Wave ${wave + 1}</small>`);
-      go.onclick = () => {
+      const close = () => {
         h.close();
-        audio.play('waveStart');
         this.view.hideFrontier();
         rig.clearFocus();
         this.holdSim = false;
         meta.d.progress.frontierSeen = wave;
         meta.commit();
+      };
+      const go = el('button', 'btn big ready-btn', `Ready! <small>Wave ${wave + 1}</small>`);
+      go.onclick = () => {
+        close();
+        audio.play('waveStart');
         this.run.continueFrontier();
       };
-      m.append(go);
+      // Or look around and build first: the wave waits for the Start button.
+      const later = el('button', 'btn blue build-first-btn', `Build first <small>start when you're ready</small>`);
+      later.onclick = () => {
+        close();
+        audio.play('select');
+        ui.toast(`Tap Start when you're ready for wave ${wave + 1}`);
+      };
+      m.append(go, later);
     }, { closable: false, cls: 'frontier' });
   }
 
@@ -708,6 +718,13 @@ export class Battle {
   }
 
   nextWave(): void {
+    // Holding before a new Age or road (the player chose to build first): start it now.
+    if (this.run.holdingFor >= 0) {
+      if (this.holdSim) return;
+      this.s.audio.play('waveStart');
+      this.run.continueFrontier();
+      return;
+    }
     if (this.run.callNextWave()) this.tutorial?.onWaveStarted();
   }
 

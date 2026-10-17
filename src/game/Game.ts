@@ -85,6 +85,19 @@ export class Game {
       repairWall: () => this.battle?.repairWall(),
       removeWall: () => this.battle?.removeWall(),
       shop: () => this.openShopInSiege(),
+      rotateView: () => {
+        this.s.rig.rotateBy(Math.PI / 2);
+        this.s.audio.play('select');
+        if (!this.s.save.data.tutorial.hintsSeen.includes('cam_twist')) {
+          this.s.save.data.tutorial.hintsSeen.push('cam_twist');
+          this.s.ui.toast('Tip: twist two fingers on the map to turn it freely');
+        }
+      },
+      recentreView: () => {
+        this.s.rig.recentre();
+        this.s.audio.play('select');
+      },
+      viewMoved: () => this.s.rig.isMoved(),
     });
     ui.addScreen('battle', this.hud.el);
     this.title = new TitleScreen(this);

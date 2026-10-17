@@ -83,6 +83,32 @@ export class CameraRig {
   /** Menu mode: slowly circle the kingdom. */
   orbit = false;
   private yaw = 0;
+  /** The player's chosen viewing angle around the kingdom (radians; 0 = the standard view). */
+  private yawTarget = 0;
+
+  /** Turns the view around the kingdom. */
+  rotateBy(da: number): void {
+    this.yawTarget += da;
+  }
+
+  /** The current viewing angle (0 = standard). */
+  get viewYaw(): number {
+    return this.yaw;
+  }
+
+  /** Whether the player has turned, zoomed or panned away from the standard view. */
+  isMoved(): boolean {
+    const a = Math.atan2(Math.sin(this.yawTarget), Math.cos(this.yawTarget));
+    return Math.abs(a) > 0.02 || this.targetZoom > 1.02 || Math.hypot(this.pan.x, this.pan.y) > 0.05;
+  }
+
+  /** Back to the standard view: facing the gate, zoomed out and centred. */
+  recentre(): void {
+    // Turn back the short way.
+    this.yawTarget = Math.round(this.yawTarget / (Math.PI * 2)) * Math.PI * 2;
+    this.targetZoom = 1;
+    this.pan.set(0, 0);
+  }
   /** Cinematic focus: glide to a point and zoom in, then ease back when cleared. */
   private focus: { x: number; z: number; zoom: number } | null = null;
   private focusK = 0;
@@ -117,9 +143,11 @@ export class CameraRig {
     return this.targetZoom;
   }
 
+  /** Pans by a screen-relative amount (x = right, z = down the screen), whichever way the view faces. */
   panBy(dx: number, dz: number): void {
-    this.pan.x += dx;
-    this.pan.y += dz;
+    const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
+    this.pan.x += dx * c + dz * s;
+    this.pan.y += -dx * s + dz * c;
     this.clampPan();
   }
 
@@ -131,6 +159,8 @@ export class CameraRig {
 
   resetView(): void {
     this.targetZoom = 1;
+    this.pan.set(0, 0);
+    this.yawTarget = Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
   }
 
   shake(amount: number): void {
@@ -154,9 +184,9 @@ export class CameraRig {
     if (this.orbit) {
       this.yaw += dt * 0.07;
     } else {
-      // Ease back to the standard view.
-      const target = Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
-      this.yaw += (target - this.yaw) * Math.min(1, dt * 4);
+      // Ease to the player's chosen angle (after the menu's orbit, the nearest turn of it).
+      const target = this.yawTarget + Math.round((this.yaw - this.yawTarget) / (Math.PI * 2)) * Math.PI * 2;
+      this.yaw += (target - this.yaw) * Math.min(1, dt * 6);
     }
     const pitch = this.orbit ? PITCH - 0.42 : PITCH;
     // Smoothstep glide in and out of a cinematic focus.

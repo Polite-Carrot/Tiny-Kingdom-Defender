@@ -8,14 +8,45 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Tiny Kingdom Defender</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='22' width='44' height='34' rx='4' fill='%23d9cbb0'/%3E%3Crect x='6' y='14' width='14' height='42' rx='3' fill='%23c9b996'/%3E%3Crect x='44' y='14' width='14' height='42' rx='3' fill='%23c9b996'/%3E%3Cpath d='M4 16 13 4l9 12z M42 16l9-12 9 12z' fill='%23d9573f'/%3E%3Crect x='26' y='38' width='12' height='18' rx='6' fill='%2374492a'/%3E%3C/svg%3E" />
+    <style>
+      #pc-boot { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 200; background: #000; display: grid; place-items: center; pointer-events: none; opacity: 1; transition: opacity 0.55s ease; }
+      #pc-boot.done { opacity: 0; }
+      .pc-lockup { display: grid; justify-items: center; width: min(68vw, 52vh, 360px); }
+      .pc-mark { display: block; width: 92%; height: auto; opacity: 0; transform: scale(0.94); animation: pc-logo 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 0.18s forwards; }
+      .pc-name { display: block; width: 100%; height: auto; margin-top: 12px; opacity: 0; transform: translateY(8px); animation: pc-name 0.55s ease 0.72s forwards; }
+      @keyframes pc-logo { to { opacity: 1; transform: scale(1); } }
+      @keyframes pc-name { to { opacity: 1; transform: translateY(0); } }
+    </style>
   </head>
   <body>
+    <!-- Polite Carrot startup lockup, shared with Color Match & Merge and Tide-Runner. -->
+    <div id="pc-boot" aria-hidden="true">
+      <div class="pc-lockup">
+        <img class="pc-mark" src="/src/assets/polite-carrot-logo.svg" alt="" />
+        <img class="pc-name" src="/src/assets/polite-carrot-name.svg" alt="" />
+      </div>
+    </div>
     <canvas id="game"></canvas>
     <div id="ui"></div>
     <div id="boot" class="boot">
       <div class="boot__logo">Tiny Kingdom<br /><span>Defender</span></div>
       <div class="boot__bar"><div></div></div>
     </div>
+    <script>
+      // Hold the studio lockup for a beat after load, then fade into the game's own loader.
+      (function () {
+        var el = document.getElementById('pc-boot');
+        if (!el) return;
+        function done() {
+          if (el.classList.contains('done')) return;
+          el.classList.add('done');
+          setTimeout(function () { el.remove(); }, 650);
+        }
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.addEventListener('load', function () { setTimeout(done, reduced ? 100 : 1350); }, { once: true });
+        setTimeout(done, 4000);
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

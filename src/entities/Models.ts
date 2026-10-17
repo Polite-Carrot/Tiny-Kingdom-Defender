@@ -1339,6 +1339,22 @@ export function padModel(): THREE.BufferGeometry {
   });
 }
 
+/** Stone foundations laid on open ground: a square dressed-stone footing with corner blocks. */
+export function foundationModel(): THREE.BufferGeometry {
+  return cached('foundation', () => {
+    const b = new ModelBuilder();
+    b.box(0.9, 0.08, 0.9, '#8a8276', { y: 0.04 });
+    b.box(0.84, 0.05, 0.84, '#a49b8c', { y: 0.1 });
+    // Flagstone top (white so the pad colour tints it, like a pad).
+    for (const x of [-0.2, 0.2]) for (const z of [-0.2, 0.2]) b.box(0.36, 0.03, 0.36, '#ffffff', { x, y: 0.135, z });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(0.14, 0.09, 0.14, '#7d7468', { x: sx * 0.38, y: 0.15, z: sz * 0.38 });
+    // Mortar lines along the footing.
+    for (const sx of [-1, 1]) b.box(0.012, 0.05, 0.86, '#6a6258', { x: sx * 0.45, y: 0.05 });
+    for (const sz of [-1, 1]) b.box(0.86, 0.05, 0.012, '#6a6258', { y: 0.05, z: sz * 0.45 });
+    return b.build();
+  });
+}
+
 export function propModel(type: PropType): THREE.BufferGeometry {
   return cached(`prop-${type}`, () => {
     const b = new ModelBuilder();

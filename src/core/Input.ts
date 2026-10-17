@@ -1,4 +1,5 @@
-// Touch-first pointer input: tap, drag-to-pan, pinch/wheel zoom. Mouse works too.
+// Touch-first pointer input: tap, drag-to-pan, pinch/wheel zoom, two-finger twist to turn the view.
+// Mouse: right-drag (or shift-drag) turns, Q/E turn too.
 
 import * as THREE from 'three';
 import type { CameraRig } from './CameraRig';
@@ -15,6 +16,9 @@ export class Input {
   private pointers = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
   private pinchDist = 0;
   private pinchZoom = 1;
+  private twistAngle = 0;
+  /** Mouse drag that turns the view (right button or shift). */
+  private turning = false;
   private moved = false;
   private multi = false;
   private ray = new THREE.Raycaster();
@@ -28,6 +32,11 @@ export class Input {
     el.addEventListener('pointercancel', this.cancel);
     el.addEventListener('wheel', this.wheel, { passive: false });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('keydown', (e) => {
+      if (!this.enabled || (e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if (e.key === 'q' || e.key === 'Q') this.rig.rotateBy(-Math.PI / 4);
+      if (e.key === 'e' || e.key === 'E') this.rig.rotateBy(Math.PI / 4);
+    });
   }
 
   /** Screen -> board plane (y = 0). */
@@ -45,12 +54,14 @@ export class Input {
     if (this.pointers.size === 1) {
       this.moved = false;
       this.multi = false;
+      this.turning = e.pointerType === 'mouse' && (e.button === 2 || e.shiftKey);
     }
     if (this.pointers.size === 2) {
       this.multi = true;
       const [a, b] = [...this.pointers.values()];
       this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
       this.pinchZoom = this.rig.zoomTarget;
+      this.twistAngle = Math.atan2(b.y - a.y, b.x - a.x);
     }
   };
 
@@ -72,6 +83,17 @@ export class Input {
       const [a, b] = [...this.pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
       if (this.pinchDist > 0) this.rig.setZoom(this.pinchZoom * (d / this.pinchDist));
+      // Twisting two fingers turns the kingdom with them.
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      let da = ang - this.twistAngle;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      this.twistAngle = ang;
+      if (Math.abs(da) < 0.5) this.rig.rotateBy(-da);
+      return;
+    }
+    if (this.turning) {
+      if (this.moved) this.rig.rotateBy(-dx * 0.008);
       return;
     }
     if (this.moved && this.pointers.size === 1 && this.rig.zoom > 1.02) {

@@ -6,7 +6,7 @@ import * as Modals from './Modals';
 import type { Game } from '../game/Game';
 import { UNLOCK_WAVE } from '../data/base';
 import { ageTitle, checkpointOf } from '../game/Siege';
-import { MAP_BY_ID } from '../data/maps';
+import { MAPS, MAP_BY_ID } from '../data/maps';
 
 export class TitleScreen {
   readonly el: HTMLElement;
@@ -33,6 +33,11 @@ export class TitleScreen {
           <button class="side-btn records">${icon('trophy')}Records</button>
         </div>
         <div class="stack" style="display:flex;flex-direction:column;gap:10px;align-items:center">
+          <div class="realm-pick" style="display:none">
+            <button class="rp-arrow rp-prev" aria-label="Previous realm">‹</button>
+            <button class="rp-cur" aria-label="All realms"></button>
+            <button class="rp-arrow rp-next" aria-label="Next realm">›</button>
+          </div>
           <div class="kingdom-card"></div>
           <button class="btn big play">${icon('play')} Play</button>
           <button class="btn purple challenge-btn">${icon('swords')} Daily Challenge<i class="dot"></i></button>
@@ -48,6 +53,19 @@ export class TitleScreen {
     q('.kingdom-btn').onclick = () => this.gate('kingdom', () => this.kingdomHub());
     q('.records').onclick = () => this.recordsHub();
     q('.challenge-btn').onclick = () => this.gate('challenge', () => Modals.challenge(game));
+    // Realm picker: step through the realms you can play, or open the full list.
+    const step = (dir: number) => {
+      const meta = game.s.meta;
+      const open = MAPS.filter((m) => meta.mapUnlocked(m.id));
+      if (open.length < 2) return;
+      const i = open.findIndex((m) => m.id === meta.mapId());
+      const next = open[(i + dir + open.length) % open.length];
+      game.s.audio.play('select');
+      game.switchMap(next.id);
+    };
+    q('.rp-prev').onclick = () => step(-1);
+    q('.rp-next').onclick = () => step(1);
+    q('.rp-cur').onclick = () => Modals.realms(game);
     q('.version').onclick = () => {
       if (++this.versionTaps >= 5) {
         this.versionTaps = 0;
@@ -139,7 +157,16 @@ export class TitleScreen {
     const wave = base ? base.wave : 0;
     const card = $(this.el, '.kingdom-card');
     const realm = MAP_BY_ID[meta.mapId()];
-    const realmTag = meta.featureUnlocked('realms') ? `${realm.name} · ` : '';
+    const realmsOn = meta.featureUnlocked('realms');
+    const realmTag = '';
+    const pick = $(this.el, '.realm-pick');
+    pick.style.display = realmsOn ? '' : 'none';
+    if (realmsOn) {
+      const open = MAPS.filter((m) => meta.mapUnlocked(m.id));
+      const locked = MAPS.find((m) => !meta.mapUnlocked(m.id));
+      $(this.el, '.rp-cur').innerHTML = `<span class="rp-map">${Modals.mapSketch(realm)}</span><span class="rp-text"><b>${realm.name}</b><small>${open.length > 1 ? `Realm ${open.findIndex((m) => m.id === realm.id) + 1} of ${open.length}` : locked ? `Next realm at wave ${locked.unlockWave}` : ''}</small></span>`;
+      pick.querySelectorAll<HTMLButtonElement>('.rp-arrow').forEach((b) => b.classList.toggle('disabled', open.length < 2));
+    }
     card.innerHTML = base
       ? `<b>${realmTag}${ageTitle(wave)}</b> · Wave ${wave + 1}<br/><span>⚑ Checkpoint ${base.checkpoint ?? checkpointOf(wave)} · Best ${meta.mapBest(meta.mapId())} · ${base.towers.length} towers</span>`
       : `<b>${realmTag}Found your kingdom</b><br/><span>Build, upgrade and hold out for as long as you can</span>`;
