@@ -181,7 +181,10 @@ export class Game {
     } else if (o === 'portrait') {
       safe = { top: sa.top + 60, bottom: sa.bottom + 96, left: sa.left + 4, right: sa.right + 4 };
     } else {
-      safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: sa.left + (this.battle.run.hero ? 92 : 12), right: sa.right + 252 };
+      // The hero button sits on the left and the tower panel opens on the right. Split the margin
+      // evenly so the board stays centred: the panel then only overlaps the outer wall.
+      const side = (sa.left + (this.battle.run.hero ? 92 : 12) + sa.right + 252) / 2;
+      safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: side, right: side };
     }
     rig.frame(w, h, safe);
     renderer.setFogRange(rig.distance * 1.15, rig.distance + 120);
