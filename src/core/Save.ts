@@ -79,7 +79,23 @@ export interface SaveData {
   secondHero: HeroId | '';
   /** Experience earned by each hero. */
   heroXp: Partial<Record<HeroId, number>>;
-  cosmetics: { owned: string[]; castle: string; trail: string; hero: string; tower: string; flag: string };
+  cosmetics: { owned: string[]; castle: string; trail: string; hero: string; tower: string; flag: string; /** Season skin worn by each hero ('' or absent = none). */ heroSkins: Partial<Record<HeroId, string>> };
+  /** The monthly Reward Track. */
+  pass: {
+    month: string;
+    stars: number;
+    /** Tier numbers (1..30) already collected. */
+    claimed: number[];
+    /** Bonus chests collected after completing the track. */
+    bonusPaid: number;
+    /** Today's capped sources. */
+    day: string;
+    waveStars: number;
+    challenge: boolean;
+    login: boolean;
+    /** Rewards collected for you when last month ended (shown once, then 0). */
+    carried: number;
+  };
   settings: Settings;
   treasury: { lastCollect: number };
   chest: { nextFree: number; pendingMilestone: number };
@@ -127,7 +143,8 @@ export function defaultSave(now = Date.now()): SaveData {
     selectedHero: 'ranger',
     secondHero: '',
     heroXp: {},
-    cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none', hero: 'hero_none', tower: 'tower_none', flag: 'flag_none' },
+    cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none', hero: 'hero_none', tower: 'tower_none', flag: 'flag_none', heroSkins: {} },
+    pass: { month: '', stars: 0, claimed: [], bonusPaid: 0, day: '', waveStars: 0, challenge: false, login: false, carried: 0 },
     settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false, vibration: true },
     treasury: { lastCollect: now },
     chest: { nextFree: now, pendingMilestone: 0 },

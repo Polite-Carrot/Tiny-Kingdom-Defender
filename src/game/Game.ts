@@ -196,7 +196,7 @@ export class Game {
     } else {
       // The hero button sits on the left and the tower panel opens on the right. Split the margin
       // evenly so the board stays centred: the panel then only overlaps the outer wall.
-      const side = (sa.left + (this.battle.run.hero ? 92 : 12) + sa.right + 252) / 2;
+      const side = (sa.left + 12 + sa.right + 252) / 2;
       safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: side, right: side };
     }
     rig.frame(w, h, safe);

@@ -97,6 +97,9 @@ export class BattleView {
   private heroAnims: HeroAnimator[] = [];
   /** Soft coloured glow under the hero. */
   private heroAuras: THREE.Mesh[] = [];
+  /** Season skins worn by each hero slot (they override the Style hero tint). */
+  private heroSkins: ({ tint: string; glow: string; aura: string } | null)[] = [];
+  private heroSkinMats: THREE.MeshLambertMaterial[] = [];
   private foundations!: THREE.InstancedMesh;
   /** Foundations still rising after being laid (0..1). */
   private foundationRise = new Map<number, number>();
@@ -145,12 +148,13 @@ export class BattleView {
     readonly run: Run,
     private audio: AudioSystem,
     private hooks: ViewHooks,
-    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; heroGear2?: number; castleTier?: number; archers?: boolean; buildings?: BuildingId[]; heroTint?: string | null; towerTint?: string | null; flag?: string | null },
+    cosmetics: { castleColor: string; trailColor: string | null; heroGear?: number; heroGear2?: number; heroSkins?: ({ tint: string; glow: string; aura: string } | null)[]; castleTier?: number; archers?: boolean; buildings?: BuildingId[]; heroTint?: string | null; towerTint?: string | null; flag?: string | null },
   ) {
     this.theme = themeOf(run.waveIndex);
     this.trailColor = cosmetics.trailColor ? new THREE.Color(cosmetics.trailColor) : null;
     this.castleColor = cosmetics.castleColor;
     this.heroGears = [cosmetics.heroGear ?? 0, cosmetics.heroGear2 ?? 0];
+    this.heroSkins = cosmetics.heroSkins ?? [];
     this.castleTier = cosmetics.castleTier ?? 0;
     this.castleArchers = cosmetics.archers ?? false;
     this.buildings = cosmetics.buildings ?? [];
@@ -624,7 +628,7 @@ export class BattleView {
     for (const hero of this.run.heroes) {
       this.makeHeroAnimator(hero.slot);
       const aura = new THREE.Mesh(auraGeo, this.track(new THREE.MeshBasicMaterial({
-        color: new THREE.Color(hero.def.color).multiplyScalar(1.4), transparent: true, opacity: 0.32, depthWrite: false, map: this.auraTexture(),
+        color: new THREE.Color(this.heroSkins[hero.slot]?.aura ?? hero.def.color).multiplyScalar(1.4), transparent: true, opacity: 0.32, depthWrite: false, map: this.auraTexture(),
       })));
       this.heroAuras[hero.slot] = aura;
       this.root.add(aura);
@@ -1273,12 +1277,25 @@ export class BattleView {
     return m;
   }
 
+  /** A season skin: the hero's colours tinted, with a soft glow. */
+  private heroMaterialFor(slot: number): THREE.MeshLambertMaterial {
+    const skin = this.heroSkins[slot];
+    if (!skin) return this.heroMaterial;
+    if (!this.heroSkinMats[slot]) {
+      const m = this.track(this.material.clone()) as THREE.MeshLambertMaterial;
+      m.color.set(skin.tint);
+      m.emissive.set(skin.glow);
+      this.heroSkinMats[slot] = m;
+    }
+    return this.heroSkinMats[slot];
+  }
+
   private makeHeroAnimator(slot: number): void {
     const hero = this.run.heroes[slot];
     if (!hero) return;
     const old = this.heroAnims[slot];
     if (old) this.root.remove(old.root);
-    const anim = new HeroAnimator(hero.def.id, this.heroMaterial, (x, z) =>
+    const anim = new HeroAnimator(hero.def.id, this.heroMaterialFor(slot), (x, z) =>
       this.particles.burst(x, 0.04, z, this.theme.id === 'snow' ? '#ffffff' : this.theme.pathEdge, 2, { speed: 0.4, up: 0.5, size: 0.06, gravity: 1, life: 0.35 }), this.heroGears[slot] ?? 0);
     this.heroAnims[slot] = anim;
     this.root.add(anim.root);

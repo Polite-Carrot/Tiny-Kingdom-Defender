@@ -169,14 +169,15 @@ export class Hud {
     this.lastWaveKey = this.lastCtxKey = '';
     this.closeCtx();
     const hero = run.hero;
-    this.heroWrap.style.display = hero ? '' : 'none';
+    // Heroes are tapped on the map; their faces are the ability buttons, so no portrait is needed.
+    this.heroWrap.style.display = 'none';
     this.el.classList.toggle('no-hero', !hero);
     this.el.classList.toggle('two-heroes', run.heroes.length > 1);
     // Spell bar: one button per unlocked spell.
     const spellsEl = $(this.el, '.hud-spells');
     const spells = SPELLS.filter((s) => run.config.meta.spells?.[s.id] !== undefined);
     // Heroes' abilities sit with the spells, nearest the hero portraits.
-    const abilities = run.heroes.map((h, i) => `<button class="spell-btn ability-btn" data-ability="${i}" style="--sc:${h.def.color}" aria-label="${h.def.name}: ${h.def.ability.name}" title="${h.def.ability.name}: ${h.def.ability.description}"><span class="ico">${ICONS[ABILITY_ICON[h.def.ability.kind]]}</span><span class="cd"></span></button>`).join('');
+    const abilities = run.heroes.map((h, i) => `<button class="spell-btn ability-btn" data-ability="${i}" style="--sc:${h.def.color}" aria-label="${h.def.name}: ${h.def.ability.name}" title="${h.def.name}: ${h.def.ability.name}. ${h.def.ability.description}"><img class="ab-face" src="${heroThumb(h.def.id)}" alt=""/><span class="ab-badge">${ICONS[ABILITY_ICON[h.def.ability.kind]]}</span><span class="cd"></span></button>`).join('');
     spellsEl.innerHTML = abilities + spells.map((s) => `<button class="spell-btn" data-spell="${s.id}" style="--sc:${s.color}" aria-label="${s.name}" title="${s.name}: ${s.description}"><span class="ico">${ICONS[s.icon]}</span><span class="cd"></span></button>`).join('');
     this.abilityBtns = [...spellsEl.querySelectorAll<HTMLButtonElement>('[data-ability]')];
     this.abilityCds = this.abilityBtns.map((b) => $(b, '.cd'));
@@ -329,7 +330,7 @@ export class Hud {
       const afford = this.ctxMode === 'build'
         ? TOWER_ORDER.map((id) => (run.gold >= TOWERS[id].cost ? 1 : 0)).join('') + run.config.availableTowers.join()
         : this.ctxMode === 'land'
-          ? String(run.gold >= run.clearLandCost())
+          ? String(run.gold >= run.landCost(this.ctxSpot))
           : this.ctxMode === 'wall'
             ? this.wallKey()
           : String(t && run.gold >= (run.upgradeCost(t) ?? Infinity));
@@ -438,13 +439,13 @@ export class Hud {
 
   private renderLand(): void {
     const run = this.run!;
-    const cost = run.clearLandCost();
+    const cost = run.landCost(this.ctxSpot);
     const classic = run.map.isClassic(this.ctxSpot);
     this.ctx.innerHTML = `
       <div class="ctx-head"><span class="name">${classic ? 'Overgrown pad' : 'Open ground'}</span><button class="x" aria-label="Close">✕</button></div>
       <div class="ctx-info" style="margin:0 0 8px">${classic
         ? 'Clear away the overgrowth to free this build pad.'
-        : 'No pad here yet. Lay stone <b>Foundations</b> and you can build a tower on top.'} Each new spot costs more than the last, so pick ones that cover the roads well.</div>
+        : 'No pad here yet. Lay stone <b>Foundations</b> (half the price of clearing an overgrown pad) and you can build a tower on top.'} Each new spot costs more than the last, so pick ones that cover the roads well.</div>
       <div class="ctx-row"><button class="btn land-btn ${run.gold < cost ? 'disabled' : ''}">${classic ? 'Clear land' : 'Lay Foundations'} <span class="cost">${icon('coin')}${cost}</span></button></div>`;
     $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
     $(this.ctx, '.land-btn').onclick = () => this.cb.clearLand();

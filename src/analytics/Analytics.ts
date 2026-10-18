@@ -2,6 +2,7 @@
 
 export type AnalyticsEventName =
   | 'session_start'
+  | 'pass_tier_claimed'
   | 'level_start'
   | 'achievement_unlocked'
   | 'welcome_back_shown'

@@ -9,7 +9,7 @@ import { COSMETICS } from '../data/economy';
 import { BUILDINGS, type BuildingId } from '../data/kingdom';
 
 const thumbs = new Map<string, string>();
-let shotFn: ((key: string, parts: { geo: THREE.BufferGeometry; y?: number }[], yaw?: number, pitch?: number, zoom?: number) => void) | null = null;
+let shotFn: ((key: string, parts: { geo: THREE.BufferGeometry; y?: number }[], yaw?: number, pitch?: number, zoom?: number, look?: { tint: string; glow: string }) => void) | null = null;
 
 export function thumb(key: string): string {
   return thumbs.get(key) ?? '';
@@ -26,6 +26,13 @@ export function towerThumb(id: TowerId, tier = 1, branch = -1): string {
 }
 export const enemyThumb = (id: EnemyId) => thumb(`enemy-${id}`);
 export const heroThumb = (id: HeroId) => thumb(`hero-${id}`);
+
+/** A hero portrait in a season skin (rendered on demand). */
+export function heroSkinThumb(id: HeroId, skin: { id: string; tint: string; glow: string }): string {
+  const key = `heroskin-${skin.id}`;
+  if (!thumbs.has(key) && shotFn) shotFn(key, [{ geo: heroModel(id) }], 0.4, 0.2, 1.25, skin);
+  return thumbs.get(key) ?? heroThumb(id);
+}
 export const buildingThumb = (id: BuildingId) => thumb(`building-${id}`);
 
 export function renderThumbnails(): void {
@@ -50,7 +57,9 @@ export function renderThumbnails(): void {
   const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 
-  const shot = (key: string, parts: { geo: THREE.BufferGeometry; y?: number }[], yaw = 0.6, pitch = 0.45, zoom = 1) => {
+  const shot = (key: string, parts: { geo: THREE.BufferGeometry; y?: number }[], yaw = 0.6, pitch = 0.45, zoom = 1, look?: { tint: string; glow: string }) => {
+    mat.color.set(look ? look.tint : '#ffffff');
+    mat.emissive.set(look ? look.glow : '#000000');
     const group = new THREE.Group();
     for (const p of parts) {
       const m = new THREE.Mesh(p.geo, mat);

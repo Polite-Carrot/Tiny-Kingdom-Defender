@@ -91,7 +91,7 @@ export class Battle {
         this.hud.castleHit();
         vibrate(35);
       },
-    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), heroGear2: meta.secondHero() ? gearTierFor(meta.heroLevel(meta.secondHero()!)) : 0, castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings], heroTint: meta.cosmeticTint('hero'), towerTint: meta.cosmeticTint('tower'), flag: meta.flagColor() });
+    }, { castleColor: meta.castleColor(), trailColor: meta.trailColor(), heroGear: gearTierFor(meta.heroLevel(meta.d.selectedHero)), heroGear2: meta.secondHero() ? gearTierFor(meta.heroLevel(meta.secondHero()!)) : 0, heroSkins: [meta.heroSkin(meta.d.selectedHero), meta.secondHero() ? meta.heroSkin(meta.secondHero()!) : null], castleTier: meta.castleTier(), archers: (meta.d.meta.battlements ?? 0) > 0, buildings: [...meta.d.buildings], heroTint: meta.cosmeticTint('hero'), towerTint: meta.cosmeticTint('tower'), flag: meta.flagColor() });
     if (opts.demo) return;
 
     if (!s.save.data.base && !c) this.persist(true);
@@ -274,6 +274,7 @@ export class Battle {
     });
     ev.on('waveCleared', ({ index }) => {
       this.wavesServed++;
+      meta.passAdd('wave');
       this.flushMastery();
       if (nightOf(index) >= 1) meta.d.life.nightWaves = (meta.d.life.nightWaves ?? 0) + 1;
       if (weatherOf(index) !== 'clear') meta.d.life.weatherWaves = (meta.d.life.weatherWaves ?? 0) + 1;
@@ -692,7 +693,7 @@ export class Battle {
   clearLand(): void {
     const spot = this.hud.selectedSpot;
     if (spot < 0) return;
-    if (this.run.gold < this.run.clearLandCost()) return this.notEnoughGold();
+    if (this.run.gold < this.run.landCost(spot)) return this.notEnoughGold();
     if (this.run.clearLand(spot)) {
       this.hud.openBuild(spot);
       this.tutorial?.onLandCleared();

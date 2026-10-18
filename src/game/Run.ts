@@ -9,6 +9,9 @@ import {
 import { HEROES, REINFORCEMENT, HERO_LEVELS, HERO_POST, type HeroDef, type HeroId } from '../data/heroes';
 import { TOWER_META, AD_REWARDS, BATTLEMENTS } from '../data/economy';
 import { SIEGE, BARRICADE } from '../data/base';
+
+/** Foundations on open ground cost this share of clearing an overgrown pad. */
+const FOUNDATION_PRICE = 0.5;
 import { Emitter } from '../core/Emitter';
 import { Random } from '../core/Random';
 import { tileToWorld, type LevelMap, type PathPoint } from './LevelMap';
@@ -689,8 +692,15 @@ export class Run {
     return this.unlockedSpots.has(spot);
   }
 
+  /** Gold to clear the next overgrown pad. */
   clearLandCost(): number {
     return clearLandCost(this.padsCleared);
+  }
+
+  /** Gold to open a spot: an overgrown pad, or Foundations on open ground (half price). */
+  landCost(spot: number): number {
+    const c = this.clearLandCost();
+    return this.map.isClassic(spot) ? c : Math.ceil((c * FOUNDATION_PRICE) / 5) * 5;
   }
 
   towerAt(spot: number): Tower | undefined {
@@ -866,7 +876,7 @@ export class Run {
   /** Spend gold to clear land and unlock a build pad. */
   clearLand(spot: number): boolean {
     if (this.unlockedSpots.has(spot) || !this.map.buildSpots[spot]) return false;
-    const cost = this.clearLandCost();
+    const cost = this.landCost(spot);
     if (this.gold < cost) return false;
     this.addGold(-cost);
     this.unlockedSpots.add(spot);

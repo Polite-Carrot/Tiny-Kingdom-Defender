@@ -50,6 +50,8 @@ export const CHESTS = {
   /** Earned at every checkpoint reached for the first time. */
   milestone: { coinsMin: 100, coinsMax: 160, shardsMin: 5, shardsMax: 10 },
   daily: { coinsMin: 150, coinsMax: 220, shardsMin: 8, shardsMax: 14 },
+  /** From the monthly Reward Track. */
+  track: { coinsMin: 220, coinsMax: 340, shardsMin: 10, shardsMax: 16 },
 };
 
 /** 7-day login cycle. Day 7 is a chest. */

@@ -2,7 +2,8 @@
 
 import { el, $, fmt, fmtTime } from './dom';
 import { icon, ICONS } from './icons';
-import { towerThumb, heroThumb, thumb, enemyThumb, buildingThumb } from './Thumbnails';
+import { towerThumb, heroThumb, thumb, enemyThumb, buildingThumb, heroSkinThumb } from './Thumbnails';
+import { PASS, PASS_TIERS, seasonFor, daysLeftInMonth, type PassReward, type Season } from '../data/pass';
 import type { Game } from '../game/Game';
 import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, isSupport, type TowerId } from '../data/towers';
@@ -385,7 +386,7 @@ export function heroes(game: Game): void {
         const bar = (label: string, v: number) => `<div class="hstat"><span>${label}</span><i><b style="width:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></b></i></div>`;
         const dps = h.damage / h.cooldown;
         return `<div class="hero-card ${sel || isPartner ? 'sel' : ''} ${owned ? '' : 'locked'}" style="--hc:${h.color}">
-          <div class="portrait"><img src="${heroThumb(id)}" alt=""/>${owned ? '' : `<span class="lock">${ICONS.lock}</span>`}</div>
+          <div class="portrait"><img src="${meta.heroSkin(id) ? heroSkinThumb(id, meta.heroSkin(id)!) : heroThumb(id)}" alt=""/>${owned ? '' : `<span class="lock">${ICONS.lock}</span>`}</div>
           <div class="body">
             <div class="name">${h.name} <span class="muted">${h.title}</span></div>
             ${owned ? (() => {
@@ -401,11 +402,18 @@ export function heroes(game: Game): void {
             <div class="desc" style="font-weight:800">${h.hitsAir ? 'Hits flyers too' : 'Ground enemies only'}</div>
             <div class="ability"><span class="aico">${ICONS[ABILITY_ICONS[h.ability.kind]]}</span><span><b>${h.ability.name}</b> ${h.ability.description}</span></div>
             ${owned ? perkRow(game, id) : ''}
+            ${meta.heroSkinsOwned(id).length ? `<div class="skin-row"><span>Skin</span>${[{ id: '', name: 'Classic' }, ...meta.heroSkinsOwned(id)].map((k) => `<button class="skin-pill ${(meta.heroSkin(id)?.id ?? '') === k.id ? 'on' : ''}" data-hero="${id}" data-skin="${k.id}">${k.name}</button>`).join('')}</div>` : ''}
           </div>
           <div class="act">${btn}</div></div>`;
       }).join('')}</div><div class="muted" style="text-align:center;margin-top:8px">Hero Training in the Shop boosts every hero.</div>`;
       m.querySelectorAll<HTMLButtonElement>('[data-sel]').forEach((b) => (b.onclick = () => {
         meta.selectHero(b.dataset.sel as typeof d.selectedHero);
+        render();
+      }));
+      m.querySelectorAll<HTMLButtonElement>('[data-skin]').forEach((b) => (b.onclick = () => {
+        meta.equipHeroSkin(b.dataset.hero as HeroId, b.dataset.skin ?? '');
+        game.s.audio.play('select');
+        game.refreshCosmetics();
         render();
       }));
       m.querySelectorAll<HTMLButtonElement>('[data-partner]').forEach((b) => (b.onclick = () => {
@@ -534,7 +542,7 @@ export function chestReveal(game: Game, reward: ChestReward): void {
   const { audio } = game.s;
   const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   game.s.ui.modal((m, h) => {
-    m.innerHTML = `<div class="ribbon purple">${reward.kind === 'milestone' ? 'Milestone Chest' : reward.kind === 'daily' ? 'Day 7 Chest' : 'Free Chest'}</div>
+    m.innerHTML = `<div class="ribbon purple">${reward.kind === 'milestone' ? 'Milestone Chest' : reward.kind === 'daily' ? 'Day 7 Chest' : reward.kind === 'track' ? 'Reward Track Chest' : 'Free Chest'}</div>
       <div class="chest-stage kind-${reward.kind}">
         <div class="chest-rays"></div><div class="chest-glow"></div>
         <div class="chest-box">${chestSvg()}</div>
@@ -961,21 +969,28 @@ export function trophies(game: Game): void {
   game.s.ui.modal((m) => {
     const d = meta.d;
     const done = ACHIEVEMENTS.filter((a) => d.achievements.includes(a.id)).length;
-    const rows = ACHIEVEMENTS.map((a) => {
+    const row = (a: (typeof ACHIEVEMENTS)[number]) => {
       const got = d.achievements.includes(a.id);
       const p = Math.min(a.target, a.progress(d));
       const frac = got ? 1 : p / a.target;
-      return `<div class="trophy ${got ? 'got' : ''}">
-        <div class="tico">${icon(a.icon as 'trophy')}</div>
+      // Foes show their portrait (a silhouette until you've met them, as in the Bestiary).
+      const face = a.enemy ? `<img class="${(d.bestiary[a.enemy]?.seen ?? 0) > 0 ? '' : 'unseen'}" src="${enemyThumb(a.enemy)}" alt=""/>` : icon(a.icon as 'trophy');
+      return `<div class="trophy ${got ? 'got' : ''} ${a.enemy ? 'foe' : ''}">
+        <div class="tico">${face}</div>
         <div class="tbody"><b>${a.name}</b><span>${a.description}</span>
           <i class="tbar"><b style="width:${Math.round(frac * 100)}%"></b></i>
           <small>${got ? 'Unlocked' : `${fmt(Math.floor(p))} / ${fmt(a.target)}`}</small></div>
         <div class="treward">${got ? '✓' : `+${a.reward.coins} ${icon('coin', 'inline')}${a.reward.gems ? `<br/>+${a.reward.gems} ${icon('gem', 'inline')}` : ''}`}</div>
       </div>`;
-    }).join('');
+    };
+    const general = ACHIEVEMENTS.filter((a) => !a.enemy);
+    const foes = ACHIEVEMENTS.filter((a) => a.enemy);
+    const foesDone = foes.filter((a) => d.achievements.includes(a.id)).length;
     m.innerHTML = `<div class="ribbon purple">Trophy Room</div>
       <div class="trophy-summary"><b>${done}</b> of ${ACHIEVEMENTS.length} trophies<i class="tbar"><b style="width:${Math.round((done / ACHIEVEMENTS.length) * 100)}%"></b></i></div>
-      <div class="trophies">${rows}</div>`;
+      <div class="trophies">${general.map(row).join('')}</div>
+      <div class="stat-section">Foes defeated · ${foesDone}/${foes.length}</div>
+      <div class="trophies">${foes.map(row).join('')}</div>`;
   }, { wide: true });
 }
 
@@ -1375,4 +1390,113 @@ export function hub(game: Game, title: string, tiles: HubTile[]): void {
       setTimeout(t.open, 120);
     }));
   });
+}
+
+// --- Reward Track -------------------------------------------------------------------------------
+
+/** One tier's reward as a small icon + label. */
+function passRewardHtml(r: PassReward, season: Season): { icon: string; label: string } {
+  if (r.kind === 'coins') return { icon: ICONS.coin, label: fmt(r.amount) };
+  if (r.kind === 'shards') return { icon: ICONS.gem, label: String(r.amount) };
+  if (r.kind === 'heroXp') return { icon: ICONS.scroll, label: `${r.amount} XP` };
+  if (r.kind === 'chest') return { icon: ICONS.chest, label: r.shards ? `+${r.shards}${ICONS.gem.replace('<svg', '<svg style="width:12px;height:12px;vertical-align:-2px"')}` : 'Chest' };
+  return { icon: `<img src="${heroSkinThumb(season.skin.hero, season.skin)}" alt=""/>`, label: 'Skin' };
+}
+
+/**
+ * The monthly Reward Track: 30 tiers climbed with stars from daily play, with the month's own
+ * hero skin at the top.
+ */
+export function rewardTrack(game: Game): void {
+  const { meta, audio, ui } = game.s;
+  ui.modal((m) => {
+    const render = (scrollTo = true) => {
+      const p = meta.pass();
+      const now = new Date();
+      const season = seasonFor(now);
+      const tier = meta.passTier();
+      const done = tier >= PASS.tiers;
+      const into = done ? PASS.starsPerTier : p.stars - tier * PASS.starsPerTier;
+      const claimable = meta.passClaimable();
+      const skin = season.skin;
+      const heroName = HEROES[skin.hero].name;
+      const days = daysLeftInMonth(now);
+      const today = [
+        { label: 'Visit today', got: p.login ? PASS.starsLogin : 0, max: PASS.starsLogin },
+        { label: 'Waves cleared', got: p.waveStars, max: PASS.waveCapPerDay, note: `${PASS.starsPerWave} per wave` },
+        { label: 'Daily Challenge', got: p.challenge ? PASS.starsChallenge : 0, max: PASS.starsChallenge },
+        { label: 'Daily missions', got: null, max: PASS.starsPerMission, note: `${PASS.starsPerMission} per mission` },
+      ];
+      const tiles = PASS_TIERS.map((r, i) => {
+        const t = i + 1;
+        const got = p.claimed.includes(t);
+        const ready = t <= tier && !got;
+        const { icon: ic, label } = passRewardHtml(r, season);
+        return `<button class="pt ${got ? 'got' : ready ? 'ready' : t <= tier ? '' : 'locked'} ${r.kind === 'skin' ? 'skin' : ''}" data-tier="${t}" ${ready ? '' : 'tabindex="-1"'}>
+          <small>${t}</small><span class="pt-ico">${ic}</span><b>${label}</b>${got ? '<i class="pt-tick">✓</i>' : ''}</button>`;
+      }).join('');
+      const bonus = meta.passBonusDue();
+      m.innerHTML = `
+        <div class="ribbon" style="background:${season.color}">${icon('crown')} ${season.name}</div>
+        <div class="pass-head">
+          <div class="pass-skin" style="--sc:${skin.aura}"><img src="${heroSkinThumb(skin.hero, skin)}" alt=""/></div>
+          <div class="pass-info">
+            <small>Tier 30 reward · this month only</small>
+            <b>${skin.name}</b>
+            <span>A ${heroName} skin. ${season.blurb}</span>
+            <span class="pass-days">${days} day${days > 1 ? 's' : ''} left</span>
+          </div>
+        </div>
+        <div class="pass-progress">
+          <div class="pass-tier">Tier <b>${tier}</b>/30</div>
+          <div class="pass-bar"><i style="width:${Math.round((into / PASS.starsPerTier) * 100)}%"></i><span>${done ? 'Track complete!' : `${into}/${PASS.starsPerTier} ${icon('star', 'inline')}`}</span></div>
+        </div>
+        ${claimable > 1 ? `<button class="btn gold collect-all">Collect all (${claimable})</button>` : ''}
+        <div class="pass-track">${tiles}</div>
+        ${done ? `<div class="pass-bonus">${icon('chest', 'inline')}Bonus chest every ${PASS.bonusEvery} stars past the end. ${bonus > 0 ? `<button class="btn small gold bonus">Open (${bonus})</button>` : ''}</div>` : ''}
+        <div class="pass-today"><div class="pt-title">Stars today</div>${today.map((x) => `<div class="pt-row"><span>${x.label}${x.note ? ` <small>${x.note}</small>` : ''}</span><b>${x.got === null ? `+${x.max}` : `${x.got}/${x.max}`}</b></div>`).join('')}
+          <div class="pt-foot">Waves are capped each day, so the track takes a few weeks of regular play. Rewards reset each month; anything reached but not collected is collected for you.</div></div>`;
+      const claim = (t: number, quiet = false) => {
+        const r = meta.claimPassTier(t);
+        if (!r) return;
+        if (r.skin) {
+          audio.play('victory');
+          ui.banner(`${r.skin.name} unlocked!`, `${HEROES[r.skin.hero].name} wears it in battle. Change skins in the Heroes menu.`);
+        } else if (r.chest && !quiet) {
+          chestReveal(game, r.chest);
+        } else audio.play('reward');
+        refreshCoins(game);
+      };
+      m.querySelectorAll<HTMLButtonElement>('.pt.ready').forEach((b) => (b.onclick = () => {
+        claim(Number(b.dataset.tier));
+        render(false);
+      }));
+      m.querySelector<HTMLButtonElement>('.collect-all')?.addEventListener('click', () => {
+        let n = 0;
+        for (let t = 1; t <= meta.passTier(); t++) if (!meta.d.pass.claimed.includes(t)) {
+          claim(t, true);
+          n++;
+        }
+        while (meta.claimPassBonus()) n++;
+        ui.toast(`Collected ${n} rewards`);
+        refreshCoins(game);
+        render(false);
+      });
+      m.querySelector<HTMLButtonElement>('.bonus')?.addEventListener('click', () => {
+        const r = meta.claimPassBonus();
+        if (r) chestReveal(game, r);
+        render(false);
+      });
+      // Scroll the track to the current tier.
+      if (scrollTo) {
+        const track = $(m, '.pass-track');
+        // The first reward waiting to be collected, else the next tier to reach.
+        let focus = tier + 1;
+        for (let t = 1; t <= tier; t++) if (!meta.d.pass.claimed.includes(t)) { focus = t; break; }
+        const cur = track.querySelector<HTMLElement>(`[data-tier="${Math.min(PASS.tiers, focus)}"]`);
+        requestAnimationFrame(() => { if (cur) track.scrollLeft = cur.offsetLeft - track.clientWidth / 2 + cur.clientWidth / 2; });
+      }
+    };
+    render();
+  }, { wide: true, onClose: () => refreshCoins(game) });
 }

@@ -9,6 +9,7 @@ import {
 import { MISSION_POOL, MISSIONS_PER_DAY, type MissionDef, type MissionStat } from '../data/missions';
 import { TOWER_UNLOCK_WAVE, UNLOCK_WAVE } from '../data/base';
 import { HEROES, heroLevelFor, gearTierFor, PERK_TIERS, type HeroId, type PerkId } from '../data/heroes';
+import { PASS, PASS_TIERS, SKIN_BY_ID, monthKey, seasonFor, type PassReward, type SeasonSkin } from '../data/pass';
 import { SPELLS, SPELL_BY_ID, SPELL_RULES, type SpellId } from '../data/spells';
 import { ACHIEVEMENTS, type AchievementDef } from '../data/achievements';
 import type { EnemyId } from '../data/enemies';
@@ -33,7 +34,7 @@ function dayNumber(key: string): number {
 export interface ChestReward {
   coins: number;
   shards: number;
-  kind: 'free' | 'milestone' | 'daily';
+  kind: 'free' | 'milestone' | 'daily' | 'track';
 }
 
 export type MetaUpgradeKey = keyof typeof META_UPGRADES;
@@ -307,7 +308,9 @@ export class Meta {
 
   /** Ends today's attempt: pays coins, and a chest for a new personal best. */
   finishChallenge(score: number): { coins: number; newBest: boolean; prevBest: number; chest: ChestReward | null } {
-    return this.settleChallenge(this.challengeState(), score);
+    const r = this.settleChallenge(this.challengeState(), score);
+    this.passAdd('challenge');
+    return r;
   }
 
   private settleChallenge(st: SaveData['challenge'], score: number): { coins: number; newBest: boolean; prevBest: number; chest: ChestReward | null } {
@@ -742,7 +745,10 @@ export class Meta {
       if (!def || def.stat !== stat || s.claimed) continue;
       const before = s.progress;
       s.progress = Math.min(def.target, s.progress + amount);
-      if (before < def.target && s.progress >= def.target) completed.push(def.text);
+      if (before < def.target && s.progress >= def.target) {
+        completed.push(def.text);
+        this.passAdd('mission');
+      }
     }
     return completed;
   }
@@ -777,10 +783,132 @@ export class Meta {
     return AD_REWARDS.shopBundleCoins;
   }
 
+  // --- Reward Track ---------------------------------------------------------------------
+
+  /** The track for this month (rolls over: last month's unclaimed rewards are collected for you). */
+  pass(now = new Date()): SaveData['pass'] {
+    const p = this.d.pass;
+    const month = monthKey(now);
+    if (p.month !== month) {
+      let carried = 0;
+      if (p.month) {
+        for (const t of this.passReachable()) if (!p.claimed.includes(t)) {
+          this.grantPassReward(PASS_TIERS[t - 1], p.month);
+          carried++;
+        }
+        const bonus = this.passBonusDue();
+        for (let i = 0; i < bonus; i++) this.grantChest(this.rollChest('track'));
+        carried += bonus;
+      }
+      Object.assign(p, { month, stars: 0, claimed: [], bonusPaid: 0, carried });
+    }
+    const day = dayKey(now);
+    if (p.day !== day) Object.assign(p, { day, waveStars: 0, challenge: false, login: false });
+    return p;
+  }
+
+  /** Stars earned towards the track. Daily caps keep it a few weeks' climb. Returns stars added. */
+  passAdd(source: 'wave' | 'mission' | 'challenge' | 'login', now = new Date()): number {
+    const p = this.pass(now);
+    let n = 0;
+    if (source === 'wave') {
+      n = Math.max(0, Math.min(PASS.starsPerWave, PASS.waveCapPerDay - p.waveStars));
+      p.waveStars += n;
+    } else if (source === 'mission') n = PASS.starsPerMission;
+    else if (source === 'challenge' && !p.challenge) {
+      p.challenge = true;
+      n = PASS.starsChallenge;
+    } else if (source === 'login' && !p.login) {
+      p.login = true;
+      n = PASS.starsLogin;
+    }
+    p.stars += n;
+    return n;
+  }
+
+  /** Highest tier reached (0..30). */
+  passTier(): number {
+    return Math.min(PASS.tiers, Math.floor(this.d.pass.stars / PASS.starsPerTier));
+  }
+
+  /** Tier numbers reached so far. */
+  private passReachable(): number[] {
+    return Array.from({ length: this.passTier() }, (_, i) => i + 1);
+  }
+
+  /** Bonus chests earned past the end of the track and not yet collected. */
+  passBonusDue(): number {
+    const over = this.d.pass.stars - PASS.tiers * PASS.starsPerTier;
+    return over < 0 ? 0 : Math.max(0, Math.floor(over / PASS.bonusEvery) - this.d.pass.bonusPaid);
+  }
+
+  /** Rewards ready to collect. */
+  passClaimable(): number {
+    this.pass();
+    return this.passReachable().filter((t) => !this.d.pass.claimed.includes(t)).length + this.passBonusDue();
+  }
+
+  /** Collects a tier's reward (chests are opened on the spot). */
+  claimPassTier(tier: number): { reward: PassReward; chest: ChestReward | null; skin: SeasonSkin | null } | null {
+    const p = this.pass();
+    if (tier < 1 || tier > this.passTier() || p.claimed.includes(tier)) return null;
+    p.claimed.push(tier);
+    const reward = PASS_TIERS[tier - 1];
+    const out = this.grantPassReward(reward, p.month);
+    this.analytics.track('pass_tier_claimed', { tier, month: p.month, kind: reward.kind });
+    this.commit();
+    return { reward, ...out };
+  }
+
+  claimPassBonus(): ChestReward | null {
+    if (this.passBonusDue() <= 0) return null;
+    this.d.pass.bonusPaid++;
+    const r = this.grantChest(this.rollChest('track'));
+    this.commit();
+    return r;
+  }
+
+  private grantPassReward(r: PassReward, month: string): { chest: ChestReward | null; skin: SeasonSkin | null } {
+    let chest: ChestReward | null = null;
+    let skin: SeasonSkin | null = null;
+    if (r.kind === 'coins') this.earn(r.amount, 'reward_track');
+    else if (r.kind === 'shards') this.d.shards += r.amount;
+    else if (r.kind === 'heroXp') this.addHeroXp(this.d.selectedHero, r.amount);
+    else if (r.kind === 'chest') {
+      chest = this.grantChest(this.rollChest('track'));
+      if (r.shards) this.d.shards += r.shards;
+    } else {
+      this.d.shards += r.shards;
+      skin = seasonFor(new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 15)).skin;
+      if (!this.d.cosmetics.owned.includes(skin.id)) this.d.cosmetics.owned.push(skin.id);
+      // Wear it straight away if that hero isn't already wearing one.
+      if (!this.d.cosmetics.heroSkins[skin.hero]) this.d.cosmetics.heroSkins[skin.hero] = skin.id;
+    }
+    return { chest, skin };
+  }
+
+  /** Season skins owned for a hero. */
+  heroSkinsOwned(id: HeroId): SeasonSkin[] {
+    return this.d.cosmetics.owned.map((o) => SKIN_BY_ID[o]).filter((k): k is SeasonSkin => !!k && k.hero === id);
+  }
+
+  /** The season skin a hero wears, if any. */
+  heroSkin(id: HeroId): SeasonSkin | null {
+    const k = SKIN_BY_ID[this.d.cosmetics.heroSkins[id] ?? ''];
+    return k && this.d.cosmetics.owned.includes(k.id) ? k : null;
+  }
+
+  equipHeroSkin(id: HeroId, skinId: string): void {
+    if (skinId && (!this.d.cosmetics.owned.includes(skinId) || SKIN_BY_ID[skinId]?.hero !== id)) return;
+    this.d.cosmetics.heroSkins[id] = skinId;
+    this.commit();
+  }
+
   // --- Notifications (red dots) --------------------------------------------------------
 
-  notifications(): { treasury: boolean; chest: boolean; missions: boolean; upgrades: boolean; daily: boolean; town: boolean; challenge: boolean } {
+  notifications(): { treasury: boolean; chest: boolean; missions: boolean; upgrades: boolean; daily: boolean; town: boolean; challenge: boolean; pass: boolean } {
     return {
+      pass: this.featureUnlocked('dailyLogin') && this.passClaimable() > 0,
       treasury: this.featureUnlocked('treasury') && this.treasuryAmount() >= TREASURY.minCollect,
       chest: this.featureUnlocked('chests') && (this.freeChestReady() || this.d.chest.pendingMilestone > 0),
       missions: this.featureUnlocked('missions') && this.missions().some((m) => m.done && !m.claimed),

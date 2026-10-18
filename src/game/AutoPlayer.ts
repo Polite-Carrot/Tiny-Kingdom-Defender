@@ -85,7 +85,7 @@ export class AutoPlayer {
         continue;
       }
       // Clearing land competes with upgrades: take it when it is cheaper than the next upgrade.
-      if (land >= 0 && run.clearLandCost() <= upCost * 1.2 && run.gold >= run.clearLandCost() + TOWERS[nextType].cost) {
+      if (land >= 0 && run.landCost(land) <= upCost * 1.2 && run.gold >= run.landCost(land) + TOWERS[nextType].cost) {
         run.clearLand(land);
         continue;
       }

@@ -207,3 +207,19 @@ describe('building before a new Age', () => {
     expect(run.waveIndex).toBe(21);
   });
 });
+
+describe('foundations', () => {
+  it('cost half of clearing an overgrown pad', () => {
+    const run = new Run({ snapshot: { ...newKingdom(), gold: 100000 }, meta: newMeta().metaBonuses(), availableTowers: ['archer'] });
+    const pad = run.map.buildSpots.find((s) => run.map.isClassic(s.index) && !run.isSpotUnlocked(s.index))!;
+    const field = run.map.buildSpots.find((s) => !run.map.isClassic(s.index))!;
+    const full = run.clearLandCost();
+    expect(run.landCost(pad.index)).toBe(full);
+    expect(run.landCost(field.index)).toBeLessThanOrEqual(Math.ceil(full / 2 / 5) * 5);
+    expect(run.landCost(field.index)).toBeGreaterThanOrEqual(full / 2);
+    const gold = run.gold;
+    const price = run.landCost(field.index);
+    expect(run.clearLand(field.index)).toBe(true);
+    expect(gold - run.gold).toBe(price);
+  });
+});

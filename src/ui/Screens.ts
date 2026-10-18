@@ -94,6 +94,7 @@ export class TitleScreen {
     const n = meta.notifications();
     const chestSub = meta.d.chest.pendingMilestone > 0 ? `${meta.d.chest.pendingMilestone + (meta.freeChestReady() ? 1 : 0)} ready` : meta.freeChestReady() ? 'Ready!' : fmtTime(meta.freeChestRemaining());
     Modals.hub(g, `${icon('chest')} Rewards`, [
+      { label: 'Reward Track', icon: icon('crown'), dot: n.pass, locked: this.lockText('dailyLogin'), sub: `Tier ${meta.passTier()}/30`, open: () => Modals.rewardTrack(g) },
       { label: 'Daily reward', icon: icon('calendar'), dot: n.daily, locked: this.lockText('dailyLogin'), sub: meta.dailyStatus().available ? 'Ready!' : `Streak ${meta.d.daily.streak}`, open: () => Modals.daily(g) },
       { label: 'Chests', icon: icon('chest'), dot: n.chest, locked: this.lockText('chests'), sub: chestSub, open: () => Modals.chest(g) },
       { label: 'Treasury', icon: icon('castle'), dot: n.treasury, locked: this.lockText('treasury'), sub: `${meta.treasuryAmount()} coins${meta.treasuryFull() ? ' · FULL' : ''}`, open: () => Modals.treasury(g) },
@@ -125,6 +126,17 @@ export class TitleScreen {
     const meta = this.game.s.meta;
     for (const a of meta.checkAchievements()) this.game.s.ui.achievement(a.name, a.description, a.reward.coins, a.reward.gems ?? 0);
     meta.refreshMissions();
+    // Reward Track: the first visit of the day earns stars; last month's leftovers were collected.
+    if (meta.featureUnlocked('dailyLogin')) {
+      const got = meta.passAdd('login');
+      const p = meta.pass();
+      if (p.carried > 0) {
+        this.game.s.ui.toast(`A new Reward Track has begun! Last month's ${p.carried} unclaimed reward${p.carried > 1 ? 's were' : ' was'} collected for you.`, 4000);
+        p.carried = 0;
+      } else if (got > 0) this.game.s.ui.toast(`+${got} Reward Track stars for visiting today`);
+      meta.commit();
+      this.render();
+    }
     const st = meta.dailyStatus();
     const today = new Date().toDateString();
     if (meta.featureUnlocked('dailyLogin') && st.available && this.dailyShownFor !== today) {
@@ -144,7 +156,7 @@ export class TitleScreen {
     const setDot = (sel: string, on: boolean) => $(this.el, `${sel} .dot`).classList.toggle('on', on);
     setDot('.shop', n.upgrades);
     setDot('.heroes', d.unlocks.heroes.some((h) => meta.pendingPerkTier(h) >= 0));
-    setDot('.rewards', n.daily || n.chest || n.treasury || n.missions);
+    setDot('.rewards', n.daily || n.chest || n.treasury || n.missions || n.pass);
     setDot('.kingdom-btn', n.town);
     setDot('.challenge-btn', n.challenge);
     const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
@@ -181,7 +193,7 @@ export class TitleScreen {
     const meta = this.game.s.meta;
     const n = meta.notifications();
     // Rewards: how many things are waiting, or when the next chest is ready.
-    const ready = [n.daily, n.chest, n.treasury, n.missions].filter(Boolean).length;
+    const ready = [n.daily, n.chest, n.treasury, n.missions, n.pass].filter(Boolean).length;
     const t = $(this.el, '.rewards .timer');
     if (meta.featureUnlocked('dailyLogin')) {
       t.style.display = '';

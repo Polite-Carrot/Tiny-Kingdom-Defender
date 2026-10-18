@@ -2,7 +2,7 @@
 // target unlocks it once and pays its reward.
 
 import type { SaveData } from '../core/Save';
-import { ENEMIES, type EnemyId } from './enemies';
+import { ENEMIES, REGULAR_ENEMIES, BOSS_BY_CHAPTER, type EnemyId } from './enemies';
 import { HERO_ORDER, heroLevelFor } from './heroes';
 import { TOWER_ORDER } from './towers';
 import { SYNERGIES } from './synergies';
@@ -22,6 +22,8 @@ export interface AchievementDef {
   target: number;
   progress: (d: SaveData) => number;
   reward: { coins: number; gems?: number };
+  /** "Foes defeated" trophies show the enemy's portrait. */
+  enemy?: EnemyId;
 }
 
 const discovered = (d: SaveData) => (Object.keys(ENEMIES) as EnemyId[]).filter((id) => (d.bestiary[id]?.seen ?? 0) > 0).length;
@@ -73,7 +75,28 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'perks', name: 'Master of Skills', description: 'Choose all five skills for one hero.', icon: 'hero', target: PERK_TIERS.length, progress: (d) => Math.max(0, ...Object.values(d.heroPerks).map((p) => (p ?? []).filter((x) => x === 0 || x === 1).length)), reward: { coins: 800, gems: 20 } },
   { id: 'mastered', name: 'Tower Master', description: 'Reach Master with any tower type.', icon: 'star', target: MASTERY.masterLevel, progress: (d) => Math.max(0, ...TOWER_ORDER.map((t) => masteryLevelFor(d.mastery[t] ?? 0))), reward: { coins: 1000, gems: 25 } },
   { id: 'townfull', name: 'Thriving Kingdom', description: 'Build every building in your town.', icon: 'castle', target: BUILDINGS.length, progress: (d) => d.buildings.length, reward: { coins: 1500, gems: 30 } },
+  ...foeTrophies(),
 ];
+
+/** One trophy per enemy type, earned the first time you defeat one. */
+function foeTrophies(): AchievementDef[] {
+  const ids: EnemyId[] = [...REGULAR_ENEMIES, 'slugling', ...BOSS_BY_CHAPTER];
+  return ids.map((id) => {
+    const e = ENEMIES[id];
+    const boss = !!e.boss;
+    const raider = id === 'thief' || id === 'tunneler' || id === 'siege';
+    return {
+      id: `foe_${id}`,
+      name: boss ? `${e.name} Slain` : `Beat a ${e.name}`,
+      description: boss ? `Defeat the ${e.name}.` : `Defeat your first ${e.name}.`,
+      icon: 'skull' as const,
+      target: 1,
+      progress: (d: SaveData) => d.bestiary[id]?.killed ?? 0,
+      reward: boss ? { coins: 300, gems: 10 } : raider || e.age !== undefined ? { coins: 80, gems: 2 } : { coins: 40 },
+      enemy: id,
+    };
+  });
+}
 
 /** Best wave in a realm (Kingdom Vale counts the old overall best for older saves). */
 function realmBest(d: SaveData, id: MapId): number {
