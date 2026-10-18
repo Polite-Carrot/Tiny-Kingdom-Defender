@@ -90,7 +90,9 @@ button * { pointer-events: none; }
 .screen { position: absolute; inset: 0; display: flex; flex-direction: column; pointer-events: none; opacity: 0; transform: scale(1.03); transition: opacity .3s, transform .3s; }
 .screen.on { opacity: 1; transform: none; }
 .screen.on button, .screen.on .ctx, .screen.on .map-board, .screen.on .chapter-tabs, .screen.on .pill { pointer-events: auto; }
-.screen.on .ctx.hidden { pointer-events: none; }
+/* A closed panel only fades out, so it and every button in it must stop taking taps (the rule
+   above would otherwise keep its invisible buttons live and swallow taps on the board). */
+.screen.on .ctx.hidden, .screen.on .ctx.hidden *, .screen.on .rp-arrow.disabled { pointer-events: none; }
 .screen.on .map-board .road { pointer-events: none; }
 .screen.hidden { display: none; }
 
@@ -297,7 +299,7 @@ body.landscape .rush-pill { top: calc(var(--sat) + 120px); }
 
 /* Context panel: build menu / tower card */
 .ctx { position: absolute; background: var(--paper); border-radius: 20px; box-shadow: inset 0 -6px 0 var(--paper-2), 0 6px 0 rgba(0,0,0,.25); padding: 10px; transition: transform .25s cubic-bezier(.2,1.4,.4,1), opacity .2s; }
-.ctx.hidden { opacity: 0; pointer-events: none; }
+.ctx.hidden { opacity: 0; pointer-events: none; visibility: hidden; transition: transform .25s cubic-bezier(.2,1.4,.4,1), opacity .2s, visibility 0s .2s; }
 body.portrait .ctx { left: calc(var(--sal) + 8px); right: calc(var(--sar) + 8px); bottom: calc(var(--sab) + 86px); }
 body.portrait .ctx.hidden { transform: translateY(30px); }
 body.landscape .ctx { right: calc(var(--sar) + 10px); top: calc(var(--sat) + 60px); width: 236px; max-height: calc(100% - 140px - var(--sat) - var(--sab)); overflow-y: auto; }
