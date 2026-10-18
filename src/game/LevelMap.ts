@@ -83,17 +83,22 @@ export class LevelMap {
     this.addFieldSpots();
   }
 
-  /** Every remaining grass square (not road, castle or a tunnel mouth) becomes a spot too. */
+  /**
+   * Every remaining grass square (not road or castle) becomes a spot too, right up to the board
+   * edge beside the tunnels (the tunnel mouths themselves sit just off the board).
+   */
   private addFieldSpots(): void {
     const taken = new Set(this.buildSpots.map((s) => LevelMap.key(s.col, s.row)));
     const nearSpawn = (c: number, r: number) => this.paths.some((p) => Math.max(Math.abs(c - worldToTile(p.xs[0])), Math.abs(r - worldToTile(p.zs[0]))) <= 1);
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        const k = LevelMap.key(c, r);
-        if (taken.has(k) || this.pathCells.has(k) || this.nearCastle(c, r, 1) || nearSpawn(c, r)) continue;
-        this.buildSpots.push({ index: this.buildSpots.length, col: c, row: r, x: tileToWorld(c), z: tileToWorld(r) });
-      }
-    }
+    const add = (c: number, r: number) => {
+      this.buildSpots.push({ index: this.buildSpots.length, col: c, row: r, x: tileToWorld(c), z: tileToWorld(r) });
+      taken.add(LevelMap.key(c, r));
+    };
+    const open = (c: number, r: number) => !taken.has(LevelMap.key(c, r)) && !this.pathCells.has(LevelMap.key(c, r)) && !this.nearCastle(c, r, 1);
+    for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) if (open(c, r) && !nearSpawn(c, r)) add(c, r);
+    // The squares beside the tunnel mouths come last, so the spot numbers saved kingdoms use
+    // for the squares above stay the same.
+    for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) if (open(c, r)) add(c, r);
   }
 
   isClassic(spot: number): boolean {

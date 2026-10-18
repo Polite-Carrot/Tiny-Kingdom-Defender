@@ -105,3 +105,28 @@ describe('new towers', () => {
     expect(nightOf(10)).toBe(0);
   });
 });
+
+describe('squares beside the tunnels', () => {
+  it('are buildable in every realm, and come last so saved spot numbers stay put', () => {
+    for (const def of MAPS) {
+      setActiveMap(def.id);
+      const map = kingdomMap();
+      const at = new Map(map.buildSpots.map((s) => [`${s.col},${s.row}`, s.index]));
+      let firstBeside = Infinity, lastOther = -1;
+      for (const s of map.buildSpots) {
+        if (map.isClassic(s.index)) continue;
+        const beside = def.roads.some((r) => Math.max(Math.abs(s.col - r.points[0][0]), Math.abs(s.row - r.points[0][1])) <= 1);
+        if (beside) firstBeside = Math.min(firstBeside, s.index);
+        else lastOther = Math.max(lastOther, s.index);
+      }
+      // Each road's first on-board square has buildable grass on at least one side.
+      for (const r of def.roads) {
+        const [sc, sr] = r.points[0];
+        const ec = Math.min(GRID_SIZE - 1, Math.max(0, sc)), er = Math.min(GRID_SIZE - 1, Math.max(0, sr));
+        const sides = sc < 0 || sc >= GRID_SIZE ? [[ec, er - 1], [ec, er + 1]] : [[ec - 1, er], [ec + 1, er]];
+        expect(sides.some(([c, rr]) => at.has(`${c},${rr}`)), `${def.id} ${r.name}`).toBe(true);
+      }
+      expect(firstBeside).toBeGreaterThan(lastOther);
+    }
+  });
+});
