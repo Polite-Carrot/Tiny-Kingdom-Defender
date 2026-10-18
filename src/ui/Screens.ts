@@ -29,6 +29,7 @@ export class TitleScreen {
           <button class="side-btn shop">${icon('shop')}Shop<i class="dot"></i></button>
           <button class="side-btn heroes">${icon('hero')}Heroes<i class="dot"></i></button>
           <button class="side-btn rewards">${icon('chest')}Rewards<i class="dot"></i><span class="timer"></span></button>
+          <button class="side-btn track-btn">${icon('crown')}Track<i class="dot"></i><span class="timer"></span></button>
           <button class="side-btn kingdom-btn">${icon('town')}Kingdom<i class="dot"></i></button>
           <button class="side-btn records">${icon('trophy')}Records</button>
         </div>
@@ -50,6 +51,7 @@ export class TitleScreen {
     q('.shop').onclick = () => this.gate('shop', () => Modals.shop(game));
     q('.heroes').onclick = () => this.gate('heroes', () => Modals.heroes(game));
     q('.rewards').onclick = () => this.gate('dailyLogin', () => this.rewardsHub());
+    q('.track-btn').onclick = () => this.gate('dailyLogin', () => Modals.rewardTrack(game));
     q('.kingdom-btn').onclick = () => this.gate('kingdom', () => this.kingdomHub());
     q('.records').onclick = () => this.recordsHub();
     q('.challenge-btn').onclick = () => this.gate('challenge', () => Modals.challenge(game));
@@ -156,13 +158,15 @@ export class TitleScreen {
     const setDot = (sel: string, on: boolean) => $(this.el, `${sel} .dot`).classList.toggle('on', on);
     setDot('.shop', n.upgrades);
     setDot('.heroes', d.unlocks.heroes.some((h) => meta.pendingPerkTier(h) >= 0));
-    setDot('.rewards', n.daily || n.chest || n.treasury || n.missions || n.pass);
+    setDot('.rewards', n.daily || n.chest || n.treasury || n.missions);
+    setDot('.track-btn', !!n.pass);
     setDot('.kingdom-btn', n.town);
     setDot('.challenge-btn', n.challenge);
     const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
     lock('.shop', 'shop');
     lock('.heroes', 'heroes');
     lock('.rewards', 'dailyLogin');
+    lock('.track-btn', 'dailyLogin');
     lock('.kingdom-btn', 'kingdom');
     lock('.challenge-btn', 'challenge');
     const base = d.base;
@@ -193,7 +197,12 @@ export class TitleScreen {
     const meta = this.game.s.meta;
     const n = meta.notifications();
     // Rewards: how many things are waiting, or when the next chest is ready.
-    const ready = [n.daily, n.chest, n.treasury, n.missions, n.pass].filter(Boolean).length;
+    const ready = [n.daily, n.chest, n.treasury, n.missions].filter(Boolean).length;
+    // The Reward Track has its own button: its tier, and a dot when one can be claimed.
+    const tt = $(this.el, '.track-btn .timer');
+    tt.style.display = meta.featureUnlocked('dailyLogin') ? '' : 'none';
+    tt.textContent = `Tier ${meta.passTier()}`;
+    $(this.el, '.track-btn .dot').classList.toggle('on', !!n.pass);
     const t = $(this.el, '.rewards .timer');
     if (meta.featureUnlocked('dailyLogin')) {
       t.style.display = '';
