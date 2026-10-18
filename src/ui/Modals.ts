@@ -1235,11 +1235,12 @@ export function welcomeBack(game: Game, info: NonNullable<ReturnType<Game['s']['
 
 /** A tiny top-down sketch of a realm's roads and castle. */
 export function mapSketch(def: MapDef): string {
-  const N = GRID_SIZE + 2;
+  const N = (def.size ?? GRID_SIZE) + 2;
   const s = (v: number) => ((v + 1) / N) * 100;
-  const lines = def.roads.map((r, i) => `<polyline points="${r.points.map(([c, rr]) => `${s(c) + 3.3},${s(rr) + 3.3}`).join(' ')}" fill="none" stroke="${i === 0 ? '#c9a66b' : '#8f8070'}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" ${i ? 'stroke-dasharray="4 4"' : ''}/>`).join('');
+  const o = (3.3 * 17) / N;
+  const lines = def.roads.map((r, i) => `<polyline points="${r.points.map(([c, rr]) => `${s(c) + o},${s(rr) + o}`).join(' ')}" fill="none" stroke="${i === 0 ? '#c9a66b' : '#8f8070'}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" ${i ? 'stroke-dasharray="4 4"' : ''}/>`).join('');
   const [cc, cr] = def.roads[0].points[def.roads[0].points.length - 1];
-  return `<svg viewBox="0 0 100 100" class="map-sketch"><rect x="3" y="3" width="94" height="94" rx="10" fill="#7bbf5a"/>${lines}<rect x="${s(cc) - 1.5}" y="${s(cr) - 1.5}" width="10" height="10" rx="2" fill="#e8e0d0" stroke="#5a4a3a" stroke-width="2"/></svg>`;
+  return `<svg viewBox="0 0 100 100" class="map-sketch"><rect x="3" y="3" width="94" height="94" rx="10" fill="#7bbf5a"/>${lines}<rect x="${s(cc) + o - 4.8}" y="${s(cr) + o - 4.8}" width="10" height="10" rx="2" fill="#e8e0d0" stroke="#5a4a3a" stroke-width="2"/></svg>`;
 }
 
 export function realms(game: Game): void {
@@ -1437,7 +1438,7 @@ export function rewardTrack(game: Game): void {
       }).join('');
       const bonus = meta.passBonusDue();
       m.innerHTML = `
-        <div class="ribbon" style="background:${season.color}">${icon('crown')} ${season.name}</div>
+        <div class="ribbon" style="--rb:${season.color};--rbd:color-mix(in srgb, ${season.color} 62%, #000)">${icon('crown')} ${season.name}</div>
         <div class="pass-head">
           <div class="pass-skin" style="--sc:${skin.aura}"><img src="${heroSkinThumb(skin.hero, skin)}" alt=""/></div>
           <div class="pass-info">

@@ -693,3 +693,84 @@ body.landscape .hud.ctx-open .hud-cam { display: none; }
 .spell-btn.ability-btn .ab-badge { position: absolute; right: -6px; bottom: -4px; width: 26px; height: 26px; padding: 3px; box-sizing: border-box; border-radius: 50%; background: #7a4fd6; box-shadow: 0 0 0 2px #fff; z-index: 1; }
 .spell-btn.ability-btn .ab-badge svg { width: 100%; height: 100%; display: block; }
 .spell-btn.ability-btn .cd { z-index: 2; }
+
+/* ---------- Game-styled panels ----------
+   Every modal is a wooden frame (with gold rivets) around a parchment page that scrolls; the title
+   is a cloth banner pinned to the top of the page, and the close button sits on the frame. */
+:root { --parch: #fbf0d6; --parch-2: #efdcb2; --parch-edge: #d9bc84; --frame: #8a5a32; --frame-d: #5c3a1e; --frame-line: #3a2312; }
+.modal-layer { background: radial-gradient(ellipse at 50% 45%, rgba(24,16,40,.35), rgba(12,8,24,.78)); padding-top: calc(var(--sat) + 20px); padding-right: calc(var(--sar) + 18px); }
+.modal { overflow: visible; display: flex; flex-direction: column; padding: 10px; border-radius: 22px;
+  border: 3px solid var(--frame-line);
+  background: repeating-linear-gradient(100deg, rgba(255,255,255,.05) 0 6px, rgba(0,0,0,.05) 6px 9px, rgba(255,255,255,0) 9px 17px), linear-gradient(180deg, #a06c3e, var(--frame) 40%, var(--frame-d));
+  box-shadow: inset 0 2px 0 rgba(255,220,170,.35), inset 0 -3px 0 rgba(0,0,0,.3), 0 8px 0 rgba(0,0,0,.35), 0 20px 44px rgba(0,0,0,.45);
+  transform: translateY(26px) scale(.82); transition: transform .38s cubic-bezier(.2,1.6,.4,1); }
+.modal-layer.on .modal { transform: none; }
+.modal::before { content: ''; position: absolute; inset: 0; border-radius: 19px; pointer-events: none; z-index: 5;
+  background: radial-gradient(circle at 6px 6px, #ffe9a6 0 1.5px, #e0a93a 2px 3.5px, #6e4210 4px 4.6px, transparent 5px),
+    radial-gradient(circle at calc(100% - 6px) 6px, #ffe9a6 0 1.5px, #e0a93a 2px 3.5px, #6e4210 4px 4.6px, transparent 5px),
+    radial-gradient(circle at 6px calc(100% - 6px), #ffe9a6 0 1.5px, #e0a93a 2px 3.5px, #6e4210 4px 4.6px, transparent 5px),
+    radial-gradient(circle at calc(100% - 6px) calc(100% - 6px), #ffe9a6 0 1.5px, #e0a93a 2px 3.5px, #6e4210 4px 4.6px, transparent 5px); }
+.modal-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; touch-action: pan-y; padding: 0 16px 16px; border-radius: 13px; color: var(--ink);
+  background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%), radial-gradient(ellipse at 50% 120%, rgba(190,140,70,.18), rgba(190,140,70,0) 60%), var(--parch);
+  box-shadow: inset 0 0 0 2px var(--parch-edge), inset 0 3px 0 2px rgba(60,30,10,.35), inset 0 0 26px rgba(160,110,50,.28); }
+/* Pages without a banner still get a little headroom. */
+.modal-content > :first-child:not(.ribbon) { margin-top: 16px; }
+
+/* The banner: forked cloth ends, a stitched edge, and a parchment strip behind it so the page
+   scrolls neatly underneath. */
+.modal .modal-content > .ribbon { --rb: #c0473a; --rbd: #8a2a22; position: sticky; top: 0; z-index: 4; margin: 0 -16px 12px; padding: 14px 44px 14px; border-radius: 0;
+  background: linear-gradient(var(--parch) 70%, rgba(251,240,214,0)); box-shadow: none; color: #fff; text-align: center; font-size: 23px; font-weight: 900; letter-spacing: .3px;
+  text-shadow: 0 2px 0 rgba(0,0,0,.35), 0 0 2px rgba(0,0,0,.35); }
+.modal .modal-content > .ribbon::before { content: ''; position: absolute; z-index: -1; left: 6px; right: 6px; top: 6px; bottom: 6px;
+  background: linear-gradient(180deg, var(--rb), var(--rbd));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rb) 80%, #fff), var(--rb) 45%, var(--rbd));
+  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 50%, 100% 100%, 0 100%, 16px 50%);
+  filter: drop-shadow(0 3px 0 rgba(0,0,0,.25)); }
+.modal .modal-content > .ribbon::after { content: ''; position: absolute; z-index: -1; left: 26px; right: 26px; top: 10px; bottom: 10px; border-top: 2px dashed rgba(255,255,255,.35); border-bottom: 2px dashed rgba(0,0,0,.2); pointer-events: none; }
+.modal .modal-content > .ribbon.win { --rb: #4fb24c; --rbd: #2c7a30; }
+.modal .modal-content > .ribbon.lose { --rb: #d84a3d; --rbd: #8f2a20; }
+.modal .modal-content > .ribbon.purple { --rb: #8f62ea; --rbd: #5a35b0; }
+.modal .ribbon .ico { filter: drop-shadow(0 2px 0 rgba(0,0,0,.3)); }
+.modal h2 { color: var(--frame-d); text-shadow: 0 1px 0 rgba(255,255,255,.7); }
+
+/* Close: a red wax-seal button bolted to the frame's corner. */
+.modal-close { top: -14px; right: -14px; width: 46px; height: 46px; z-index: 6; border-radius: 50%; color: #fff; font-size: 19px; text-shadow: 0 2px 0 rgba(0,0,0,.35);
+  background: radial-gradient(circle at 40% 30%, #ff8a73, #e04a38 55%, #a72a1e); border: 3px solid #ffd76a;
+  box-shadow: 0 0 0 2px var(--frame-line), inset 0 -3px 0 rgba(0,0,0,.25), 0 4px 0 rgba(0,0,0,.35); }
+.modal-close:active { transform: translateY(2px) scale(.95); }
+
+.modal .footer { bottom: -16px; margin: 10px -16px -16px; padding: 10px 16px 14px; border-radius: 0 0 13px 13px; background: linear-gradient(rgba(239,220,178,.9), var(--parch-2)); box-shadow: 0 -2px 0 var(--parch-edge); }
+
+/* Rows, tiles and tabs: chunky parchment slots with a carved edge. */
+.list-item, .hub-tile, .daily-cell { background: linear-gradient(180deg, #fffaf0, #f7e9cb); border: 2px solid var(--parch-edge); box-shadow: inset 0 2px 0 #fff, inset 0 -4px 0 rgba(150,100,40,.18), 0 3px 0 rgba(90,55,20,.25); }
+.list-item .thumb { background: radial-gradient(circle at 50% 35%, #fff6df, #ead39f); box-shadow: inset 0 0 0 2px rgba(150,100,40,.25); }
+.hub-tile { border-radius: 16px; transition: transform .12s; }
+.hub-tile:active { transform: translateY(3px); box-shadow: inset 0 2px 0 #fff, inset 0 -2px 0 rgba(150,100,40,.18), 0 1px 0 rgba(90,55,20,.25); }
+.hub-tile .ico { width: 46px; height: 46px; padding: 6px; border-radius: 50%; background: radial-gradient(circle at 50% 35%, #fff8e4, #ecd6a4); box-shadow: inset 0 0 0 2px rgba(150,100,40,.3), 0 2px 0 rgba(90,55,20,.2); }
+.tab { background: linear-gradient(180deg, #f7e7c4, #e8cf9b); color: var(--frame-d); border: 2px solid var(--parch-edge); box-shadow: inset 0 -3px 0 rgba(120,80,30,.2); }
+.tab.on { background: linear-gradient(180deg, #a87244, var(--frame-d)); color: #fff; border-color: var(--frame-line); text-shadow: 0 2px 0 rgba(0,0,0,.3); box-shadow: inset 0 2px 0 rgba(255,220,170,.3), 0 2px 0 rgba(0,0,0,.25); }
+.stat-grid div { background: linear-gradient(180deg, #fffaf0, #f3e2bd); border: 2px solid var(--parch-edge); }
+.progress { background: #e2cb98; box-shadow: inset 0 2px 0 rgba(0,0,0,.15); border: 1px solid rgba(120,80,30,.35); }
+
+/* Main-menu buttons: little wooden signs. */
+.side-btn { background: linear-gradient(180deg, #fffaf0, #f2dfb5); border: 3px solid var(--frame); box-shadow: 0 0 0 2px var(--frame-line), inset 0 -4px 0 rgba(150,100,40,.25), 0 5px 0 rgba(0,0,0,.3); color: var(--frame-d); }
+.side-btn:active { transform: translateY(3px); box-shadow: 0 0 0 2px var(--frame-line), inset 0 -2px 0 rgba(150,100,40,.25), 0 2px 0 rgba(0,0,0,.3); }
+
+/* Realm picker: a wooden sign with carved arrows. */
+.rp-cur { background: linear-gradient(180deg, #fffaf0, #f2dfb5); border: 3px solid var(--frame); box-shadow: 0 0 0 2px var(--frame-line), inset 0 -4px 0 rgba(150,100,40,.25), 0 5px 0 rgba(0,0,0,.3); color: var(--frame-d); }
+.rp-arrow { color: #fff; background: linear-gradient(180deg, #a87244, var(--frame-d)); border: 2px solid var(--frame-line); box-shadow: inset 0 2px 0 rgba(255,220,170,.3), 0 4px 0 rgba(0,0,0,.3); text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+
+/* The in-battle panel: the same parchment, in a slimmer wooden frame. */
+.ctx { background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%), var(--parch); border: 2px solid var(--parch-edge);
+  box-shadow: 0 0 0 5px var(--frame), 0 0 0 7px var(--frame-line), inset 0 0 20px rgba(160,110,50,.22), 0 9px 0 rgba(0,0,0,.3); }
+.ctx-head .name { color: var(--frame-d); }
+.ctx-head .x { color: #fff; background: radial-gradient(circle at 40% 30%, #ff8a73, #e04a38 55%, #a72a1e); border: 2px solid #ffd76a; box-shadow: 0 0 0 1.5px var(--frame-line), 0 2px 0 rgba(0,0,0,.3); text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+.tcard { background: linear-gradient(180deg, #fffaf0, #f7e9cb); border: 2px solid var(--parch-edge); box-shadow: inset 0 2px 0 #fff, inset 0 -3px 0 rgba(150,100,40,.18); }
+.tcard.sel { background: linear-gradient(180deg, #f2ffe8, #d9f5c6); border-color: var(--green-d); box-shadow: 0 0 0 2px var(--green-d), inset 0 -3px 0 rgba(0,0,0,.08); }
+
+@media (max-height: 420px) {
+  .modal { padding: 8px; }
+  .modal-content { padding: 0 12px 12px; }
+  .modal .modal-content > .ribbon { margin: 0 -12px 8px; padding: 10px 40px; font-size: 19px; }
+  .modal .footer { bottom: -12px; margin: 8px -12px -12px; }
+}

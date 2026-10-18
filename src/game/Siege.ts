@@ -1,11 +1,11 @@
 // The endless siege on your persistent kingdom: map, Ages, roads, waves, checkpoints, land.
 
-import { LAND, SIEGE, SIEGE_COINS, WAVE_COMPOSER, type Road } from '../data/base';
+import { LAND, SIEGE, SIEGE_COINS, WAVE_COMPOSER, GRID_SIZE, type Road } from '../data/base';
 import { MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
 import { THEMES, ageName, type Theme } from '../data/themes';
 import { BOSS_BY_CHAPTER } from '../data/enemies';
 import { Random, hashString } from '../core/Random';
-import { LevelMap } from './LevelMap';
+import { LevelMap, setGridSize, gridSize } from './LevelMap';
 import { composeWave, type WaveDef } from './WaveComposer';
 
 let active: MapDef = MAP_BY_ID.vale;
@@ -14,6 +14,12 @@ const mapCache = new Map<MapId, LevelMap>();
 /** Chooses the realm the siege functions below work on. */
 export function setActiveMap(id: MapId): void {
   active = MAP_BY_ID[id] ?? MAP_BY_ID.vale;
+  setGridSize(mapSize(active));
+}
+
+/** Tiles per side of a realm's board. */
+export function mapSize(def: MapDef): number {
+  return def.size ?? GRID_SIZE;
 }
 
 export function activeMap(): MapDef {
@@ -29,7 +35,11 @@ export function kingdomMap(id: MapId = active.id): LevelMap {
   let m = mapCache.get(id);
   if (!m) {
     const def = MAP_BY_ID[id];
-    m = new LevelMap(def.roads.map((r) => r.points), LAND.totalSpots, hashString(id === 'vale' ? 'tiny-kingdom' : `tiny-kingdom-${id}`));
+    // Build it at its own size, then put the active realm's size back.
+    const prev = gridSize();
+    setGridSize(mapSize(def));
+    m = new LevelMap(def.roads.map((r) => r.points), def.spots ?? LAND.totalSpots, hashString(id === 'vale' ? 'tiny-kingdom' : `tiny-kingdom-${id}`));
+    setGridSize(prev);
     mapCache.set(id, m);
   }
   return m;

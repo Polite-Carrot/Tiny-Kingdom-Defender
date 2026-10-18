@@ -37,12 +37,24 @@ export interface PathPoint {
   dz: number;
 }
 
-const HALF = (GRID_SIZE - 1) / 2;
+// The board size of the realm being played (realms can be bigger than the classic 15×15).
+let SIZE = GRID_SIZE;
+let HALF = (SIZE - 1) / 2;
+
+/** Sets the board size that tile <-> world conversions use. */
+export function setGridSize(n: number): void {
+  SIZE = n;
+  HALF = (n - 1) / 2;
+}
+
+/** Tiles per side of the active board. */
+export const gridSize = (): number => SIZE;
 export const tileToWorld = (c: number) => c - HALF;
 export const worldToTile = (x: number) => Math.round(x + HALF);
 
 export class LevelMap {
-  readonly size = GRID_SIZE;
+  /** Tiles per side (the grid size active when the map was built). */
+  readonly size = SIZE;
   readonly paths: PathData[] = [];
   readonly pathCells = new Set<number>();
   readonly buildSpots: BuildSpot[] = [];
@@ -95,10 +107,10 @@ export class LevelMap {
       taken.add(LevelMap.key(c, r));
     };
     const open = (c: number, r: number) => !taken.has(LevelMap.key(c, r)) && !this.pathCells.has(LevelMap.key(c, r)) && !this.nearCastle(c, r, 1);
-    for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) if (open(c, r) && !nearSpawn(c, r)) add(c, r);
+    for (let r = 0; r < this.size; r++) for (let c = 0; c < this.size; c++) if (open(c, r) && !nearSpawn(c, r)) add(c, r);
     // The squares beside the tunnel mouths come last, so the spot numbers saved kingdoms use
     // for the squares above stay the same.
-    for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) if (open(c, r)) add(c, r);
+    for (let r = 0; r < this.size; r++) for (let c = 0; c < this.size; c++) if (open(c, r)) add(c, r);
   }
 
   isClassic(spot: number): boolean {
@@ -131,7 +143,7 @@ export class LevelMap {
     let c = a[0];
     let r = a[1];
     for (let guard = 0; guard < 64; guard++) {
-      if (c >= 0 && r >= 0 && c < GRID_SIZE && r < GRID_SIZE) this.pathCells.add(LevelMap.key(c, r));
+      if (c >= 0 && r >= 0 && c < this.size && r < this.size) this.pathCells.add(LevelMap.key(c, r));
       if (c === b[0] && r === b[1]) break;
       if (c !== b[0]) c += dc;
       else r += dr;
@@ -148,8 +160,8 @@ export class LevelMap {
     const covered = new Map<number, number>();
     type Cand = { c: number; r: number; cells: number[]; jitter: number };
     const cands: Cand[] = [];
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
         if (this.isPath(c, r) || this.nearCastle(c, r, 1)) continue;
         let adjacent = false;
         for (let dr = -1; dr <= 1 && !adjacent; dr++) for (let dc = -1; dc <= 1; dc++) if (this.isPath(c + dc, r + dr)) adjacent = true;
@@ -183,13 +195,13 @@ export class LevelMap {
 
   private generateProps(rng: Random): void {
     const spotSet = new Set(this.buildSpots.map((s) => LevelMap.key(s.col, s.row)));
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
         const k = LevelMap.key(c, r);
         if (this.pathCells.has(k) || spotSet.has(k) || this.nearCastle(c, r, 1)) continue;
         let nearPath = false;
         for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (this.isPath(c + dc, r + dr)) nearPath = true;
-        const edge = c === 0 || r === 0 || c === GRID_SIZE - 1 || r === GRID_SIZE - 1;
+        const edge = c === 0 || r === 0 || c === this.size - 1 || r === this.size - 1;
         const chance = nearPath ? 0.12 : edge ? 0.55 : 0.32;
         if (rng.next() > chance) continue;
         const n = edge && rng.next() < 0.4 ? 2 : 1;

@@ -14,7 +14,6 @@ import { Scenery } from '../systems/Scenery';
 import { Grass, type BladeSpot } from '../systems/Grass';
 import type { AudioSystem } from '../systems/Audio';
 import { ENEMIES, ELITES, ELITE_RULES, type EnemyId } from '../data/enemies';
-import { GRID_SIZE } from '../data/base';
 import type { Theme } from '../data/themes';
 import { materialFor } from '../data/towers';
 import { tileToWorld, worldToTile } from './LevelMap';
@@ -231,7 +230,7 @@ export class BattleView {
     const map = this.run.map;
     const wave = this.run.waveIndex;
     const b = new ModelBuilder();
-    const half = GRID_SIZE / 2 + 1;
+    const half = this.run.map.size / 2 + 1;
     // Diorama body: a raised plateau with layered rock strata.
     b.box(half * 2, 0.55, half * 2, t.cliff, { y: -0.4 });
     b.box(half * 2 - 0.12, 0.5, half * 2 - 0.12, new THREE.Color(t.cliff).lerp(new THREE.Color(t.cliffDark), 0.5), { y: -0.92 });
@@ -247,11 +246,11 @@ export class BattleView {
     const padTiles = new Set(map.buildSpots.filter((sp) => map.isClassic(sp.index) || this.run.isSpotUnlocked(sp.index)).map((sp) => sp.row * 64 + sp.col));
     const bladesPerTile = this.renderer.quality === 'high' ? ({ meadow: 22, desert: 5, snow: 4, volcano: 3 } as const)[t.id] : 0;
     const bladeBase = new THREE.Color(t.id === 'desert' ? '#c9b26a' : t.id === 'snow' ? '#a9c2a0' : t.id === 'volcano' ? '#8a7a5a' : t.grass);
-    for (let r = -1; r <= GRID_SIZE; r++) {
-      for (let c = -1; c <= GRID_SIZE; c++) {
+    for (let r = -1; r <= this.run.map.size; r++) {
+      for (let c = -1; c <= this.run.map.size; c++) {
         const x = tileToWorld(c);
         const z = tileToWorld(r);
-        const inside = c >= 0 && r >= 0 && c < GRID_SIZE && r < GRID_SIZE;
+        const inside = c >= 0 && r >= 0 && c < this.run.map.size && r < this.run.map.size;
         const road = this.roadCells.get((r + 1) * 64 + (c + 1));
         const i = (r + 2) * 37 + c;
         const isOpenRoad = (cc: number, rr: number) => {
@@ -279,7 +278,7 @@ export class BattleView {
           }
           // Kerb stones where the road meets grass.
           for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-            if (isOpenRoad(c + dc, r + dr) || c + dc < -1 || r + dr < -1 || c + dc > GRID_SIZE || r + dr > GRID_SIZE) continue;
+            if (isOpenRoad(c + dc, r + dr) || c + dc < -1 || r + dr < -1 || c + dc > this.run.map.size || r + dr > this.run.map.size) continue;
             for (let k = 0; k < 3; k++) {
               const along = (k - 1) * 0.32 + (rnd(i + k * 7 + dc * 3 + dr * 5) - 0.5) * 0.08;
               const sx = dc !== 0 ? dc * 0.46 : along;
@@ -379,7 +378,7 @@ export class BattleView {
       if ((c * 7 + r * 3) % 4 !== 0 || n >= 44) continue;
       if (Math.max(Math.abs(c - map.castle.col), Math.abs(r - map.castle.row)) <= 1) continue;
       // Stand on the kerb, on a side that isn't road.
-      const side = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).find(([dc, dr]) => !map.isPath(c + dc, r + dr) && c + dc >= 0 && r + dr >= 0 && c + dc < GRID_SIZE && r + dr < GRID_SIZE);
+      const side = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).find(([dc, dr]) => !map.isPath(c + dc, r + dr) && c + dc >= 0 && r + dr >= 0 && c + dc < this.run.map.size && r + dr < this.run.map.size);
       if (!side) continue;
       const x = tileToWorld(c) + side[0] * 0.5, z = tileToWorld(r) + side[1] * 0.5;
       posts.cyl(0.022, 0.03, 0.62, 5, '#3a3036', { x, y: 0.31, z });
@@ -454,7 +453,7 @@ export class BattleView {
     }
     const t = this.theme;
     const map = this.run.map;
-    const half = GRID_SIZE / 2;
+    const half = this.run.map.size / 2;
     const cleared = new Set(map.buildSpots.filter((sp) => this.run.isSpotUnlocked(sp.index)).map((sp) => sp.row * 64 + sp.col));
     const onCleared = (x: number, z: number) => cleared.has(worldToTile(z) * 64 + worldToTile(x));
     const pick = (v: number) => t.props[Math.min(t.props.length - 1, Math.floor(v * t.props.length))];
@@ -464,8 +463,8 @@ export class BattleView {
       const k = (i * 0.37) % 1;
       const px = side === 0 ? -half + 0.45 : side === 1 ? half - 0.45 : (k - 0.5) * (half * 2 - 1);
       const pz = side === 2 ? -half + 0.45 : side === 3 ? half - 0.45 : (k - 0.5) * (half * 2 - 1);
-      const c = Math.round(px + (GRID_SIZE - 1) / 2);
-      const r = Math.round(pz + (GRID_SIZE - 1) / 2);
+      const c = Math.round(px + (this.run.map.size - 1) / 2);
+      const r = Math.round(pz + (this.run.map.size - 1) / 2);
       if (this.roadCells.has((r + 1) * 64 + (c + 1)) || onCleared(px, pz)) continue;
       items.push({ geo: propModel(t.props[i % t.props.length]), x: px, y: 0, z: pz, ry: i * 1.3, s: 0.9 });
     }

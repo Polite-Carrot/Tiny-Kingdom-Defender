@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import type { WeatherKind } from '../game/Siege';
+import { gridSize } from '../game/LevelMap';
 
 const BOX = { x: 11, y: 9, z: 11 };
 
@@ -21,6 +22,7 @@ export class Weather {
   flash = 0;
 
   constructor(quality: 'low' | 'high') {
+    BOX.x = BOX.z = (gridSize() / 15) * 11;
     const nRain = quality === 'high' ? 1500 : 600;
     const rp = new Float32Array(nRain * 6);
     for (let i = 0; i < nRain; i++) this.resetDrop(rp, i, true);

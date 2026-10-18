@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { MAPS } from '../src/data/maps';
-import { LAND, GRID_SIZE } from '../src/data/base';
+import { LAND } from '../src/data/base';
 import { kingdomMap, setActiveMap, initialSpots, siegeWave, openRoads, nightOf } from '../src/game/Siege';
 import { Run, newKingdom } from '../src/game/Run';
 import { Meta } from '../src/game/Meta';
@@ -29,7 +29,7 @@ describe('realms', () => {
         for (let i = 1; i < r.points.length; i++) expect(r.points[i][0] === r.points[i - 1][0] || r.points[i][1] === r.points[i - 1][1]).toBe(true);
         // Starts just off the board edge.
         const [c, rr] = r.points[0];
-        expect(c === -1 || rr === -1 || c === GRID_SIZE || rr === GRID_SIZE).toBe(true);
+        expect(c === -1 || rr === -1 || c === map.size || rr === map.size).toBe(true);
       }
       expect(map.classicSpots).toBeGreaterThanOrEqual(24);
       expect(map.buildSpots.length).toBeGreaterThan(LAND.totalSpots * 3);
@@ -122,8 +122,8 @@ describe('squares beside the tunnels', () => {
       // Each road's first on-board square has buildable grass on at least one side.
       for (const r of def.roads) {
         const [sc, sr] = r.points[0];
-        const ec = Math.min(GRID_SIZE - 1, Math.max(0, sc)), er = Math.min(GRID_SIZE - 1, Math.max(0, sr));
-        const sides = sc < 0 || sc >= GRID_SIZE ? [[ec, er - 1], [ec, er + 1]] : [[ec - 1, er], [ec + 1, er]];
+        const ec = Math.min(map.size - 1, Math.max(0, sc)), er = Math.min(map.size - 1, Math.max(0, sr));
+        const sides = sc < 0 || sc >= map.size ? [[ec, er - 1], [ec, er + 1]] : [[ec - 1, er], [ec + 1, er]];
         expect(sides.some(([c, rr]) => at.has(`${c},${rr}`)), `${def.id} ${r.name}`).toBe(true);
       }
       expect(firstBeside).toBeGreaterThan(lastOther);

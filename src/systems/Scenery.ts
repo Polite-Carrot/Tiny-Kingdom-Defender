@@ -9,7 +9,8 @@ import type { Theme } from '../data/themes';
 import { Water } from './Water';
 import { Grass, type BladeSpot } from './Grass';
 import { Moat } from './Moat';
-import { BUILDING_PLOTS, type BuildingId } from '../data/kingdom';
+import { BUILDING_PLOTS as BASE_PLOTS, type BuildingId } from '../data/kingdom';
+import { gridSize } from '../game/LevelMap';
 import { ModelBuilder as MB } from '../entities/ModelBuilder';
 
 /** Smooth 2D value noise in [0, 1]. */
@@ -51,8 +52,10 @@ const LOOKS: Record<Theme['id'], Look> = {
   volcano: { beach: '#3a2e30', wet: '#241b1d', floor: '#2a1612', low: '#5e4c50', high: '#4a3a3f', rock: '#241b1f', peak: '#ff7a2a', cloud: '#5b4b52', particle: '#ffb347', particleMode: 'embers' },
 };
 
-/** Half-size of the board's square footprint (the plateau). */
-const BOARD_HALF = 8.6;
+/** Half-size of the board's square footprint (the plateau); set per realm (bigger realms are bigger). */
+let BOARD_HALF = 8.6;
+/** Town plots, pushed out with the board. */
+let BUILDING_PLOTS = BASE_PLOTS;
 const WATER_Y = -1.18;
 /** The moat: from the plateau out to a stone retaining wall this far away. */
 const MOAT_W = 1.5;
@@ -61,7 +64,7 @@ const MOAT_W = 1.5;
 const MOAT_FLOOR = -1.42;
 const WALL_TOP = -0.84;
 /** The plateau itself (the board) is a little inside BOARD_HALF. */
-const PLATEAU_HALF = 8.5;
+let PLATEAU_HALF = 8.5;
 const TERRAIN_SIZE = 84;
 
 export class Scenery {
@@ -85,6 +88,10 @@ export class Scenery {
   private lambert: THREE.MeshLambertMaterial;
 
   constructor(private theme: Theme, private animated: boolean, buildings: BuildingId[] = []) {
+    BOARD_HALF = gridSize() / 2 + 1.1;
+    PLATEAU_HALF = gridSize() / 2 + 1.0;
+    const k = BOARD_HALF / 8.6;
+    BUILDING_PLOTS = Object.fromEntries(Object.entries(BASE_PLOTS).map(([id, [x, z]]) => [id, [x * k, z * k]])) as typeof BASE_PLOTS;
     this.look = LOOKS[theme.id];
     const lambert = this.track(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
     this.lambert = lambert;

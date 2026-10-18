@@ -4,6 +4,7 @@
 //   npm run sim -- --hours 30           # longer careers
 //   npm run sim -- --push               # single pushes from a fresh kingdom (no retreats)
 //   npm run sim -- --waves              # per-wave composition / HP table
+//   npm run sim -- --push --map kingsway # any mode, on another realm
 //
 // "Career" plays ONE persistent kingdom like a player would: when the castle falls it retreats
 // to the last checkpoint (towers and gold kept), coins from waves and checkpoints are spent on
@@ -12,13 +13,16 @@
 
 import { Run, newKingdom, type MetaBonuses } from '../src/game/Run';
 import { AutoPlayer } from '../src/game/AutoPlayer';
-import { siegeWave, waveCoins, checkpointCoins, ageTitle, hpMultFor } from '../src/game/Siege';
+import { siegeWave, waveCoins, checkpointCoins, ageTitle, hpMultFor, setActiveMap } from '../src/game/Siege';
+import type { MapId } from '../src/data/maps';
 import { waveSummary } from '../src/game/WaveComposer';
 import { META_UPGRADES, TOWER_META, UNLOCKS, metaCost } from '../src/data/economy';
 import { TOWER_UNLOCK_WAVE, SIEGE } from '../src/data/base';
 import { materialFor, TOWER_ORDER, type TowerId } from '../src/data/towers';
 
 const args = process.argv.slice(2);
+// --map <id>: play a realm other than Kingdom Vale.
+if (args.includes('--map')) setActiveMap(args[args.indexOf('--map') + 1] as MapId);
 const arg = (name: string, def: string) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : def;

@@ -15,6 +15,7 @@ import { Battle } from './Battle';
 import { AutoPlayer } from './AutoPlayer';
 import type { Services } from './Services';
 import { GRID_SIZE } from '../data/base';
+import { gridSize } from './LevelMap';
 import { themeOf, setActiveMap } from './Siege';
 import type { MapId } from '../data/maps';
 import type { HeroId } from '../data/heroes';
@@ -199,6 +200,7 @@ export class Game {
       const side = (sa.left + 12 + sa.right + 252) / 2;
       safe = { top: sa.top + 54, bottom: sa.bottom + 8, left: side, right: side };
     }
+    rig.setBounds(gridSize() / 2 + 0.7);
     rig.frame(w, h, safe);
     renderer.setFogRange(rig.distance * 1.15, rig.distance + 120);
     renderer.camera.far = Math.max(rig.distance * 4, 600);
