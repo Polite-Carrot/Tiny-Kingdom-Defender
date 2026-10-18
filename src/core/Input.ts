@@ -10,6 +10,9 @@ export interface InputHandlers {
 }
 
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+/** How far (px) a finger may wander and how long (ms) it may stay down and still count as a tap. */
+const TAP_SLOP = 14;
+const TAP_MS = 900;
 
 export class Input {
   enabled = true;
@@ -32,6 +35,10 @@ export class Input {
     el.addEventListener('pointercancel', this.cancel);
     el.addEventListener('wheel', this.wheel, { passive: false });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // A finger lifted anywhere (even if the browser dropped the capture) must be forgotten,
+    // or every later tap would look like a second finger and be ignored.
+    window.addEventListener('pointerup', this.forget, true);
+    window.addEventListener('pointercancel', this.forget, true);
     window.addEventListener('keydown', (e) => {
       if (!this.enabled || (e.target as HTMLElement)?.tagName === 'INPUT') return;
       if (e.key === 'q' || e.key === 'Q') this.rig.rotateBy(-Math.PI / 4);
@@ -47,9 +54,20 @@ export class Input {
     return this.ray.ray.intersectPlane(plane, this.hit) ? this.hit.clone() : null;
   }
 
+  private forget = (e: PointerEvent) => {
+    // Runs in the capture phase, before `up`: keep the record for `up` to read on the canvas.
+    if (e.target !== this.el) this.pointers.delete(e.pointerId);
+  };
+
   private down = (e: PointerEvent) => {
     if (!this.enabled) return;
-    this.el.setPointerCapture(e.pointerId);
+    // The first finger of a new gesture: anything still recorded is stale.
+    if (e.isPrimary) this.pointers.clear();
+    try {
+      this.el.setPointerCapture(e.pointerId);
+    } catch {
+      /* Some browsers refuse capture for an already-ending pointer; the tap still counts. */
+    }
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
     if (this.pointers.size === 1) {
       this.moved = false;
@@ -78,7 +96,7 @@ export class Input {
     const dy = e.clientY - p.y;
     p.x = e.clientX;
     p.y = e.clientY;
-    if (Math.hypot(p.x - p.sx, p.y - p.sy) > 10) this.moved = true;
+    if (Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_SLOP) this.moved = true;
     if (this.pointers.size === 2) {
       const [a, b] = [...this.pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -106,7 +124,7 @@ export class Input {
     const p = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
     if (!p || !this.enabled) return;
-    if (!this.moved && !this.multi && performance.now() - p.t < 600) {
+    if (!this.moved && !this.multi && performance.now() - p.t < TAP_MS) {
       const w = this.toWorld(e.clientX, e.clientY);
       if (w) this.handlers.onTap(w.x, w.z, e.clientX, e.clientY);
     }

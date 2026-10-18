@@ -64,6 +64,8 @@ export class Hud {
   private fpsEl: HTMLElement;
   private run: Run | null = null;
   private ctxMode: 'none' | 'build' | 'tower' | 'land' | 'wall' = 'none';
+  /** A finger is down on the context panel (its redraw waits until it lifts). */
+  private ctxPressed = false;
   private ctxTile: [number, number] = [0, 0];
   private ctxSpot = -1;
   private ctxTower: Tower | null = null;
@@ -126,6 +128,10 @@ export class Hud {
     this.abilityBtns = [];
     this.abilityCds = [];
     this.ctx = $(this.el, '.ctx');
+    this.ctx.addEventListener('pointerdown', () => (this.ctxPressed = true));
+    const lift = () => setTimeout(() => (this.ctxPressed = false), 0);
+    window.addEventListener('pointerup', lift);
+    window.addEventListener('pointercancel', lift);
     this.fpsEl = $(this.el, '.fps');
 
     $(this.el, '.pause-btn').onclick = () => cb.pause();
@@ -332,7 +338,8 @@ export class Hud {
         const k = this.ctx.querySelector('.kills');
         if (k) k.textContent = `☠ ${t.kills}`;
       }
-      if (ctxKey !== this.lastCtxKey) {
+      // Never swap the panel's buttons out from under a finger that is pressing one.
+      if (ctxKey !== this.lastCtxKey && !this.ctxPressed) {
         this.lastCtxKey = ctxKey;
         if (this.ctxMode === 'build') this.renderBuild();
         else if (this.ctxMode === 'land') this.renderLand();
