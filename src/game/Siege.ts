@@ -31,7 +31,7 @@ export function activeRoads(): Road[] {
 }
 
 /** Realms with fewer roads than pads fit beside them: their pads may stand a square further out. */
-const WIDE_PADS = new Set<MapId>(['serpent', 'winds']);
+const WIDE_PADS = new Set<MapId>(['winds']);
 export const widePads = (id: MapId): boolean => WIDE_PADS.has(id);
 
 /** A realm's map with the given roads (deterministic). Kingdom Vale keeps its original seed. */

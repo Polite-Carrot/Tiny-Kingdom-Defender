@@ -66,6 +66,15 @@ export const LAYOUTS: Record<number, Partial<Record<MapId, Layout>>> = {
   6: {
     vale: { wide: true, roads: [{ name: 'West Road', openWave: 0, points: [[-1, 1], [5, 1], [5, 4], [1, 4], [1, 12], [5, 12], [5, 7], [7, 7]] }] },
   },
+  7: {
+    serpent: {
+      wide: true,
+      roads: [
+        { name: 'Serpent Road', openWave: 0, points: [[-1, 1], [12, 1], [12, 4], [2, 4], [2, 7], [12, 7], [12, 10], [7, 10], [7, 12]] },
+        { name: 'East Gate', openWave: 20, points: [[14, -1], [14, 13], [9, 13], [9, 12], [7, 12]] },
+      ],
+    },
+  },
 };
 
 /** The layout a realm had in save version `v` (the current one if it hasn't changed since). */

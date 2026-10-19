@@ -43,10 +43,10 @@ export const MAPS: MapDef[] = [
   },
   {
     id: 'serpent', name: 'Serpent Pass', unlockWave: 20,
-    description: 'One endless switchback road, and an east gate down the far side that opens later.',
+    description: 'One endless switchback road to a keep in the south-west corner, and an east gate down the far side and along the south wall that opens later.',
     roads: [
-      { name: 'Serpent Road', openWave: 0, points: [[-1, 1], [12, 1], [12, 4], [2, 4], [2, 7], [12, 7], [12, 10], [7, 10], [7, 12]] },
-      { name: 'East Gate', openWave: 20, points: [[14, -1], [14, 13], [9, 13], [9, 12], [7, 12]] },
+      { name: 'Serpent Road', openWave: 0, points: [[-1, 1], [12, 1], [12, 4], [2, 4], [2, 7], [12, 7], [12, 10], [2, 10], [2, 12]] },
+      { name: 'East Gate', openWave: 20, points: [[14, -1], [14, 13], [2, 13], [2, 12]] },
     ],
   },
   {

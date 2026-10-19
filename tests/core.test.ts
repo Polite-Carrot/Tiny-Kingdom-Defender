@@ -486,3 +486,21 @@ describe('the two-road Kingdom Vale', () => {
     expect(nb.heroPost).toBe(-1);
   });
 });
+
+describe('Serpent Pass with its keep in the corner', () => {
+  it('keeps every tower when a version-7 kingdom moves onto the new layout', () => {
+    const v7 = LAYOUTS[7].serpent!;
+    const oldMap = buildRealmMap(MAP_BY_ID.serpent, v7.roads, v7.wide);
+    const newMap = kingdomMap('serpent');
+    const pads = oldMap.buildSpots.filter((s) => oldMap.isClassic(s.index)).slice(0, 5);
+    const base = { ...newKingdom(), wave: 33, spots: pads.map((s) => s.index), towers: pads.map((s) => ({ spot: s.index, type: 'mage' as const, tier: 2, branch: -1, kills: 3 })) };
+    const d = migrate({ version: 7, base: null, realms: { current: 'vale', saved: { serpent: { base, checkpointsPaid: 3, frontierSeen: 20 } }, best: { serpent: 33 } } } as never);
+    const nb = d.realms.saved.serpent!.base!;
+    expect(nb.towers).toHaveLength(5);
+    for (const t of nb.towers) {
+      const s = newMap.buildSpots[t.spot];
+      expect(newMap.isPath(s.col, s.row)).toBe(false);
+    }
+    expect(newMap.castle).toMatchObject({ col: 2, row: 12 });
+  });
+});
