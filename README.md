@@ -14,6 +14,7 @@ npm run pages      # rebuild the self-contained index.html that GitHub Pages ser
 npm run preview    # serve the production build
 npm test           # unit tests (save migrations, ad rules, economy, towers, siege)
 npm run sim        # headless balance simulator (see "Balancing")
+npm run ios:sync   # iOS app: build the game into the Xcode project (see docs/IOS.md)
 ```
 
 ### Play it on GitHub Pages

@@ -10,6 +10,8 @@ import { Hud } from '../ui/Hud';
 import { LocalAnalytics } from '../analytics/Analytics';
 import { AdManager } from '../ads/AdManager';
 import { MockAdProvider } from '../ads/MockAdProvider';
+import { UnityAdsProvider } from '../ads/UnityAdsProvider';
+import { Capacitor } from '@capacitor/core';
 import { Meta } from './Meta';
 import { Battle } from './Battle';
 import { AutoPlayer } from './AutoPlayer';
@@ -55,7 +57,10 @@ export class Game {
       audio.play('click');
     };
     const meta = new Meta(save, analytics);
-    const provider = new MockAdProvider(() => save.data.settings.debugAdOutcome, () => save.data.settings.debugAdsUnavailable);
+    // Real Unity ads inside the iOS app; the website keeps the mock ads.
+    const provider = Capacitor.isNativePlatform()
+      ? new UnityAdsProvider()
+      : new MockAdProvider(() => save.data.settings.debugAdOutcome, () => save.data.settings.debugAdsUnavailable);
     const ads = new AdManager(provider, analytics, {
       onOpen: () => this.onAdOpen(),
       onClose: () => this.onAdClose(),

@@ -3,3 +3,5 @@ dist
 *.log
 .DS_Store
 .pages-build
+# The iOS app's copy of the game build (made by npm run ios:sync)
+www

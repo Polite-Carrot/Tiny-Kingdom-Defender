@@ -28,6 +28,19 @@ export const INTERSTITIAL_RULES = {
   rewardedCooldownSeconds: 180,
 };
 
+/**
+ * Unity Ads (iOS app only; the website keeps the mock ads). Every rewarded placement in the
+ * game shares the one rewarded ad unit; interstitials only ever show at checkpoints.
+ * Set testMode to false for the App Store build: real ads on your own phone can get the
+ * account flagged, so keep it on while testing.
+ */
+export const UNITY_ADS = {
+  gameId: '800404139',
+  rewarded: 'BP_Rewarded_iOS',
+  interstitial: 'BP_Interstitial_iOS',
+  testMode: true,
+};
+
 export const MOCK_AD = {
   /** Countdown length of the mock ad in seconds. */
   durationSeconds: 5,
