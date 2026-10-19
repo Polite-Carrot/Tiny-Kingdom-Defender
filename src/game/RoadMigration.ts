@@ -63,6 +63,9 @@ export const LAYOUTS: Record<number, Partial<Record<MapId, Layout>>> = {
       { name: 'Back Door', openWave: 60, points: [[19, 17], [9, 17]] },
     ]),
   },
+  6: {
+    vale: { wide: true, roads: [{ name: 'West Road', openWave: 0, points: [[-1, 1], [5, 1], [5, 4], [1, 4], [1, 12], [5, 12], [5, 7], [7, 7]] }] },
+  },
 };
 
 /** The layout a realm had in save version `v` (the current one if it hasn't changed since). */
@@ -88,15 +91,32 @@ export function remapBase(id: MapId, base: BaseSnapshot, from: Layout, to: Layou
     const s = oldMap.buildSpots[i];
     return s ? at.get(`${s.col},${s.row}`) ?? -1 : -1;
   };
-  const towers = base.towers.map((t) => ({ ...t, spot: move(t.spot) })).filter((t) => t.spot >= 0);
+  const towers = base.towers.map((t) => ({ ...t, spot: move(t.spot) }));
+  // A tower whose square became road moves to the nearest free square instead of being lost.
+  const taken = new Set(towers.map((t) => t.spot).filter((i) => i >= 0));
+  base.towers.forEach((t, k) => {
+    if (towers[k].spot >= 0) return;
+    const from = oldMap.buildSpots[t.spot];
+    let best = -1, bd = Infinity;
+    for (const sp of newMap.buildSpots) {
+      if (taken.has(sp.index) || !from) continue;
+      const d = (sp.col - from.col) ** 2 + (sp.row - from.row) ** 2;
+      if (d < bd) { bd = d; best = sp.index; }
+    }
+    towers[k].spot = best;
+    if (best >= 0) taken.add(best);
+  });
+  const kept = towers.filter((t) => t.spot >= 0);
   const spots = new Set(base.spots.map(move).filter((i) => i >= 0));
   // Every tower stands on an unlocked pad, and the new layout's starting pads come free.
-  for (const t of towers) spots.add(t.spot);
-  for (const i of initialSpots(newMap)) spots.add(i);
-  const post = (p: number | undefined) => (p === undefined || p < 0 ? p : move(p) >= 0 ? move(p) : -1);
+  for (const t of kept) spots.add(t.spot);
+  const startRoads = (to ? to.roads : def.roads).map((r, i) => (r.openWave === 0 ? i : -1)).filter((i) => i >= 0);
+  for (const i of initialSpots(newMap, startRoads)) spots.add(i);
+  // A hero whose pad became road goes back to the castle wall (a free move later).
+  const post = (p: number | undefined) => (p === undefined || p < 0 ? p : move(p) >= 0 && !taken.has(move(p)) ? move(p) : -1);
   return {
     ...base,
-    towers,
+    towers: kept,
     spots: [...spots],
     // Barricades on a road that is gone come down.
     barricades: base.barricades?.filter((b) => newMap.isPath(b.col, b.row)),

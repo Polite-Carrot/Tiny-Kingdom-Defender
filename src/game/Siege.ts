@@ -31,7 +31,7 @@ export function activeRoads(): Road[] {
 }
 
 /** Realms with fewer roads than pads fit beside them: their pads may stand a square further out. */
-const WIDE_PADS = new Set<MapId>(['vale', 'serpent', 'winds']);
+const WIDE_PADS = new Set<MapId>(['serpent', 'winds']);
 export const widePads = (id: MapId): boolean => WIDE_PADS.has(id);
 
 /** A realm's map with the given roads (deterministic). Kingdom Vale keeps its original seed. */
@@ -155,13 +155,23 @@ export function clearLandCost(padsCleared: number): number {
 }
 
 /** Pads usable when a new kingdom is founded: the best-covering pads of the first road. */
-export function initialSpots(map = kingdomMap()): number[] {
-  return map.buildSpots
-    .filter((s) => map.isClassic(s.index))
-    .map((s) => ({ i: s.index, v: map.spotCoverage(s, 0) }))
-    .sort((a, b) => b.v - a.v)
-    .slice(0, LAND.initialSpots)
-    .map((x) => x.i);
+export function initialSpots(map = kingdomMap(), startRoads = openRoads(0)): number[] {
+  // The best-covering pads for each road open from the start, taken in turn, so every opening
+  // road gets its share (Kingdom Vale's two mirror roads get three each).
+  const ranked = startRoads.map((r) =>
+    map.buildSpots
+      .filter((s) => map.isClassic(s.index))
+      .map((s) => ({ i: s.index, v: map.spotCoverage(s, r) }))
+      .sort((a, b) => b.v - a.v)
+      .map((x) => x.i));
+  const out: number[] = [];
+  for (let k = 0; out.length < LAND.initialSpots && k < map.buildSpots.length; k++) {
+    for (const list of ranked) {
+      const i = list.find((x) => !out.includes(x));
+      if (i !== undefined && out.length < LAND.initialSpots) out.push(i);
+    }
+  }
+  return out;
 }
 
 /** Coins paid for clearing wave n. */

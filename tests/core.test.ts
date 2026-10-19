@@ -166,9 +166,9 @@ describe('kingdom siege', () => {
   });
 
   it('opens new roads and Ages as waves progress', () => {
-    // Kingdom Vale keeps its one road however far you get.
-    expect(openRoads(0)).toEqual([0]);
-    expect(openRoads(500)).toEqual([0]);
+    // Kingdom Vale's two mirror-image roads are both open from the start, and stay the only two.
+    expect(openRoads(0)).toEqual([0, 1]);
+    expect(openRoads(500)).toEqual([0, 1]);
     setActiveMap('winds');
     expect(openRoads(0)).toEqual([0]);
     expect(openRoads(MAP_BY_ID.winds.roads[1].openWave)).toEqual([0, 1]);
@@ -420,7 +420,7 @@ describe('kingdom siege', () => {
 describe('roads per realm', () => {
   it('a realm never has more roads than its place in the list', () => {
     MAPS.forEach((m, i) => expect(m.roads.length, m.id).toBeLessThanOrEqual(Math.max(1, i + 1)));
-    expect(MAP_BY_ID.vale.roads).toHaveLength(1);
+    expect(MAP_BY_ID.vale.roads).toHaveLength(2);
   });
 
   it('moves a kingdom saved on the old layout onto the new one, square by square', () => {
@@ -436,8 +436,15 @@ describe('roads per realm', () => {
     expect(d.version).toBe(SAVE_VERSION);
     const nb = d.base!;
     expect(nb.wave).toBe(37);
-    expect(nb.towers.map((t) => tile(newMap, t.spot))).toEqual(pads.slice(0, 3).map((i) => tile(oldMap, i)));
-    expect(tile(newMap, nb.heroPost!)).toBe(tile(oldMap, pads[3]));
+    // No tower is lost: each stays on its square, or moves to the nearest free one if a road now runs there.
+    expect(nb.towers).toHaveLength(3);
+    pads.slice(0, 3).forEach((old, k) => {
+      const [c, r] = tile(oldMap, old).split(',').map(Number);
+      if (!newMap.isPath(c, r)) expect(tile(newMap, nb.towers[k].spot)).toBe(tile(oldMap, old));
+    });
+    expect(new Set(nb.towers.map((t) => t.spot)).size).toBe(3);
+    const [hc, hr] = tile(oldMap, pads[3]).split(',').map(Number);
+    if (!newMap.isPath(hc, hr)) expect(tile(newMap, nb.heroPost!)).toBe(tile(oldMap, pads[3]));
     for (const t of nb.towers) expect(nb.spots).toContain(t.spot);
     // The barricade on the old North-East Road comes down; the one on the West Road stays.
     expect(nb.barricades).toEqual([{ col: 1, row: 6, hp: 10, maxHp: 10 }]);
@@ -457,5 +464,25 @@ describe('roads per realm', () => {
     expect(tile(newMap, nb.towers[0].spot)).toBe(tile(oldMap, pad));
     // The road now runs on to the corner keep, so that barricade still stands on it.
     expect(nb.barricades).toEqual([{ col: 15, row: 17, hp: 5, maxHp: 5 }]);
+  });
+});
+
+describe('the two-road Kingdom Vale', () => {
+  it('a tower on a square the East Road now crosses moves to the nearest free square', () => {
+    const v6 = LAYOUTS[6].vale!;
+    const oldMap = buildRealmMap(MAP_BY_ID.vale, v6.roads, v6.wide);
+    const newMap = kingdomMap('vale');
+    const onRoad = oldMap.buildSpots.find((s) => newMap.isPath(s.col, s.row))!;
+    const safe = oldMap.buildSpots.find((s) => !newMap.isPath(s.col, s.row) && s.col < 4)!;
+    const base = { ...newKingdom(), wave: 15, spots: [onRoad.index, safe.index], heroPost: onRoad.index,
+      towers: [onRoad, safe].map((s) => ({ spot: s.index, type: 'archer' as const, tier: 1, branch: -1, kills: 0 })) };
+    const d = migrate({ version: 6, base, realms: { current: 'vale', saved: {}, best: { vale: 15 } } } as never);
+    const nb = d.base!;
+    expect(nb.towers).toHaveLength(2);
+    const moved = newMap.buildSpots[nb.towers[0].spot];
+    expect(newMap.isPath(moved.col, moved.row)).toBe(false);
+    expect(Math.max(Math.abs(moved.col - onRoad.col), Math.abs(moved.row - onRoad.row))).toBeLessThanOrEqual(2);
+    expect(`${newMap.buildSpots[nb.towers[1].spot].col},${newMap.buildSpots[nb.towers[1].spot].row}`).toBe(`${safe.col},${safe.row}`);
+    expect(nb.heroPost).toBe(-1);
   });
 });

@@ -20,6 +20,11 @@ export const ROADS: Road[] = [
     name: 'West Road', openWave: 0,
     points: [[-1, 1], [5, 1], [5, 4], [1, 4], [1, 12], [5, 12], [5, 7], [7, 7]],
   },
+  // Its mirror image on the east side, open from the start too.
+  {
+    name: 'East Road', openWave: 0,
+    points: [[15, 1], [9, 1], [9, 4], [13, 4], [13, 12], [9, 12], [9, 7], [7, 7]],
+  },
 ];
 
 export const LAND = {

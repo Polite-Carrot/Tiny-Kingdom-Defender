@@ -9,7 +9,7 @@ import type { MapId } from '../data/maps';
 import { migrateLayouts } from '../game/RoadMigration';
 import type { SpellId } from '../data/spells';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const SAVE_KEY = 'tkd_save';
 export const BACKUP_KEY = 'tkd_save_backup';
 export const CORRUPT_KEY = 'tkd_save_corrupt';
@@ -214,6 +214,8 @@ export const MIGRATIONS: Record<number, (d: AnyObj) => AnyObj> = {
   // Roads shape where the pads go, so saved kingdoms move onto each new layout square by square.
   4: (d) => relayout(d, 4),
   5: (d) => relayout(d, 5),
+  // v7: Kingdom Vale gained a mirror-image East Road.
+  6: (d) => relayout(d, 6),
 };
 
 function relayout(d: AnyObj, v: number): AnyObj {

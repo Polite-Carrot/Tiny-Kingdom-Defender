@@ -38,7 +38,7 @@ export const MAPS: MapDef[] = [
   },
   {
     id: 'vale', name: 'Kingdom Vale', unlockWave: 0,
-    description: 'The original kingdom. One long winding road from the west, and it stays that way.',
+    description: 'The original kingdom. Two identical winding roads, west and east, meet at the castle in the middle.',
     roads: ROADS,
   },
   {

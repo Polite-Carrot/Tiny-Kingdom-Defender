@@ -34,7 +34,7 @@ describe('realms', () => {
       expect(map.classicSpots).toBeGreaterThanOrEqual(24);
       expect(map.buildSpots.length).toBeGreaterThan(LAND.totalSpots * 3);
       expect(initialSpots()).toHaveLength(LAND.initialSpots);
-      expect(openRoads(0)).toEqual([0]);
+      expect(openRoads(0)).toContain(0);
       expect(siegeWave(3).groups.length).toBeGreaterThan(0);
     });
 
