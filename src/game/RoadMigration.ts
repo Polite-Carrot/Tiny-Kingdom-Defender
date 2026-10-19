@@ -11,6 +11,8 @@ export interface Layout {
   roads: Road[];
   /** Whether pads could stand a square further out (see LevelMap). */
   wide: boolean;
+  /** Board size, when it differed from the realm's current one. */
+  size?: number;
 }
 
 const narrow = (roads: Road[]): Layout => ({ roads, wide: false });
@@ -75,6 +77,49 @@ export const LAYOUTS: Record<number, Partial<Record<MapId, Layout>>> = {
       ],
     },
   },
+  8: {
+    winds: {
+      wide: true,
+      roads: [
+        { name: 'North Road', openWave: 0, points: [[7, -1], [7, 2], [4, 2], [4, 5], [7, 5], [7, 7]] },
+        { name: 'East Road', openWave: 15, points: [[15, 7], [12, 7], [12, 10], [9, 10], [9, 7], [7, 7]] },
+        { name: 'South Road', openWave: 30, points: [[7, 15], [7, 13], [4, 13], [4, 10], [7, 10], [7, 7]] },
+      ],
+    },
+    crooked: {
+      wide: false,
+      roads: [
+        { name: 'Long Road', openWave: 0, points: [[15, 1], [10, 1], [10, 5], [4, 5], [4, 8], [9, 8], [9, 11], [3, 11]] },
+        { name: 'Ridge Road', openWave: 20, points: [[1, -1], [1, 3], [2, 3], [2, 8], [1, 8], [1, 11], [3, 11]] },
+        { name: 'Lake Road', openWave: 40, points: [[15, 13], [5, 13], [5, 12], [3, 12], [3, 11]] },
+      ],
+    },
+    kingsway: {
+      wide: false,
+      roads: [
+        { name: "King's Road", openWave: 0, points: [[-1, 10], [19, 10]] },
+        { name: 'North Gate', openWave: 25, points: [[10, -1], [10, 4], [16, 4], [16, 10], [19, 10]] },
+        { name: 'South Gate', openWave: 50, points: [[10, 21], [10, 16], [16, 16], [16, 10], [19, 10]] },
+      ],
+    },
+    mirefen: {
+      wide: false,
+      roads: [
+        { name: 'Bog Road', openWave: 0, points: [[-1, 2], [5, 2], [5, 7], [2, 7], [2, 11], [7, 11], [7, 13]] },
+        { name: 'Fen Road', openWave: 20, points: [[15, 2], [9, 2], [9, 7], [12, 7], [12, 11], [7, 11], [7, 13]] },
+        { name: 'Reed Path', openWave: 40, points: [[7, -1], [7, 13]] },
+      ],
+    },
+    twin: {
+      wide: false, size: 15,
+      roads: [
+        { name: 'West Road', openWave: 0, points: [[-1, 3], [3, 3], [3, 11], [5, 11], [5, 7], [7, 7]] },
+        { name: 'East Road', openWave: 15, points: [[15, 11], [11, 11], [11, 3], [9, 3], [9, 7], [7, 7]] },
+        { name: 'North Road', openWave: 35, points: [[7, -1], [7, 1], [5, 1], [5, 5], [7, 5], [7, 7]] },
+        { name: 'South Road', openWave: 55, points: [[7, 15], [7, 13], [9, 13], [9, 9], [7, 9], [7, 7]] },
+      ],
+    },
+  },
 };
 
 /** The layout a realm had in save version `v` (the current one if it hasn't changed since). */
@@ -93,8 +138,8 @@ export function migrateLayouts(v: number, base: BaseSnapshot, id: MapId): BaseSn
 /** Moves a kingdom from one layout of a realm onto another (null: its current layout). */
 export function remapBase(id: MapId, base: BaseSnapshot, from: Layout, to: Layout | null): BaseSnapshot {
   const def = MAP_BY_ID[id];
-  const oldMap = buildRealmMap(def, from.roads, from.wide);
-  const newMap = to ? buildRealmMap(def, to.roads, to.wide) : kingdomMap(id);
+  const oldMap = buildRealmMap({ ...def, size: from.size ?? def.size }, from.roads, from.wide);
+  const newMap = to ? buildRealmMap({ ...def, size: to.size ?? def.size }, to.roads, to.wide) : kingdomMap(id);
   const at = new Map(newMap.buildSpots.map((s) => [`${s.col},${s.row}`, s.index]));
   const move = (i: number): number => {
     const s = oldMap.buildSpots[i];

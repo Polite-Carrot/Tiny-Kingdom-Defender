@@ -9,7 +9,7 @@ import type { MapId } from '../data/maps';
 import { migrateLayouts } from '../game/RoadMigration';
 import type { SpellId } from '../data/spells';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const SAVE_KEY = 'tkd_save';
 export const BACKUP_KEY = 'tkd_save_backup';
 export const CORRUPT_KEY = 'tkd_save_corrupt';
@@ -218,6 +218,9 @@ export const MIGRATIONS: Record<number, (d: AnyObj) => AnyObj> = {
   6: (d) => relayout(d, 6),
   // v8: Serpent Pass's keep moved to the south-west corner.
   7: (d) => relayout(d, 7),
+  // v9: realms 5-10 redesigned (Four Winds -> The Crossing, Crooked Keep -> Three Fords,
+  // Mirefen -> The Old Vale, Twin Rivers -> Pinwheel Keep, longer Kingsway gates).
+  8: (d) => relayout(d, 8),
 };
 
 function relayout(d: AnyObj, v: number): AnyObj {

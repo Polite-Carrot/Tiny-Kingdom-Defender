@@ -169,10 +169,10 @@ describe('kingdom siege', () => {
     // Kingdom Vale's two mirror-image roads are both open from the start, and stay the only two.
     expect(openRoads(0)).toEqual([0, 1]);
     expect(openRoads(500)).toEqual([0, 1]);
-    setActiveMap('winds');
+    setActiveMap('crooked');
     expect(openRoads(0)).toEqual([0]);
-    expect(openRoads(MAP_BY_ID.winds.roads[1].openWave)).toEqual([0, 1]);
-    expect(openRoads(MAP_BY_ID.winds.roads[2].openWave)).toEqual([0, 1, 2]);
+    expect(openRoads(MAP_BY_ID.crooked.roads[1].openWave)).toEqual([0, 1]);
+    expect(openRoads(MAP_BY_ID.crooked.roads[2].openWave)).toEqual([0, 1, 2]);
     setActiveMap('vale');
     expect(ageOf(0)).toBe(0);
     expect(ageOf(SIEGE.ageEvery - 1)).toBe(0);
@@ -502,5 +502,46 @@ describe('Serpent Pass with its keep in the corner', () => {
       expect(newMap.isPath(s.col, s.row)).toBe(false);
     }
     expect(newMap.castle).toMatchObject({ col: 2, row: 12 });
+  });
+});
+
+describe('realms 5 to 10', () => {
+  it('no road is under 18 squares, and roads only meet at the castle', () => {
+    for (const m of MAPS) {
+      setActiveMap(m.id);
+      const map = kingdomMap();
+      const seen = new Map<string, number>();
+      m.roads.forEach((r, i) => {
+        let tiles = 0;
+        for (let k = 1; k < r.points.length; k++) {
+          const [a, b] = r.points[k - 1], [c, d] = r.points[k];
+          const n = Math.abs(c - a) + Math.abs(d - b);
+          for (let t = k === 1 ? 0 : 1; t <= n; t++) {
+            const x = a + Math.sign(c - a) * t, y = b + Math.sign(d - b) * t;
+            if (x < 0 || y < 0 || x >= map.size || y >= map.size) continue;
+            tiles++;
+            const key = `${x},${y}`;
+            if (x !== map.castle.col || y !== map.castle.row) {
+              // From realm 5 on, roads share nothing but the castle square.
+              if (seen.has(key) && seen.get(key) !== i && MAPS.indexOf(m) >= 4) expect.fail(`${m.id}: ${r.name} overlaps another road at ${key}`);
+              seen.set(key, i);
+            }
+          }
+        }
+        if (MAPS.indexOf(m) >= 3) expect(tiles, `${m.id} ${r.name}`).toBeGreaterThanOrEqual(18);
+      });
+    }
+    setActiveMap('vale');
+  });
+
+  it('a version-8 Twin Rivers kingdom moves onto the bigger Pinwheel Keep board', () => {
+    const v8 = LAYOUTS[8].twin!;
+    const oldMap = buildRealmMap({ ...MAP_BY_ID.twin, size: v8.size }, v8.roads, v8.wide);
+    const pads = oldMap.buildSpots.filter((s) => oldMap.isClassic(s.index)).slice(0, 4);
+    const base = { ...newKingdom(), wave: 41, spots: pads.map((s) => s.index), towers: pads.map((s) => ({ spot: s.index, type: 'frost' as const, tier: 1, branch: -1, kills: 0 })) };
+    const d = migrate({ version: 8, base: null, realms: { current: 'vale', saved: { twin: { base, checkpointsPaid: 4, frontierSeen: 40 } }, best: { twin: 41 } } } as never);
+    const nb = d.realms.saved.twin!.base!;
+    expect(nb.towers).toHaveLength(4);
+    expect(nb.wave).toBe(41);
   });
 });
