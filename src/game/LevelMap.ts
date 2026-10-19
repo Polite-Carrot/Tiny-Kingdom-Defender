@@ -68,7 +68,8 @@ export class LevelMap {
   /** Spawn points (start of each path), world space. */
   readonly spawns: { x: number; z: number }[] = [];
 
-  constructor(public readonly roads: Waypoint[][], spotCount: number, seed: number) {
+  /** `widePads`: when the pads don't all fit right beside the roads, the rest may stand a square further out. */
+  constructor(public readonly roads: Waypoint[][], spotCount: number, seed: number, widePads = false) {
     const rng = new Random(seed);
     for (const wp of roads) {
       const xs: number[] = [];
@@ -89,7 +90,7 @@ export class LevelMap {
     }
     const last = roads[0][roads[0].length - 1];
     this.castle = { col: last[0], row: last[1], x: tileToWorld(last[0]), z: tileToWorld(last[1]) };
-    this.generateSpots(spotCount, rng);
+    this.generateSpots(spotCount, rng, widePads);
     this.generateProps(rng);
     this.classicSpots = this.buildSpots.length;
     this.addFieldSpots();
@@ -154,7 +155,7 @@ export class LevelMap {
     return Math.max(Math.abs(c - this.castle.col), Math.abs(r - this.castle.row)) <= d;
   }
 
-  private generateSpots(count: number, rng: Random): void {
+  private generateSpots(count: number, rng: Random, widePads: boolean): void {
     const pathList: [number, number][] = [];
     this.pathCells.forEach((k) => pathList.push([k % 64, Math.floor(k / 64)]));
     const covered = new Map<number, number>();
@@ -172,8 +173,32 @@ export class LevelMap {
       }
     }
     const chosen: Cand[] = [];
+    this.pickSpots(cands, chosen, covered, count);
+    if (widePads && chosen.length < count) {
+      // The second row: squares two steps from the road.
+      const wide: Cand[] = [];
+      for (let r = 0; r < this.size; r++) {
+        for (let c = 0; c < this.size; c++) {
+          if (this.isPath(c, r) || this.nearCastle(c, r, 1) || cands.some((o) => o.c === c && o.r === r)) continue;
+          let near = false;
+          for (let dr = -2; dr <= 2 && !near; dr++) for (let dc = -2; dc <= 2; dc++) if (this.isPath(c + dc, r + dr)) near = true;
+          if (!near) continue;
+          const cells: number[] = [];
+          for (const [pc, pr] of pathList) if ((pc - c) ** 2 + (pr - r) ** 2 <= 2.7 * 2.7) cells.push(LevelMap.key(pc, pr));
+          wide.push({ c, r, cells, jitter: rng.next() * 0.5 });
+        }
+      }
+      this.pickSpots(wide, chosen, covered, count);
+    }
+    // Stable order: top-left to bottom-right so indices are predictable.
+    chosen.sort((a, b) => a.r - b.r || a.c - b.c);
+    chosen.forEach((cand, i) => this.buildSpots.push({ index: i, col: cand.c, row: cand.r, x: tileToWorld(cand.c), z: tileToWorld(cand.r) }));
+  }
+
+  /** Greedily adds the candidates that cover the least-covered road, keeping pads a square apart. */
+  private pickSpots<T extends { c: number; r: number; cells: number[]; jitter: number }>(cands: T[], chosen: T[], covered: Map<number, number>, count: number): void {
     while (chosen.length < count) {
-      let best: Cand | null = null;
+      let best: T | null = null;
       let bestScore = -1;
       for (const cand of cands) {
         if (chosen.some((o) => Math.max(Math.abs(o.c - cand.c), Math.abs(o.r - cand.r)) < 2)) continue;
@@ -188,9 +213,6 @@ export class LevelMap {
       chosen.push(best);
       for (const k of best.cells) covered.set(k, (covered.get(k) ?? 0) + 1);
     }
-    // Stable order: top-left to bottom-right so indices are predictable.
-    chosen.sort((a, b) => a.r - b.r || a.c - b.c);
-    chosen.forEach((cand, i) => this.buildSpots.push({ index: i, col: cand.c, row: cand.r, x: tileToWorld(cand.c), z: tileToWorld(cand.r) }));
   }
 
   private generateProps(rng: Random): void {

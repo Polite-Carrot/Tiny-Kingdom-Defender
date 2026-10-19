@@ -4,8 +4,10 @@ import { evaluateInterstitial, type InterstitialState } from '../src/ads/AdManag
 import { metaCost } from '../src/data/economy';
 import { Run, newKingdom, type MetaBonuses } from '../src/game/Run';
 import { Meta } from '../src/game/Meta';
-import { siegeWave, openRoads, ageOf, checkpointOf, kingdomMap, clearLandCost, initialSpots, checkpointCoins } from '../src/game/Siege';
-import { ROADS, LAND, WAVE_COMPOSER, SIEGE } from '../src/data/base';
+import { siegeWave, openRoads, ageOf, checkpointOf, kingdomMap, clearLandCost, initialSpots, checkpointCoins, setActiveMap, buildRealmMap } from '../src/game/Siege';
+import { MAPS, MAP_BY_ID } from '../src/data/maps';
+import { LEGACY_ROADS } from '../src/game/RoadMigration';
+import { LAND, WAVE_COMPOSER, SIEGE } from '../src/data/base';
 import { TOWERS, towerStats, upgradeCost, levelName, MAX_TIER, MAX_LEVEL } from '../src/data/towers';
 import type { Analytics } from '../src/analytics/Analytics';
 import { heroLevelFor, xpForLevel, gearTierFor, HERO_LEVELS } from '../src/data/heroes';
@@ -149,7 +151,8 @@ describe('towers', () => {
 describe('kingdom siege', () => {
   it('has one map whose roads all end at the castle, with enough pads', () => {
     const map = kingdomMap();
-    expect(map.classicSpots).toBe(LAND.totalSpots);
+    expect(map.classicSpots).toBeGreaterThanOrEqual(24);
+    expect(map.classicSpots).toBeLessThanOrEqual(LAND.totalSpots);
     // Every other open grass square can be cleared and built on too.
     expect(map.buildSpots.length).toBeGreaterThan(LAND.totalSpots * 3);
     const keys = new Set(map.buildSpots.map((s) => `${s.col},${s.row}`));
@@ -163,9 +166,14 @@ describe('kingdom siege', () => {
   });
 
   it('opens new roads and Ages as waves progress', () => {
+    // Kingdom Vale keeps its one road however far you get.
     expect(openRoads(0)).toEqual([0]);
-    expect(openRoads(ROADS[1].openWave)).toEqual([0, 1]);
-    expect(openRoads(ROADS[2].openWave)).toEqual([0, 1, 2]);
+    expect(openRoads(500)).toEqual([0]);
+    setActiveMap('winds');
+    expect(openRoads(0)).toEqual([0]);
+    expect(openRoads(MAP_BY_ID.winds.roads[1].openWave)).toEqual([0, 1]);
+    expect(openRoads(MAP_BY_ID.winds.roads[2].openWave)).toEqual([0, 1, 2]);
+    setActiveMap('vale');
     expect(ageOf(0)).toBe(0);
     expect(ageOf(SIEGE.ageEvery - 1)).toBe(0);
     expect(ageOf(SIEGE.ageEvery)).toBe(1);
@@ -175,7 +183,7 @@ describe('kingdom siege', () => {
     expect(SIEGE.ageEvery % SIEGE.checkpointEvery).toBe(0);
     for (let w = 0; w < 200; w++) expect(ageOf(checkpointOf(w))).toBe(ageOf(w));
     // New roads open as an Age begins.
-    for (const r of ROADS) expect(r.openWave % SIEGE.ageEvery).toBe(0);
+    for (const r of MAP_BY_ID.vale.roads) expect(r.openWave % SIEGE.ageEvery).toBe(0);
   });
 
   it('waves are deterministic, endless, and capped in enemy count', () => {
@@ -262,6 +270,8 @@ describe('kingdom siege', () => {
   });
 
   it('holds before a new Age / new road until the player is ready', () => {
+    // Serpent Pass: its East Gate opens as the second Age begins.
+    setActiveMap('serpent');
     const snap = newKingdom();
     snap.wave = SIEGE.ageEvery;
     snap.checkpoint = SIEGE.ageEvery;
@@ -276,7 +286,7 @@ describe('kingdom siege', () => {
     expect(run.aliveCount()).toBe(0);
     run.continueFrontier();
     expect(run.waveIndex).toBe(SIEGE.ageEvery + 1);
-    expect(run.holdingFor).toBe(-1);
+    expect(run.holdingFor).toBe(-1);    setActiveMap('vale');
   });
 
   it('new hero abilities: quake slows, holy light heals the castle, shadow strike hits several', () => {
@@ -404,5 +414,32 @@ describe('kingdom siege', () => {
     const b = new Run({ snapshot: a.snapshot(), meta: noMeta, availableTowers: ['archer', 'cannon'] });
     expect(b.towers.map((t) => [t.def.id, t.tier, t.spot])).toEqual(a.towers.map((t) => [t.def.id, t.tier, t.spot]));
     expect(b.gold).toBe(Math.floor(a.gold));
+  });
+});
+
+describe('roads per realm', () => {
+  it('a realm never has more roads than its place in the list', () => {
+    MAPS.forEach((m, i) => expect(m.roads.length, m.id).toBeLessThanOrEqual(Math.max(1, i + 1)));
+    expect(MAP_BY_ID.vale.roads).toHaveLength(1);
+  });
+
+  it('moves a kingdom saved on the old layout onto the new one, square by square', () => {
+    const oldMap = buildRealmMap(MAP_BY_ID.vale, LEGACY_ROADS.vale!, false);
+    const newMap = kingdomMap('vale');
+    const tile = (m: typeof oldMap, i: number) => `${m.buildSpots[i].col},${m.buildSpots[i].row}`;
+    // Towers on pads beside the West Road (which stays) and a hero on another pad.
+    const pads = oldMap.buildSpots.filter((s) => oldMap.isClassic(s.index)).slice(0, 4).map((s) => s.index);
+    const base = { ...newKingdom(), wave: 37, checkpoint: 30, spots: pads, heroPost: pads[3], towers: pads.slice(0, 3).map((spot) => ({ spot, type: 'archer' as const, tier: 2, branch: -1, kills: 5 })),
+      barricades: [{ col: 12, row: 3, hp: 10, maxHp: 10 }, { col: 1, row: 6, hp: 10, maxHp: 10 }] };
+    const v4 = { version: 4, base, realms: { current: 'vale', saved: {}, best: {} } };
+    const d = migrate(v4 as never);
+    expect(d.version).toBe(SAVE_VERSION);
+    const nb = d.base!;
+    expect(nb.wave).toBe(37);
+    expect(nb.towers.map((t) => tile(newMap, t.spot))).toEqual(pads.slice(0, 3).map((i) => tile(oldMap, i)));
+    expect(tile(newMap, nb.heroPost!)).toBe(tile(oldMap, pads[3]));
+    for (const t of nb.towers) expect(nb.spots).toContain(t.spot);
+    // The barricade on the old North-East Road comes down; the one on the West Road stays.
+    expect(nb.barricades).toEqual([{ col: 1, row: 6, hp: 10, maxHp: 10 }]);
   });
 });

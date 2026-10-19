@@ -30,16 +30,24 @@ export function activeRoads(): Road[] {
   return active.roads;
 }
 
-/** The active realm's map (deterministic). Kingdom Vale keeps its original seed. */
+/** Realms with fewer roads than pads fit beside them: their pads may stand a square further out. */
+const WIDE_PADS = new Set<MapId>(['vale', 'serpent', 'winds']);
+
+/** A realm's map with the given roads (deterministic). Kingdom Vale keeps its original seed. */
+export function buildRealmMap(def: MapDef, roads: Road[], widePads = WIDE_PADS.has(def.id)): LevelMap {
+  // Build it at its own size, then put the active realm's size back.
+  const prev = gridSize();
+  setGridSize(mapSize(def));
+  const m = new LevelMap(roads.map((r) => r.points), def.spots ?? LAND.totalSpots, hashString(def.id === 'vale' ? 'tiny-kingdom' : `tiny-kingdom-${def.id}`), widePads);
+  setGridSize(prev);
+  return m;
+}
+
+/** The active realm's map. */
 export function kingdomMap(id: MapId = active.id): LevelMap {
   let m = mapCache.get(id);
   if (!m) {
-    const def = MAP_BY_ID[id];
-    // Build it at its own size, then put the active realm's size back.
-    const prev = gridSize();
-    setGridSize(mapSize(def));
-    m = new LevelMap(def.roads.map((r) => r.points), def.spots ?? LAND.totalSpots, hashString(id === 'vale' ? 'tiny-kingdom' : `tiny-kingdom-${id}`));
-    setGridSize(prev);
+    m = buildRealmMap(MAP_BY_ID[id], MAP_BY_ID[id].roads);
     mapCache.set(id, m);
   }
   return m;

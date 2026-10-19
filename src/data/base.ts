@@ -20,14 +20,6 @@ export const ROADS: Road[] = [
     name: 'West Road', openWave: 0,
     points: [[-1, 1], [5, 1], [5, 4], [1, 4], [1, 12], [5, 12], [5, 7], [7, 7]],
   },
-  {
-    name: 'North-East Road', openWave: 20,
-    points: [[12, -1], [12, 2], [8, 2], [8, 5], [12, 5], [12, 7], [7, 7]],
-  },
-  {
-    name: 'South Road', openWave: 40,
-    points: [[9, 15], [9, 13], [13, 13], [13, 9], [7, 9], [7, 7]],
-  },
 ];
 
 export const LAND = {

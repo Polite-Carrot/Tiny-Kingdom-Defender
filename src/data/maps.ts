@@ -1,7 +1,8 @@
 // The realms: each is its own kingdom map with its own road layout, saved siege and best wave.
 // Roads are tile waypoints joined by straight orthogonal segments; every road ends at the castle
 // (the last point of the first road). Tunnels sit just off the board edge (-1 or the size).
-// Most realms are the classic 15×15; some are bigger.
+// Most realms are the classic 15×15; some are bigger. A realm never has more roads than its place
+// in the list (Kingdom Vale has one road for good, Serpent Pass two, Four Winds three...).
 
 import { ROADS, type Road } from './base';
 
@@ -23,26 +24,24 @@ export interface MapDef {
 export const MAPS: MapDef[] = [
   {
     id: 'vale', name: 'Kingdom Vale', unlockWave: 0,
-    description: 'Your first kingdom. A winding west road, with more opening from the north-east and south.',
+    description: 'Your first kingdom. One long winding road from the west, and it stays that way.',
     roads: ROADS,
   },
   {
     id: 'serpent', name: 'Serpent Pass', unlockWave: 20,
-    description: 'One endless switchback road: lots of room to line it with towers, but short gates open late.',
+    description: 'One endless switchback road, and a short east gate that opens later.',
     roads: [
       { name: 'Serpent Road', openWave: 0, points: [[-1, 1], [12, 1], [12, 4], [2, 4], [2, 7], [12, 7], [12, 10], [7, 10], [7, 12]] },
       { name: 'East Gate', openWave: 20, points: [[15, 13], [10, 13], [10, 12], [7, 12]] },
-      { name: 'West Gate', openWave: 40, points: [[-1, 13], [3, 13], [3, 11], [5, 11], [5, 12], [7, 12]] },
     ],
   },
   {
     id: 'winds', name: 'Four Winds', unlockWave: 35,
-    description: 'The castle stands at the crossroads. Short roads close in from all four sides.',
+    description: 'The castle stands at a crossroads. Short roads close in from three sides.',
     roads: [
       { name: 'North Road', openWave: 0, points: [[7, -1], [7, 2], [4, 2], [4, 5], [7, 5], [7, 7]] },
       { name: 'East Road', openWave: 15, points: [[15, 7], [12, 7], [12, 10], [9, 10], [9, 7], [7, 7]] },
       { name: 'South Road', openWave: 30, points: [[7, 15], [7, 13], [4, 13], [4, 10], [7, 10], [7, 7]] },
-      { name: 'West Road', openWave: 45, points: [[-1, 4], [2, 4], [2, 9], [5, 9], [5, 7], [7, 7]] },
     ],
   },
   {
