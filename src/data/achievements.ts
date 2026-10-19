@@ -69,8 +69,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'realm_kingsway', name: 'Down the Kingsway', description: 'Reach wave 25 on The Kingsway.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'kingsway'), reward: { coins: 700, gems: 15 } },
   { id: 'realm_mirefen', name: 'Bog Warden', description: 'Reach wave 25 in Mirefen.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'mirefen'), reward: { coins: 800, gems: 15 } },
   { id: 'realm_twin', name: 'Between the Rivers', description: 'Reach wave 25 in Twin Rivers.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'twin'), reward: { coins: 900, gems: 20 } },
-  { id: 'realm_coil', name: 'Heart of the Coil', description: 'Reach wave 25 in Coil Keep.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'coil'), reward: { coins: 1000, gems: 20 } },
-  { id: 'realm_gauntlet', name: 'Ran the Gauntlet', description: 'Reach wave 25 in The Gauntlet.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'gauntlet'), reward: { coins: 1100, gems: 25 } },
+  { id: 'realm_coil', name: 'Heart of the Coil', description: 'Reach wave 25 in Coil Keep.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'coil'), reward: { coins: 250, gems: 5 } },
+  { id: 'realm_gauntlet', name: 'Ran the Gauntlet', description: 'Reach wave 25 in The Gauntlet.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'gauntlet'), reward: { coins: 350, gems: 10 } },
   { id: 'realm_crownfall', name: 'Crown of Crownfall', description: 'Reach wave 25 in Crownfall.', icon: 'map', target: 25, progress: (d) => realmBest(d, 'crownfall'), reward: { coins: 1200, gems: 25 } },
   { id: 'realm_founder', name: 'Founder of Realms', description: 'Clear a wave in every realm.', icon: 'castle', target: MAPS.length, progress: (d) => MAPS.filter((m) => realmBest(d, m.id) > 0).length, reward: { coins: 300, gems: 10 } },
   { id: 'realm_all50', name: 'High King', description: 'Reach wave 50 in every realm.', icon: 'trophy', target: 50, progress: (d) => Math.min(...MAPS.map((m) => realmBest(d, m.id))), reward: { coins: 3000, gems: 60 } },
@@ -106,5 +106,6 @@ function foeTrophies(): AchievementDef[] {
 
 /** Best wave in a realm (Kingdom Vale counts the old overall best for older saves). */
 function realmBest(d: SaveData, id: MapId): number {
-  return d.realms?.best?.[id] ?? (id === 'vale' ? d.progress.bestWave : 0);
+  const best = d.realms?.best ?? {};
+  return best[id] ?? (id === 'vale' && !Object.keys(best).length ? d.progress.bestWave : 0);
 }

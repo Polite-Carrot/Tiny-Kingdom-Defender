@@ -176,8 +176,9 @@ export class Meta {
 
   /** Best wave reached in a realm. */
   mapBest(id: MapId): number {
-    // Saves from before realms existed: Kingdom Vale's best is the overall best.
-    return this.d.realms.best[id] ?? (id === 'vale' ? this.bestWave() : 0);
+    // Saves from before realms existed (no realm records yet): Kingdom Vale's best is the overall best.
+    const best = this.d.realms.best;
+    return best[id] ?? (id === 'vale' && !Object.keys(best).length ? this.bestWave() : 0);
   }
 
   /** The saved siege of a realm (null if never founded). */
@@ -190,7 +191,7 @@ export class Meta {
     if (!MAP_BY_ID[id] || !this.mapUnlocked(id)) return false;
     const r = this.d.realms;
     if (r.current === id) return true;
-    r.best.vale ??= this.bestWave();
+    if (r.current === 'vale') r.best.vale ??= this.bestWave();
     const p = this.d.progress;
     r.saved[r.current] = { base: this.d.base, checkpointsPaid: p.checkpointsPaid, frontierSeen: p.frontierSeen };
     const next = r.saved[id] ?? { base: null, checkpointsPaid: 0, frontierSeen: 0 };

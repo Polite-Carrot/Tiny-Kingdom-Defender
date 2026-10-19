@@ -2,7 +2,7 @@
 // Roads are tile waypoints joined by straight orthogonal segments; every road ends at the castle
 // (the last point of the first road). Tunnels sit just off the board edge (-1 or the size).
 // Most realms are the classic 15×15; some are bigger. A realm never has more roads than its place
-// in the list (Kingdom Vale has one road for good, Serpent Pass two, Four Winds three...).
+// in the list. The first realms are the gentlest: one long road each.
 
 import { ROADS, type Road } from './base';
 
@@ -23,16 +23,30 @@ export interface MapDef {
 
 export const MAPS: MapDef[] = [
   {
+    id: 'coil', name: 'Coil Keep', unlockWave: 0, size: 17, spots: 40,
+    description: 'One enormous spiral winds all the way in to the keep at its heart. A long road, and the only one.',
+    roads: [
+      { name: 'The Coil', openWave: 0, points: [[-1, 1], [15, 1], [15, 15], [1, 15], [1, 3], [13, 3], [13, 13], [3, 13], [3, 5], [11, 5], [11, 11], [5, 11], [5, 7], [9, 7], [9, 9], [8, 9], [8, 8]] },
+    ],
+  },
+  {
+    id: 'gauntlet', name: 'The Gauntlet', unlockWave: 10, size: 19, spots: 44,
+    description: 'A huge realm crossed by one long snaking road, back and forth from wall to wall to a keep in the far corner.',
+    roads: [
+      { name: 'The Gauntlet', openWave: 0, points: [[-1, 1], [17, 1], [17, 5], [1, 5], [1, 9], [17, 9], [17, 13], [1, 13], [1, 17], [17, 17]] },
+    ],
+  },
+  {
     id: 'vale', name: 'Kingdom Vale', unlockWave: 0,
-    description: 'Your first kingdom. One long winding road from the west, and it stays that way.',
+    description: 'The original kingdom. One long winding road from the west, and it stays that way.',
     roads: ROADS,
   },
   {
     id: 'serpent', name: 'Serpent Pass', unlockWave: 20,
-    description: 'One endless switchback road, and a short east gate that opens later.',
+    description: 'One endless switchback road, and an east gate down the far side that opens later.',
     roads: [
       { name: 'Serpent Road', openWave: 0, points: [[-1, 1], [12, 1], [12, 4], [2, 4], [2, 7], [12, 7], [12, 10], [7, 10], [7, 12]] },
-      { name: 'East Gate', openWave: 20, points: [[15, 13], [10, 13], [10, 12], [7, 12]] },
+      { name: 'East Gate', openWave: 20, points: [[14, -1], [14, 13], [9, 13], [9, 12], [7, 12]] },
     ],
   },
   {
@@ -82,23 +96,7 @@ export const MAPS: MapDef[] = [
     ],
   },
   {
-    id: 'coil', name: 'Coil Keep', unlockWave: 85, size: 17, spots: 40,
-    description: 'One enormous spiral winds all the way in to the keep at its heart. Later, a breach cuts straight through.',
-    roads: [
-      { name: 'The Coil', openWave: 0, points: [[-1, 1], [15, 1], [15, 15], [1, 15], [1, 3], [13, 3], [13, 13], [3, 13], [3, 5], [11, 5], [11, 11], [5, 11], [5, 7], [9, 7], [9, 9], [8, 9], [8, 8]] },
-      { name: 'The Breach', openWave: 30, points: [[17, 8], [8, 8]] },
-    ],
-  },
-  {
-    id: 'gauntlet', name: 'The Gauntlet', unlockWave: 95, size: 19, spots: 44,
-    description: 'A huge realm crossed by one long snaking road, back and forth from wall to wall.',
-    roads: [
-      { name: 'The Gauntlet', openWave: 0, points: [[-1, 1], [17, 1], [17, 5], [1, 5], [1, 9], [17, 9], [17, 13], [1, 13], [1, 17], [9, 17]] },
-      { name: 'Back Door', openWave: 60, points: [[19, 17], [9, 17]] },
-    ],
-  },
-  {
-    id: 'crownfall', name: 'Crownfall', unlockWave: 110, size: 21, spots: 52,
+    id: 'crownfall', name: 'Crownfall', unlockWave: 90, size: 21, spots: 52,
     description: 'The greatest realm of all: the crown at its centre, four long roads from the four winds.',
     roads: [
       { name: 'North Road', openWave: 0, points: [[10, -1], [10, 2], [4, 2], [4, 6], [10, 6], [10, 10]] },

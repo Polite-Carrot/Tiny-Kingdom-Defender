@@ -6,10 +6,10 @@ import type { EnemyId } from '../data/enemies';
 import type { BaseSnapshot } from '../game/Run';
 import type { BuildingId } from '../data/kingdom';
 import type { MapId } from '../data/maps';
-import { remapBase } from '../game/RoadMigration';
+import { migrateLayouts } from '../game/RoadMigration';
 import type { SpellId } from '../data/spells';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const SAVE_KEY = 'tkd_save';
 export const BACKUP_KEY = 'tkd_save_backup';
 export const CORRUPT_KEY = 'tkd_save_corrupt';
@@ -164,7 +164,7 @@ export function defaultSave(now = Date.now()): SaveData {
     lastSeen: now,
     spellLevels: {},
     heroPerks: {},
-    realms: { current: 'vale', saved: {}, best: {} },
+    realms: { current: 'coil', saved: {}, best: {} },
   };
 }
 
@@ -209,15 +209,20 @@ export const MIGRATIONS: Record<number, (d: AnyObj) => AnyObj> = {
       version: 4,
     };
   },
-  // v5: Kingdom Vale, Serpent Pass and Four Winds lost roads, which moves their pads; saved
-  // kingdoms there are moved onto the new layout square by square.
-  4: (d) => {
-    const realms = d.realms ?? { current: 'vale', saved: {}, best: {} };
-    const saved: AnyObj = { ...(realms.saved ?? {}) };
-    for (const id of Object.keys(saved)) if (saved[id]?.base) saved[id] = { ...saved[id], base: remapBase(id as MapId, saved[id].base) };
-    return { ...d, base: d.base ? remapBase((realms.current ?? 'vale') as MapId, d.base) : d.base, realms: { ...realms, saved }, version: 5 };
-  },
+  // v5: Kingdom Vale, Serpent Pass and Four Winds lost roads. v6: Coil Keep and The Gauntlet
+  // lost theirs (and The Gauntlet's keep moved to the corner), Serpent Pass's east gate grew.
+  // Roads shape where the pads go, so saved kingdoms move onto each new layout square by square.
+  4: (d) => relayout(d, 4),
+  5: (d) => relayout(d, 5),
 };
+
+function relayout(d: AnyObj, v: number): AnyObj {
+  const realms = d.realms ?? { current: 'vale', saved: {}, best: {} };
+  const saved: AnyObj = { ...(realms.saved ?? {}) };
+  for (const id of Object.keys(saved)) if (saved[id]?.base) saved[id] = { ...saved[id], base: migrateLayouts(v, saved[id].base, id as MapId) };
+  const base = d.base ? migrateLayouts(v, d.base, (realms.current ?? 'vale') as MapId) : d.base;
+  return { ...d, base, realms: { ...realms, saved }, version: v + 1 };
+}
 
 /** Fills in any missing keys from defaults (shallow per top-level section). */
 function withDefaults(d: AnyObj): SaveData {

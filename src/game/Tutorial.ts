@@ -68,7 +68,8 @@ export class Tutorial {
     // Recommend the free spot closest to the middle of the first path (good coverage).
     const mid = run.map.pointAt(0, run.map.paths[0].length * 0.45, { x: 0, z: 0, dx: 0, dz: 0 });
     for (const sp of run.map.buildSpots) {
-      if (run.towerAt(sp.index)) continue;
+      // Only pads you can build on right now (not overgrown or open ground).
+      if (run.towerAt(sp.index) || run.heroAt(sp.index) || !run.isSpotUnlocked(sp.index)) continue;
       const d = (sp.x - mid.x) ** 2 + (sp.z - mid.z) ** 2 + 0.02 * ((sp.x - castle.x) ** 2 + (sp.z - castle.z) ** 2);
       if (d < bd) {
         bd = d;

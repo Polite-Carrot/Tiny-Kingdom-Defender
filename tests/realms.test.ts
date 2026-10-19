@@ -59,9 +59,9 @@ describe('realms', () => {
     meta.d.progress.bestWave = 25;
     expect(meta.switchMap('serpent')).toBe(true);
     expect(meta.d.base).toBeNull();
-    expect(meta.mapBase('vale')?.wave).toBe(12);
+    expect(meta.mapBase('coil')?.wave).toBe(12);
     meta.d.base = { ...newKingdom(), wave: 3 };
-    meta.switchMap('vale');
+    meta.switchMap('coil');
     expect(meta.d.base?.wave).toBe(12);
     expect(meta.mapBase('serpent')?.wave).toBe(3);
   });

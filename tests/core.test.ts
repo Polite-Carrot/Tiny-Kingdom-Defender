@@ -6,7 +6,7 @@ import { Run, newKingdom, type MetaBonuses } from '../src/game/Run';
 import { Meta } from '../src/game/Meta';
 import { siegeWave, openRoads, ageOf, checkpointOf, kingdomMap, clearLandCost, initialSpots, checkpointCoins, setActiveMap, buildRealmMap } from '../src/game/Siege';
 import { MAPS, MAP_BY_ID } from '../src/data/maps';
-import { LEGACY_ROADS } from '../src/game/RoadMigration';
+import { LAYOUTS } from '../src/game/RoadMigration';
 import { LAND, WAVE_COMPOSER, SIEGE } from '../src/data/base';
 import { TOWERS, towerStats, upgradeCost, levelName, MAX_TIER, MAX_LEVEL } from '../src/data/towers';
 import type { Analytics } from '../src/analytics/Analytics';
@@ -424,7 +424,7 @@ describe('roads per realm', () => {
   });
 
   it('moves a kingdom saved on the old layout onto the new one, square by square', () => {
-    const oldMap = buildRealmMap(MAP_BY_ID.vale, LEGACY_ROADS.vale!, false);
+    const oldMap = buildRealmMap(MAP_BY_ID.vale, LAYOUTS[4].vale!.roads, false);
     const newMap = kingdomMap('vale');
     const tile = (m: typeof oldMap, i: number) => `${m.buildSpots[i].col},${m.buildSpots[i].row}`;
     // Towers on pads beside the West Road (which stays) and a hero on another pad.
@@ -441,5 +441,21 @@ describe('roads per realm', () => {
     for (const t of nb.towers) expect(nb.spots).toContain(t.spot);
     // The barricade on the old North-East Road comes down; the one on the West Road stays.
     expect(nb.barricades).toEqual([{ col: 1, row: 6, hp: 10, maxHp: 10 }]);
+  });
+
+  it('moves version-5 kingdoms in The Gauntlet onto the corner-keep layout', () => {
+    const oldMap = buildRealmMap(MAP_BY_ID.gauntlet, LAYOUTS[5].gauntlet!.roads, false);
+    const newMap = kingdomMap('gauntlet');
+    const tile = (m: typeof oldMap, i: number) => `${m.buildSpots[i].col},${m.buildSpots[i].row}`;
+    // A pad beside the first straight, far from anything that moved.
+    const pad = oldMap.buildSpots.find((s) => oldMap.isClassic(s.index) && s.row === 0)!.index;
+    const base = { ...newKingdom(), wave: 22, spots: [pad], towers: [{ spot: pad, type: 'cannon' as const, tier: 1, branch: -1, kills: 0 }],
+      barricades: [{ col: 15, row: 17, hp: 5, maxHp: 5 }] };
+    const v5 = { version: 5, base: null, realms: { current: 'vale', saved: { gauntlet: { base, checkpointsPaid: 2, frontierSeen: 0 } }, best: { vale: 40, gauntlet: 22 } } };
+    const d = migrate(v5 as never);
+    const nb = d.realms.saved.gauntlet!.base!;
+    expect(tile(newMap, nb.towers[0].spot)).toBe(tile(oldMap, pad));
+    // The road now runs on to the corner keep, so that barricade still stands on it.
+    expect(nb.barricades).toEqual([{ col: 15, row: 17, hp: 5, maxHp: 5 }]);
   });
 });
