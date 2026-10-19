@@ -128,6 +128,7 @@ export function siegeWave(n: number): WaveDef {
     waveIndex: n,
     weights: themeOf(n).enemyWeights,
     roads,
+    roadLengths: roads.map((r) => kingdomMap().paths[r].length),
     hpMult: hp,
     goldMult: Math.pow(hp, SIEGE.bountyHpExponent),
     boss,

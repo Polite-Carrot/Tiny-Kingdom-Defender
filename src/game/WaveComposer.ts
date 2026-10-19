@@ -31,6 +31,8 @@ export interface ComposeOptions {
   weights: Partial<Record<EnemyId, number>>;
   /** Indices of roads open to enemies. */
   roads: number[];
+  /** Length of each open road (same order as roads). Shorter roads get a smaller share of the wave. */
+  roadLengths?: number[];
   hpMult: number;
   goldMult: number;
   boss?: EnemyId;
@@ -54,8 +56,14 @@ export function composeWave(rng: Random, o: ComposeOptions): WaveDef {
   let budget = o.budget;
   let delay = 0;
 
+  // A road's pull on the wave: its length against the longest open road (never below a third),
+  // so a short gate gets a few enemies rather than an equal share with too little time to stop them.
+  const lens = o.roadLengths ?? o.roads.map(() => 1);
+  const longest = Math.max(...lens);
+  const pull = (path: number) => Math.max(WAVE_COMPOSER.shortRoadMinShare, lens[o.roads.indexOf(path)] / longest);
   if (o.boss) {
-    groups.push({ enemy: o.boss, count: 1, path: o.roads[o.waveIndex % o.roads.length], delay: 0, spacing: 1 });
+    // Bosses take the longest road.
+    groups.push({ enemy: o.boss, count: 1, path: o.roads[lens.indexOf(longest)], delay: 0, spacing: 1 });
     budget *= WAVE_COMPOSER.bossEscortFraction;
     delay = 3;
   }
@@ -63,10 +71,13 @@ export function composeWave(rng: Random, o: ComposeOptions): WaveDef {
   const mix = o.waveIndex >= WAVE_COMPOSER.mixFromWave;
   const maxGroups = mix ? Math.min(WAVE_COMPOSER.maxGroups + o.roads.length - 1, 1 + Math.floor(budget / 8)) : 1;
   const groupCount = Math.max(1, rng.int(Math.min(2, maxGroups), maxGroups));
+  const paths: number[] = [];
   const shares: number[] = [];
   let shareTotal = 0;
   for (let i = 0; i < groupCount; i++) {
-    const v = rng.range(0.6, 1.4);
+    const path = o.roads[(i + o.waveIndex) % o.roads.length];
+    const v = rng.range(0.6, 1.4) * pull(path);
+    paths.push(path);
     shares.push(v);
     shareTotal += v;
   }
@@ -79,7 +90,7 @@ export function composeWave(rng: Random, o: ComposeOptions): WaveDef {
     const def = ENEMIES[enemy];
     const groupBudget = (budget * shares[i]) / shareTotal;
     const count = Math.max(1, Math.round(groupBudget / def.cost));
-    const path = o.roads[(i + o.waveIndex) % o.roads.length];
+    const path = paths[i];
     const spacing = ENEMY_RULES.spawnSpacing * (def.speed > 1.5 ? 0.6 : def.cost >= 3 ? 1.5 : 1);
     groups.push({ enemy, count, path, delay, spacing });
     // Groups on different roads arrive together; on the same road they follow each other.

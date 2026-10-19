@@ -170,6 +170,8 @@ export const WAVE_COMPOSER = {
   mixFromWave: 3,
   /** Performance cap: above this many enemies, counts shrink and each enemy gets tougher (and richer) instead. */
   maxEnemiesPerWave: 70,
+  /** A road's share of a wave follows its length; even the shortest road gets at least this fraction of a full share. */
+  shortRoadMinShare: 0.35,
 };
 
 /** Barricades: walls placed on open road tiles that enemies must smash through. */
