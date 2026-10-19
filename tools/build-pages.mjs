@@ -37,6 +37,8 @@ html = html.replace(/<link[^>]*rel="stylesheet"[^>]*>\s*/g, '');
 // Function replacers so `$` sequences in the bundle are left alone.
 html = html.replace('</head>', () => `<style>${css}</style>\n</head>`);
 html = html.replace('</body>', () => `<script type="module">${js}</script>\n</body>`);
+// Icons (favicon, home-screen icon) are emitted as files; inline them as data URIs too.
+html = html.replace(/href="\.\/assets\/([^"]+\.png)"/g, (_, f) => `href="data:image/png;base64,${readFileSync(join(assets, f)).toString('base64')}"`);
 html = html.replace(/<!doctype html>/i, '<!doctype html>\n<!-- Built by "npm run pages" from game.html + src/. Do not edit by hand. -->');
 writeFileSync(join(root, 'index.html'), html);
 rmSync(out, { recursive: true, force: true });

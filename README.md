@@ -4,7 +4,7 @@ A 3D tower defence game for the web, built with **Three.js + TypeScript + Vite**
 
 You don't play separate levels. You build **one persistent kingdom** that is besieged by waves that never end. Your towers, gold and cleared land stay with you forever. Every 10 waves is a checkpoint. If the castle falls, you regroup at the last checkpoint with everything you've built, upgrade, and push further.
 
-There are no external assets. Every model is low-poly geometry built in code, and every sound effect and music track is synthesised with the Web Audio API. The game runs fully offline as a single-player game, and saves progress to `localStorage`.
+Apart from the app icon (`src/assets/icon/`: a 1024×1024 store version, the browser favicon and the home-screen icon, which the Pages build embeds in `index.html`), there are no external assets. Every model is low-poly geometry built in code, and every sound effect and music track is synthesised with the Web Audio API. The game runs fully offline as a single-player game, and saves progress to `localStorage`.
 
 ```bash
 npm install
