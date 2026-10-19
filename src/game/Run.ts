@@ -10,8 +10,8 @@ import { HEROES, REINFORCEMENT, HERO_LEVELS, HERO_POST, type HeroDef, type HeroI
 import { TOWER_META, AD_REWARDS, BATTLEMENTS } from '../data/economy';
 import { SIEGE, BARRICADE } from '../data/base';
 
-/** Foundations on open ground cost this share of clearing an overgrown pad. */
-const FOUNDATION_PRICE = 0.5;
+/** Foundations on open ground cost this many times clearing an overgrown pad (clearing is the bargain). */
+const FOUNDATION_PRICE = 2;
 import { Emitter } from '../core/Emitter';
 import { Random } from '../core/Random';
 import { tileToWorld, type LevelMap, type PathPoint } from './LevelMap';

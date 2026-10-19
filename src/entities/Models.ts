@@ -562,6 +562,55 @@ function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; 
   }
 }
 
+const _ua = new THREE.Vector3(0, 1, 0);
+
+/** A rounded cylinder between two points (bones, limbs, tail segments). */
+function limb(b: ModelBuilder, a: THREE.Vector3, c: THREE.Vector3, ra: number, rc: number, color: THREE.ColorRepresentation, seg = 5) {
+  const d = new THREE.Vector3().subVectors(c, a);
+  const len = d.length();
+  if (len < 1e-4) return;
+  const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(_ua, d.clone().normalize()));
+  const m = a.clone().addScaledVector(d, 0.5);
+  b.cyl(rc, ra, len, seg, color, { x: m.x, y: m.y, z: m.z, rx: e.x, ry: e.y, rz: e.z });
+}
+
+/**
+ * A bat-style wing: a thin membrane with a scalloped trailing edge, stretched between an arm bone
+ * and three finger bones. `sx` picks the side; `tilt` raises it; `sweep` angles it back.
+ */
+function wing(b: ModelBuilder, sx: number, o: { span: number; chord: number; membrane: string; bone: string; x?: number; y?: number; z?: number; tilt?: number; sweep?: number; thick?: number }) {
+  const S = o.span, C = o.chord;
+  const wrist: [number, number] = [S * 0.36, C * 0.12];
+  const tips: [number, number][] = [[S, -C * 0.12], [S * 0.76, -C * 0.85], [S * 0.44, -C]];
+  const shape = new THREE.Shape();
+  shape.moveTo(0, C * 0.1);
+  shape.lineTo(...wrist);
+  shape.lineTo(...tips[0]);
+  // Scallops: each edge between finger tips curves gently in towards the wrist.
+  const notch = (p: [number, number], q: [number, number]) => {
+    const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+    shape.quadraticCurveTo(mx + (wrist[0] - mx) * 0.22, my + (wrist[1] - my) * 0.22, q[0], q[1]);
+  };
+  notch(tips[0], tips[1]);
+  notch(tips[1], tips[2]);
+  notch(tips[2], [0.02, -C * 0.55]);
+  shape.lineTo(0, C * 0.1);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: o.thick ?? 0.012, bevelEnabled: false, curveSegments: 4 });
+  geo.rotateX(Math.PI / 2);
+  const tilt = o.tilt ?? 0.25, sweep = o.sweep ?? 0;
+  const at = { x: o.x ?? 0, y: o.y ?? 0, z: o.z ?? 0 };
+  b.add(geo, o.membrane, { ...at, sx, rz: sx * tilt, ry: sx * sweep });
+  // Bones, placed with the same mirror, sweep and tilt as the membrane.
+  const rot = new THREE.Euler(0, sx * sweep, sx * tilt);
+  const P = (u: number, v: number) => new THREE.Vector3(u * sx, 0.012, v).applyEuler(rot).add(new THREE.Vector3(at.x, at.y, at.z));
+  const r = S * 0.017;
+  limb(b, P(0, C * 0.1), P(...wrist), r * 1.3, r, o.bone);
+  for (const t of tips) limb(b, P(...wrist), P(...t), r, r * 0.45, o.bone, 4);
+  // A little thumb claw at the wrist.
+  const w = P(...wrist);
+  b.cone(r * 0.9, S * 0.08, 4, o.bone, { x: w.x, y: w.y + S * 0.03, z: w.z + C * 0.06, rx: 0.9 });
+}
+
 function buildEnemy(id: EnemyId): THREE.BufferGeometry {
   const b = new ModelBuilder();
   const SKIN = '#7fb24f';
@@ -579,7 +628,13 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
     case 'runner':
       humanoid(b, '#e0913a', '#c7d36a', { h: 0.95, w: 0.85 });
       b.cone(0.1, 0.22, 4, '#d2452f', { y: 0.62, rx: -0.6, z: -0.04 });
-      b.box(0.3, 0.04, 0.06, '#d2452f', { y: 0.3, z: -0.1 });
+      // A scarf streaming behind, a pouch and a dagger.
+      b.torus(0.07, 0.025, 4, 10, '#d2452f', { y: 0.39, rx: Math.PI / 2 });
+      b.box(0.06, 0.02, 0.22, '#d2452f', { x: 0.03, y: 0.37, z: -0.15, rx: 0.4 });
+      b.box(0.06, 0.02, 0.16, '#b8382c', { x: -0.03, y: 0.35, z: -0.13, rx: 0.6 });
+      b.ball(0.045, 0, '#8a5a34', { x: -0.12, y: 0.17, z: 0.04 });
+      b.box(0.018, 0.12, 0.03, '#d9dde3', { x: 0.17, y: 0.15, z: 0.08, rx: 0.5 });
+      b.box(0.05, 0.016, 0.03, GOLD, { x: 0.17, y: 0.2, z: 0.05, rx: 0.5 });
       break;
     case 'knight':
       humanoid(b, '#8a93a3', '#b9c2cf', { w: 1.15 });
@@ -587,66 +642,208 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.box(0.2, 0.03, 0.03, '#2a2d33', { y: 0.53, z: 0.14 });
       b.cone(0.03, 0.14, 4, '#c73a3a', { y: 0.66 });
       b.box(0.04, 0.4, 0.04, '#d9dde3', { x: 0.2, y: 0.38, z: 0.06 });
+      b.box(0.12, 0.025, 0.04, GOLD, { x: 0.2, y: 0.2, z: 0.06 });
       b.box(0.36, 0.06, 0.2, '#6f7888', { y: 0.37 });
+      // A red cape and a kite shield with a gold cross.
+      b.box(0.3, 0.34, 0.02, '#a8322a', { y: 0.22, z: -0.13, rx: 0.12 });
+      b.box(0.04, 0.14, 0.18, '#c9cfd8', { x: -0.2, y: 0.3, z: 0.04 });
+      b.cone(0.09, 0.12, 4, '#c9cfd8', { x: -0.2, y: 0.17, z: 0.04, rx: Math.PI, ry: Math.PI / 4, sx: 0.45 });
+      b.box(0.012, 0.13, 0.03, GOLD, { x: -0.225, y: 0.3, z: 0.04 });
+      b.box(0.012, 0.03, 0.12, GOLD, { x: -0.225, y: 0.32, z: 0.04 });
       break;
-    case 'bat':
-      b.ball(0.13, 0, '#5b3f73', { y: 0, sy: 1.1 });
-      b.cone(0.04, 0.1, 3, '#5b3f73', { x: -0.07, y: 0.15 });
-      b.cone(0.04, 0.1, 3, '#5b3f73', { x: 0.07, y: 0.15 });
-      b.box(0.36, 0.02, 0.18, '#3e2952', { x: -0.24, y: 0.03, rz: 0.3 });
-      b.box(0.36, 0.02, 0.18, '#3e2952', { x: 0.24, y: 0.03, rz: -0.3 });
-      b.ball(0.025, 0, '#ffde59', { x: -0.05, y: 0.04, z: 0.11 });
-      b.ball(0.025, 0, '#ffde59', { x: 0.05, y: 0.04, z: 0.11 });
+    case 'bat': {
+      // Furry body and head, tall ears, glowing eyes and fangs, on proper membrane wings.
+      const fur = '#4a3552', belly = '#7a5c86';
+      b.ball(0.1, 1, fur, { y: 0, sy: 1.15, sz: 0.95 });
+      b.ball(0.065, 1, belly, { y: -0.01, z: 0.05, sy: 1.2 });
+      b.ball(0.075, 1, fur, { y: 0.1, z: 0.06 });
+      b.cone(0.03, 0.05, 5, '#5e4468', { y: 0.085, z: 0.13, rx: Math.PI / 2 });
+      b.ball(0.012, 0, '#2a1a2e', { y: 0.09, z: 0.155 });
+      for (const sx of [-1, 1]) {
+        b.cone(0.042, 0.13, 4, fur, { x: sx * 0.045, y: 0.2, z: 0.04, rz: sx * -0.35 });
+        b.cone(0.024, 0.09, 4, '#d98aa6', { x: sx * 0.045, y: 0.195, z: 0.06, rz: sx * -0.35 });
+        b.ball(0.022, 0, glowC('#ff4a4a', 1.9), { x: sx * 0.032, y: 0.115, z: 0.125 });
+        b.cone(0.008, 0.03, 3, '#ffffff', { x: sx * 0.014, y: 0.06, z: 0.145, rx: Math.PI });
+        wing(b, sx, { span: 0.42, chord: 0.24, membrane: '#8a529c', bone: '#2a1a30', x: sx * 0.07, y: 0.04, z: 0.02, tilt: 0.32, sweep: 0.12 });
+        // Tucked feet with little claws.
+        b.cyl(0.012, 0.012, 0.06, 4, '#2a1a30', { x: sx * 0.035, y: -0.12, z: -0.02 });
+        b.cone(0.01, 0.03, 3, '#d9d0c0', { x: sx * 0.035, y: -0.16, z: 0.0, rx: Math.PI });
+      }
+      b.cone(0.05, 0.08, 4, '#5a3468', { y: -0.06, z: -0.11, rx: -2.2 });
       break;
-    case 'shaman':
-      b.cone(0.2, 0.42, 6, '#6a4aa0', { y: 0.21 });
-      b.ball(0.12, 0, SKIN, { y: 0.47 });
-      b.cone(0.13, 0.2, 6, '#e0c050', { y: 0.62 });
-      b.cyl(0.02, 0.02, 0.6, 4, WOOD, { x: 0.18, y: 0.3 });
-      b.ball(0.06, 0, '#79f2a0', { x: 0.18, y: 0.63 });
+    }
+    case 'shaman': {
+      // Goblin witch doctor: hooded robe with a rope belt and runes, bone mask, skull staff with a green flame.
+      const robe = '#5c3f8f', trim = '#e0c050';
+      b.cyl(0.11, 0.2, 0.36, 8, robe, { y: 0.18 });
+      b.cyl(0.205, 0.205, 0.04, 8, '#4a3274', { y: 0.02 });
+      b.torus(0.12, 0.018, 4, 10, '#a8864a', { y: 0.24, rx: Math.PI / 2 });
+      b.box(0.04, 0.12, 0.012, trim, { y: 0.15, z: 0.16, rx: -0.25 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.06, 0, robe, { x: sx * 0.12, y: 0.33 });
+        b.cyl(0.035, 0.05, 0.18, 6, robe, { x: sx * 0.17, y: 0.25, rz: sx * 0.35 });
+        b.ball(0.035, 0, SKIN, { x: sx * 0.21, y: 0.17, z: 0.04 });
+        b.ball(0.02, 0, glowC('#7dff9a', 1.8), { x: sx * 0.035, y: 0.45, z: 0.115 });
+        b.cone(0.03, 0.11, 4, SKIN, { x: sx * 0.12, y: 0.47, rz: sx * -1.25 });
+      }
+      b.ball(0.11, 1, SKIN, { y: 0.44 });
+      // Bone mask over the face, a feathered hood.
+      b.box(0.15, 0.1, 0.03, '#efe6cf', { y: 0.44, z: 0.095 });
+      for (const sx of [-1, 1]) b.box(0.035, 0.025, 0.035, '#1a1218', { x: sx * 0.035, y: 0.455, z: 0.105 });
+      b.cone(0.14, 0.24, 7, '#4a3274', { y: 0.58, z: -0.02, rx: -0.15 });
+      for (const [k, c] of [[-1, '#d94a3a'], [0, trim], [1, '#3aa0d9']] as const) b.cone(0.018, 0.12, 4, c, { x: k * 0.05, y: 0.66, z: -0.08, rx: -0.5, rz: k * 0.3 });
+      // Staff: knotted wood, a little skull and a ghostly flame.
+      b.cyl(0.018, 0.024, 0.66, 5, WOOD_D, { x: 0.24, y: 0.33, z: 0.05 });
+      b.ball(0.05, 1, '#efe6cf', { x: 0.24, y: 0.68, z: 0.05 });
+      for (const sx of [-1, 1]) b.ball(0.012, 0, '#1a1218', { x: 0.24 + sx * 0.018, y: 0.69, z: 0.093 });
+      b.cone(0.045, 0.14, 6, glowC('#7dff9a', 1.9), { x: 0.24, y: 0.79, z: 0.05 });
+      b.cone(0.025, 0.08, 5, glowC('#e0ffd0', 2.2), { x: 0.24, y: 0.78, z: 0.05 });
       break;
-    case 'shield':
-      humanoid(b, '#7a5a3a', '#9fb070', { w: 1.2, h: 1.05 });
-      b.box(0.5, 0.55, 0.06, '#b0884f', { y: 0.3, z: 0.18 });
-      b.box(0.52, 0.06, 0.07, '#7b8494', { y: 0.55, z: 0.18 });
-      b.box(0.52, 0.06, 0.07, '#7b8494', { y: 0.06, z: 0.18 });
-      b.ball(0.07, 0, GOLD, { y: 0.3, z: 0.22 });
+    }
+    case 'shield': {
+      // Orc shield-bearer peering over a big studded tower shield, spear at its side.
+      humanoid(b, '#6a4a32', '#86a85a', { w: 1.2, h: 1.05 });
+      b.cyl(0.135, 0.14, 0.08, 8, '#6f7888', { y: 0.55 });
+      b.ball(0.135, 1, '#7b8494', { y: 0.57, sy: 0.6 });
+      b.cone(0.02, 0.08, 4, '#c9cfd8', { y: 0.66 });
+      for (const sx of [-1, 1]) b.cone(0.012, 0.04, 3, '#f4f0e0', { x: sx * 0.04, y: 0.46, z: 0.12 });
+      // Tower shield: planks with an iron rim, studs and a painted emblem.
+      const sz = 0.2;
+      for (let k = 0; k < 4; k++) b.box(0.115, 0.5, 0.05, k % 2 ? '#a07a45' : '#b48a52', { x: -0.17 + k * 0.115, y: 0.3, z: sz });
+      for (const y of [0.06, 0.54]) b.box(0.5, 0.045, 0.065, '#6a7380', { y, z: sz });
+      for (const x of [-0.235, 0.235]) b.box(0.04, 0.52, 0.065, '#6a7380', { x, y: 0.3, z: sz });
+      for (const x of [-0.18, 0.18]) for (const y of [0.12, 0.48]) b.ball(0.018, 0, '#c9cfd8', { x, y, z: sz + 0.035 });
+      b.cyl(0.09, 0.09, 0.02, 8, '#b8382c', { y: 0.32, z: sz + 0.03, rx: Math.PI / 2 });
+      b.cone(0.05, 0.1, 4, '#f2c94c', { y: 0.32, z: sz + 0.05, rx: Math.PI / 2 });
+      b.cyl(0.014, 0.014, 0.8, 5, WOOD_D, { x: 0.27, y: 0.4, z: 0.05 });
+      b.cone(0.03, 0.12, 4, '#d9dde3', { x: 0.27, y: 0.86, z: 0.05 });
       break;
+    }
     case 'minion':
       humanoid(b, '#c0392b', '#e0634f', { h: 0.85, w: 0.85 });
       b.cone(0.03, 0.1, 4, '#3a1a1a', { x: -0.06, y: 0.55 });
       b.cone(0.03, 0.1, 4, '#3a1a1a', { x: 0.06, y: 0.55 });
+      // A forked tail and a little trident.
+      limb(b, new THREE.Vector3(0, 0.15, -0.08), new THREE.Vector3(0, 0.08, -0.22), 0.015, 0.01, '#a02a1a');
+      b.cone(0.03, 0.06, 3, '#3a1a1a', { y: 0.1, z: -0.25, rx: -2.2 });
+      b.cyl(0.012, 0.012, 0.42, 4, '#5a3a24', { x: 0.17, y: 0.25, z: 0.05 });
+      for (const k of [-1, 0, 1]) b.cone(0.012, 0.06, 3, '#c9cfd8', { x: 0.17 + k * 0.03, y: 0.48, z: 0.05 });
+      b.box(0.08, 0.012, 0.015, '#c9cfd8', { x: 0.17, y: 0.45, z: 0.05 });
       break;
-    case 'boss_ogre':
-      b.box(0.12, 0.18, 0.12, '#5a4632', { x: -0.1, y: 0.09 });
-      b.box(0.12, 0.18, 0.12, '#5a4632', { x: 0.1, y: 0.09 });
-      b.ball(0.26, 0, '#8aa05a', { y: 0.36, sy: 0.9 });
-      b.box(0.4, 0.12, 0.3, '#7a4a2a', { y: 0.24 });
-      b.ball(0.13, 0, '#9ab06a', { y: 0.6 });
-      b.cone(0.03, 0.08, 4, '#f4f0e0', { x: -0.06, y: 0.57, z: 0.12, rx: -0.5 });
-      b.cone(0.03, 0.08, 4, '#f4f0e0', { x: 0.06, y: 0.57, z: 0.12, rx: -0.5 });
-      b.cyl(0.05, 0.1, 0.5, 6, WOOD_D, { x: 0.3, y: 0.4, z: 0.1, rx: 0.4 });
-      b.cone(0.12, 0.12, 5, GOLD, { y: 0.74 });
+    case 'boss_ogre': {
+      // The Ogre Warlord: hulking belly, hide kilt, pauldron, tusks, a crown and a spiked tree-trunk club.
+      const skin = '#86a656', dark = '#6a8a44';
+      for (const sx of [-1, 1]) {
+        b.cyl(0.07, 0.085, 0.18, 7, dark, { x: sx * 0.1, y: 0.1 });
+        b.box(0.12, 0.05, 0.16, '#4a3424', { x: sx * 0.1, y: 0.025, z: 0.02 });
+      }
+      b.ball(0.24, 1, skin, { y: 0.36, sy: 0.92, sz: 0.9 });
+      b.ball(0.16, 1, '#a8c47a', { y: 0.32, z: 0.1, sy: 0.9 });
+      b.cyl(0.235, 0.26, 0.12, 9, '#7a4a2a', { y: 0.2 });
+      for (let k = 0; k < 6; k++) b.box(0.07, 0.1, 0.02, '#5e3820', { x: Math.cos(k) * 0.02 + (k - 2.5) * 0.08, y: 0.13, z: 0.23, rx: 0.2 });
+      b.box(0.36, 0.05, 0.04, '#3a2416', { y: 0.27, z: 0.18, rx: 0.3 });
+      b.box(0.07, 0.07, 0.03, GOLD, { y: 0.26, z: 0.22 });
+      // Arms: one with an iron pauldron, both with big fists.
+      for (const sx of [-1, 1]) {
+        b.ball(0.1, 1, dark, { x: sx * 0.26, y: 0.5 });
+        b.capsule(0.07, 0.18, skin, { x: sx * 0.31, y: 0.34, rz: sx * 0.25 });
+        b.ball(0.08, 1, dark, { x: sx * 0.35, y: 0.2, z: 0.04 });
+      }
+      b.ball(0.12, 1, '#6a7380', { x: -0.26, y: 0.54, sy: 0.7 });
+      for (let k = 0; k < 3; k++) b.cone(0.025, 0.08, 4, '#c9cfd8', { x: -0.26 - k * 0.04 + 0.04, y: 0.62, z: (k - 1) * 0.05 });
+      // Head: heavy brow, little eyes, tusks, a big nose and a crooked crown.
+      b.ball(0.13, 1, skin, { y: 0.62, z: 0.07 });
+      b.box(0.2, 0.04, 0.06, dark, { y: 0.66, z: 0.17 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.022, 0, '#fff2c0', { x: sx * 0.05, y: 0.63, z: 0.19 });
+        b.ball(0.012, 0, '#c0201a', { x: sx * 0.05, y: 0.63, z: 0.206 });
+        b.cone(0.022, 0.09, 4, '#f4f0e0', { x: sx * 0.06, y: 0.57, z: 0.18, rz: sx * -0.2 });
+        b.cone(0.03, 0.07, 4, skin, { x: sx * 0.13, y: 0.65, z: 0.05, rz: sx * -1.3 });
+      }
+      b.ball(0.04, 0, dark, { y: 0.6, z: 0.2 });
+      b.cyl(0.1, 0.09, 0.06, 7, GOLD, { y: 0.75, z: 0.06, rz: 0.15 });
+      for (let k = 0; k < 5; k++) b.cone(0.022, 0.07, 4, GOLD, { x: Math.cos((k / 5) * Math.PI * 2) * 0.085, y: 0.81, z: 0.06 + Math.sin((k / 5) * Math.PI * 2) * 0.085, rz: 0.15 });
+      b.ball(0.02, 0, glowC('#ff4a6a', 1.5), { y: 0.76, z: 0.155 });
+      // Club: a knotted trunk studded with iron spikes.
+      b.cyl(0.05, 0.1, 0.55, 7, WOOD_D, { x: 0.38, y: 0.42, z: 0.12, rx: 0.5 });
+      for (let k = 0; k < 6; k++) {
+        const a = k * 1.05;
+        b.cone(0.02, 0.07, 3, '#c9cfd8', { x: 0.38 + Math.cos(a) * 0.09, y: 0.6 + (k % 2) * 0.05, z: 0.26 + Math.sin(a) * 0.09, rz: -Math.cos(a) * 1.4, rx: Math.sin(a) * 1.4 });
+      }
       break;
-    case 'boss_scorpion':
-      b.dodec(0.28, '#c9a063', { y: 0.32 });
-      b.dodec(0.16, '#b08a52', { y: 0.62 });
-      b.box(0.14, 0.3, 0.14, '#a07a45', { x: -0.22, y: 0.15 });
-      b.box(0.14, 0.3, 0.14, '#a07a45', { x: 0.22, y: 0.15 });
-      b.dodec(0.12, '#a07a45', { x: -0.34, y: 0.36 });
-      b.dodec(0.12, '#a07a45', { x: 0.34, y: 0.36 });
-      b.ball(0.035, 0, '#4ff0ff', { x: -0.06, y: 0.64, z: 0.13 });
-      b.ball(0.035, 0, '#4ff0ff', { x: 0.06, y: 0.64, z: 0.13 });
+    }
+    case 'boss_scorpion': {
+      // The Sand Scorpion King: plated body, eight legs, huge pincers and a segmented tail arching over
+      // its back to a glowing stinger.
+      const shell = '#c9944a', dark = '#8a5e2c', light = '#e0b26a';
+      b.ball(0.2, 1, shell, { y: 0.2, sy: 0.55, sz: 1.25 });
+      for (let k = 0; k < 4; k++) b.box(0.3 - k * 0.03, 0.03, 0.07, light, { y: 0.29 - k * 0.005, z: 0.12 - k * 0.09 });
+      b.ball(0.12, 1, dark, { y: 0.2, z: 0.24, sy: 0.6, sx: 1.2 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.024, 0, glowC('#4ff0ff', 2), { x: sx * 0.04, y: 0.26, z: 0.33 });
+        b.ball(0.016, 0, glowC('#4ff0ff', 2), { x: sx * 0.085, y: 0.25, z: 0.3 });
+        // Four legs a side: up to a knee, down to the sand.
+        for (let k = 0; k < 4; k++) {
+          const z = 0.12 - k * 0.1;
+          const hip = new THREE.Vector3(sx * 0.15, 0.2, z), knee = new THREE.Vector3(sx * 0.29, 0.27, z + 0.03 - k * 0.02), foot = new THREE.Vector3(sx * 0.4, 0.0, z + 0.08 - k * 0.07);
+          limb(b, hip, knee, 0.034, 0.028, dark, 6);
+          b.ball(0.032, 0, light, { x: knee.x, y: knee.y, z: knee.z });
+          limb(b, knee, foot, 0.028, 0.01, shell, 6);
+        }
+        // Pincer arms and claws.
+        const sh = new THREE.Vector3(sx * 0.13, 0.22, 0.28), el = new THREE.Vector3(sx * 0.28, 0.28, 0.4), wr = new THREE.Vector3(sx * 0.22, 0.26, 0.56);
+        limb(b, sh, el, 0.04, 0.035, dark);
+        limb(b, el, wr, 0.035, 0.04, shell);
+        b.ball(0.1, 1, shell, { x: wr.x, y: wr.y, z: wr.z + 0.05, sz: 1.35, sy: 0.8 });
+        b.cone(0.045, 0.2, 4, light, { x: wr.x - sx * 0.045, y: wr.y, z: wr.z + 0.22, rx: Math.PI / 2, rz: sx * 0.25 });
+        b.cone(0.038, 0.17, 4, dark, { x: wr.x + sx * 0.05, y: wr.y, z: wr.z + 0.2, rx: Math.PI / 2, rz: sx * -0.3 });
+      }
+      // Tail: shrinking segments in an arc over the back.
+      let prev = new THREE.Vector3(0, 0.22, -0.22);
+      for (let k = 1; k <= 7; k++) {
+        const a = (k / 7) * Math.PI * 0.95;
+        const p = new THREE.Vector3(0, 0.22 + Math.sin(a) * 0.5, -0.22 - Math.sin(a * 0.9) * 0.18 + (1 - Math.cos(a)) * 0.2);
+        const r = 0.075 - k * 0.006;
+        limb(b, prev, p, r, r * 0.9, k % 2 ? shell : dark, 7);
+        b.ball(r, 0, light, { x: p.x, y: p.y, z: p.z });
+        prev = p;
+      }
+      b.ball(0.06, 1, '#5a3a1c', { x: prev.x, y: prev.y - 0.02, z: prev.z + 0.05 });
+      b.cone(0.03, 0.14, 5, glowC('#8af0ff', 1.8), { x: prev.x, y: prev.y - 0.08, z: prev.z + 0.11, rx: 2.4 });
+      b.cone(0.06, 0.1, 6, GOLD, { y: 0.32, z: 0.27 });
       break;
-    case 'boss_yeti':
-      b.ball(0.3, 1, '#eef3f7', { y: 0.36, sy: 1.05 });
-      b.ball(0.15, 0, '#f6f9fb', { y: 0.7 });
-      b.box(0.14, 0.06, 0.04, '#7aa0c4', { y: 0.68, z: 0.13 });
-      b.ball(0.11, 0, '#e4ecf2', { x: -0.3, y: 0.3, sy: 1.6 });
-      b.ball(0.11, 0, '#e4ecf2', { x: 0.3, y: 0.3, sy: 1.6 });
-      b.cone(0.03, 0.1, 4, '#cfdce8', { x: -0.08, y: 0.83, rz: 0.4 });
-      b.cone(0.03, 0.1, 4, '#cfdce8', { x: 0.08, y: 0.83, rz: -0.4 });
+    }
+    case 'boss_yeti': {
+      // The Frost Yeti: shaggy hunched body, long arms with big dark hands, a blue face, curled horns
+      // and a frosty crown of icicles.
+      const fur = '#eef3f7', shade = '#cfdce8', face = '#7aa0c4';
+      for (const sx of [-1, 1]) {
+        b.capsule(0.08, 0.1, shade, { x: sx * 0.12, y: 0.1 });
+        b.box(0.14, 0.05, 0.2, '#4a5a70', { x: sx * 0.12, y: 0.025, z: 0.03 });
+      }
+      b.ball(0.28, 1, fur, { y: 0.4, sy: 1.05, sz: 0.9 });
+      // Shaggy tufts all over.
+      for (let k = 0; k < 14; k++) {
+        const a = k * 2.4, y = 0.2 + (k % 5) * 0.08;
+        b.cone(0.05, 0.1, 4, k % 2 ? fur : shade, { x: Math.cos(a) * 0.25, y, z: Math.sin(a) * 0.22, rz: -Math.cos(a) * 1.2, rx: Math.sin(a) * 1.2 });
+      }
+      b.ball(0.15, 1, '#f6f9fb', { y: 0.66, z: 0.1 });
+      b.ball(0.11, 1, face, { y: 0.63, z: 0.16, sy: 0.9 });
+      b.box(0.12, 0.035, 0.05, '#4a6a8c', { y: 0.58, z: 0.24 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.022, 0, glowC('#bff4ff', 2), { x: sx * 0.045, y: 0.67, z: 0.255 });
+        b.box(0.05, 0.015, 0.02, '#3a4a5c', { x: sx * 0.045, y: 0.7, z: 0.255, rz: sx * 0.35 });
+        b.cone(0.012, 0.04, 3, '#ffffff', { x: sx * 0.035, y: 0.56, z: 0.255, rx: Math.PI });
+        b.arc(0.07, 0.022, Math.PI * 1.2, '#c9b48a', { x: sx * 0.13, y: 0.76, z: 0.06, ry: sx * 0.6 + (sx < 0 ? Math.PI : 0) });
+        // Long shaggy arms down to big dark hands.
+        b.ball(0.11, 1, shade, { x: sx * 0.27, y: 0.5 });
+        b.capsule(0.085, 0.22, fur, { x: sx * 0.33, y: 0.32, rz: sx * 0.12 });
+        b.ball(0.085, 1, '#5a6a80', { x: sx * 0.35, y: 0.13, z: 0.05 });
+        for (let k = 0; k < 3; k++) b.cone(0.014, 0.05, 3, '#e8f4ff', { x: sx * 0.35 + (k - 1) * 0.035, y: 0.08, z: 0.12, rx: 1.9 });
+      }
+      for (let k = 0; k < 5; k++) b.cone(0.025, 0.12, 4, glowC('#bff4ff', 1.3), { x: (k - 2) * 0.05, y: 0.82 + (k === 2 ? 0.03 : 0), z: 0.06 });
       break;
+    }
     case 'scarab': {
       // Armoured beetle: split shell, little head, six legs, glinting eyes.
       b.ball(0.15, 1, '#2f6f7a', { y: 0.12, sy: 0.6, sz: 1.2 });
@@ -755,16 +952,24 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       break;
     }
     case 'fireimp': {
-      // Little flying fire devil: horns, bat wings, flaming tail.
-      b.ball(0.11, 1, '#e0482a', { y: 0.05 });
-      b.ball(0.08, 1, '#f06a3a', { y: 0.17, z: 0.04 });
+      // Little flying fire devil: pot belly, horns, grin, flame hair, ember wings and a flaming tail.
+      b.ball(0.1, 1, '#d8402a', { y: 0.04, sy: 1.05 });
+      b.ball(0.065, 1, '#f08a4a', { y: 0.03, z: 0.05 });
+      b.ball(0.085, 1, '#e8502e', { y: 0.17, z: 0.04 });
       for (const sx of [-1, 1]) {
-        b.cone(0.02, 0.08, 4, '#3a1a14', { x: sx * 0.05, y: 0.26, z: 0.03, rz: sx * -0.4 });
-        b.ball(0.016, 0, glowC('#ffe066', 2), { x: sx * 0.03, y: 0.18, z: 0.11 });
-        b.box(0.22, 0.012, 0.14, '#8a2418', { x: sx * 0.18, y: 0.1, z: -0.03, rz: sx * 0.35 });
+        b.cone(0.022, 0.1, 4, '#3a1a14', { x: sx * 0.05, y: 0.27, z: 0.03, rz: sx * -0.5 });
+        b.ball(0.02, 0, glowC('#ffe066', 2.1), { x: sx * 0.032, y: 0.19, z: 0.112 });
+        b.cone(0.008, 0.025, 3, '#ffffff', { x: sx * 0.02, y: 0.135, z: 0.115, rx: Math.PI });
+        b.capsule(0.02, 0.07, '#c03a22', { x: sx * 0.1, y: 0.0, z: 0.03, rz: sx * 0.5 });
+        b.capsule(0.018, 0.05, '#a02a1a', { x: sx * 0.04, y: -0.1, z: 0.02 });
+        wing(b, sx, { span: 0.3, chord: 0.17, membrane: '#d8452a', bone: '#4a1a10', x: sx * 0.06, y: 0.1, z: -0.03, tilt: 0.45, sweep: 0.25 });
       }
-      b.cone(0.05, 0.18, 6, glowC('#ffb347', 1.8), { y: -0.04, z: -0.14, rx: -2.2 });
-      b.cone(0.03, 0.12, 5, glowC('#ffe066', 2), { y: -0.07, z: -0.2, rx: -2.2 });
+      b.box(0.06, 0.012, 0.01, '#3a1a14', { y: 0.145, z: 0.115 });
+      b.cone(0.05, 0.13, 6, glowC('#ffb347', 1.9), { y: 0.27, z: 0.0 });
+      b.cone(0.03, 0.09, 5, glowC('#ffe066', 2.2), { y: 0.28, z: 0.02 });
+      limb(b, new THREE.Vector3(0, -0.02, -0.08), new THREE.Vector3(0, -0.06, -0.2), 0.018, 0.012, '#a02a1a');
+      b.cone(0.045, 0.12, 6, glowC('#ffb347', 1.8), { y: -0.07, z: -0.26, rx: -2.0 });
+      b.cone(0.025, 0.08, 5, glowC('#ffe066', 2.1), { y: -0.08, z: -0.29, rx: -2.0 });
       break;
     }
     case 'magmaslug':
@@ -780,18 +985,44 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       }
       break;
     }
-    case 'boss_dragon':
-      b.ball(0.26, 0, '#b8322a', { y: 0.32, sz: 1.3 });
-      b.ball(0.14, 0, '#c8443a', { y: 0.5, z: 0.32 });
-      b.cone(0.06, 0.2, 4, '#f2c94c', { x: -0.07, y: 0.62, z: 0.28, rx: -0.6 });
-      b.cone(0.06, 0.2, 4, '#f2c94c', { x: 0.07, y: 0.62, z: 0.28, rx: -0.6 });
-      b.box(0.5, 0.03, 0.3, '#7d1f1a', { x: -0.36, y: 0.48, rz: 0.4 });
-      b.box(0.5, 0.03, 0.3, '#7d1f1a', { x: 0.36, y: 0.48, rz: -0.4 });
-      b.cone(0.1, 0.4, 4, '#a02a22', { y: 0.28, z: -0.4, rx: -Math.PI / 2 });
-      for (const x of [-0.14, 0.14]) for (const z of [-0.12, 0.14]) b.box(0.08, 0.16, 0.08, '#7d1f1a', { x, y: 0.08, z });
-      b.ball(0.03, 0, '#ffe066', { x: -0.06, y: 0.54, z: 0.44 });
-      b.ball(0.03, 0, '#ffe066', { x: 0.06, y: 0.54, z: 0.44 });
+    case 'boss_dragon': {
+      // The Ember Dragon: scaled body with a pale belly, four clawed legs, a long neck and horned head,
+      // spines down the back, a spade-tipped tail and great ribbed wings.
+      const red = '#b8322a', deep = '#7d1f1a', belly = '#f0b860';
+      b.capsule(0.17, 0.3, red, { y: 0.3, rx: Math.PI / 2 });
+      b.capsule(0.12, 0.28, belly, { y: 0.24, z: 0.02, rx: Math.PI / 2, sx: 1.1 });
+      for (let k = 0; k < 4; k++) b.box(0.18, 0.02, 0.06, '#d89a48', { y: 0.13, z: 0.18 - k * 0.11 });
+      for (const sx of [-1, 1]) for (const z of [-0.18, 0.16]) {
+        b.capsule(0.06, 0.08, deep, { x: sx * 0.14, y: 0.14, z });
+        b.box(0.1, 0.04, 0.12, deep, { x: sx * 0.14, y: 0.02, z: z + 0.03 });
+        for (let k = 0; k < 3; k++) b.cone(0.012, 0.05, 3, '#f4f0e0', { x: sx * 0.14 + (k - 1) * 0.03, y: 0.02, z: z + 0.11, rx: 1.6 });
+      }
+      // Neck and head.
+      const n0 = new THREE.Vector3(0, 0.36, 0.22), n1 = new THREE.Vector3(0, 0.56, 0.36);
+      limb(b, n0, n1, 0.1, 0.075, red, 7);
+      b.ball(0.14, 1, red, { y: 0.62, z: 0.42 });
+      b.box(0.16, 0.1, 0.2, red, { y: 0.6, z: 0.55 });
+      b.box(0.11, 0.035, 0.15, deep, { y: 0.545, z: 0.52, rx: 0.12 });
+      for (const sx of [-1, 1]) {
+        b.ball(0.026, 0, glowC('#ffe066', 2), { x: sx * 0.06, y: 0.66, z: 0.5 });
+        b.box(0.05, 0.016, 0.03, deep, { x: sx * 0.06, y: 0.69, z: 0.5, rz: sx * -0.4 });
+        b.ball(0.012, 0, '#2a0a08', { x: sx * 0.03, y: 0.62, z: 0.615 });
+        b.cone(0.03, 0.2, 5, '#f2c94c', { x: sx * 0.07, y: 0.72, z: 0.36, rx: -0.9, rz: sx * -0.3 });
+        b.cone(0.012, 0.04, 3, '#ffffff', { x: sx * 0.04, y: 0.55, z: 0.6, rx: Math.PI });
+        wing(b, sx, { span: 0.78, chord: 0.5, membrane: '#c8402c', bone: '#4a100c', x: sx * 0.12, y: 0.44, z: 0.02, tilt: 0.5, sweep: 0.3, thick: 0.016 });
+      }
+      b.cone(0.03, 0.08, 5, glowC('#ffb347', 1.6), { y: 0.55, z: 0.64, rx: Math.PI / 2 });
+      // Spines from the head to the tail tip.
+      for (let k = 0; k < 9; k++) b.cone(0.03 - k * 0.002, 0.09 - k * 0.004, 4, '#f2c94c', { y: 0.47 - k * 0.012 + (k < 2 ? 0.1 : 0), z: 0.3 - k * 0.08 - (k < 2 ? -0.08 : 0), rx: -0.3 });
+      let prev = new THREE.Vector3(0, 0.3, -0.3);
+      for (let k = 1; k <= 5; k++) {
+        const p = new THREE.Vector3(Math.sin(k * 0.7) * 0.06, 0.3 - k * 0.045, -0.3 - k * 0.1);
+        limb(b, prev, p, 0.1 - k * 0.016, 0.1 - (k + 1) * 0.016, k % 2 ? red : deep, 6);
+        prev = p;
+      }
+      b.octa(0.07, '#f2c94c', { x: prev.x, y: prev.y, z: prev.z - 0.06, sy: 0.4, sz: 1.3 });
       break;
+    }
   }
   return b.build();
 }
@@ -1339,20 +1570,9 @@ export function padModel(): THREE.BufferGeometry {
   });
 }
 
-/** Stone foundations laid on open ground: a square dressed-stone footing with corner blocks. */
+/** Foundations laid on open ground: the same round stone pad as the realm's own pads. */
 export function foundationModel(): THREE.BufferGeometry {
-  return cached('foundation', () => {
-    const b = new ModelBuilder();
-    b.box(0.9, 0.08, 0.9, '#8a8276', { y: 0.04 });
-    b.box(0.84, 0.05, 0.84, '#a49b8c', { y: 0.1 });
-    // Flagstone top (white so the pad colour tints it, like a pad).
-    for (const x of [-0.2, 0.2]) for (const z of [-0.2, 0.2]) b.box(0.36, 0.03, 0.36, '#ffffff', { x, y: 0.135, z });
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(0.14, 0.09, 0.14, '#7d7468', { x: sx * 0.38, y: 0.15, z: sz * 0.38 });
-    // Mortar lines along the footing.
-    for (const sx of [-1, 1]) b.box(0.012, 0.05, 0.86, '#6a6258', { x: sx * 0.45, y: 0.05 });
-    for (const sz of [-1, 1]) b.box(0.86, 0.05, 0.012, '#6a6258', { y: 0.05, z: sz * 0.45 });
-    return b.build();
-  });
+  return padModel();
 }
 
 export function propModel(type: PropType): THREE.BufferGeometry {

@@ -445,7 +445,7 @@ export class Hud {
       <div class="ctx-head"><span class="name">${classic ? 'Overgrown pad' : 'Open ground'}</span><button class="x" aria-label="Close">✕</button></div>
       <div class="ctx-info" style="margin:0 0 8px">${classic
         ? 'Clear away the overgrowth to free this build pad.'
-        : 'No pad here yet. Lay stone <b>Foundations</b> (half the price of clearing an overgrown pad) and you can build a tower on top.'} Each new spot costs more than the last, so pick ones that cover the roads well.</div>
+        : 'No pad here yet. Lay stone <b>Foundations</b> (clearing an overgrown pad is cheaper) and you can build a tower on top.'} Each new spot costs more than the last, so pick ones that cover the roads well.</div>
       <div class="ctx-row"><button class="btn land-btn ${run.gold < cost ? 'disabled' : ''}">${classic ? 'Clear land' : 'Lay Foundations'} <span class="cost">${icon('coin')}${cost}</span></button></div>`;
     $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
     $(this.ctx, '.land-btn').onclick = () => this.cb.clearLand();
