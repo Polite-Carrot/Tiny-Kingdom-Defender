@@ -44,8 +44,7 @@ export interface UnityAdIds {
 export const UNITY_ADS: { testMode: boolean; ios: UnityAdIds; android: UnityAdIds } = {
   testMode: true,
   ios: { gameId: '800404139', rewarded: 'BP_Rewarded_iOS', interstitial: 'BP_Interstitial_iOS' },
-  // From the Unity dashboard once the Android app is added (Monetization > Placements).
-  android: { gameId: '', rewarded: 'Rewarded_Android', interstitial: 'Interstitial_Android' },
+  android: { gameId: '800404140', rewarded: 'BP_Rewarded_Android', interstitial: 'BP_Interstitial_Android' },
 };
 
 export const MOCK_AD = {

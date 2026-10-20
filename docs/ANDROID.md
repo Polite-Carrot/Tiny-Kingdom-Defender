@@ -9,7 +9,9 @@ same single-file game build, in `android/`, with real **Unity Ads**.
 | Package name (application ID) | `com.politecarrot.tinykingdomdefender` |
 | Minimum Android | 7.0 (API 24); targets API 36 |
 | Unity Ads SDK | `com.unity3d.ads:unity-ads:4.20.1` (from Maven Central) |
-| Unity IDs | `UNITY_ADS.android` in `src/data/ads.ts` |
+| Unity Game ID | `800404140` (`UNITY_ADS.android` in `src/data/ads.ts`) |
+| Rewarded placement | `BP_Rewarded_Android` (shared by every "▶ AD" button) |
+| Interstitial placement | `BP_Interstitial_Android` (checkpoints only) |
 
 ## 1. Add the Android app in Unity
 
@@ -21,8 +23,9 @@ Unity creates a Game ID and two placements for it. Copy them into `src/data/ads.
 android: { gameId: '<Android Game ID>', rewarded: '<rewarded placement>', interstitial: '<interstitial placement>' },
 ```
 
-Unity's default placement IDs are usually `Rewarded_Android` and `Interstitial_Android`, which is
-what's filled in now. Until `gameId` is set, the Android app keeps the game's mock ads.
+These are filled in: Game ID `800404140`, rewarded `BP_Rewarded_Android`, interstitial
+`BP_Interstitial_Android`. Once the app is on Google Play, add its Store ID to the Unity app
+(**Apps > Tiny Kingdom Defender > Add Store ID**).
 
 ## 2. Build it
 
