@@ -65,8 +65,8 @@ How it fits together:
 - **Privacy**: in App Store Connect, declare that the app shows third-party ads and that Unity
   collects device and usage data for advertising (Unity documents the exact answers). The app does
   not ask for tracking permission (ATT), so ads are not personalised with the IDFA.
-- **Remove Ads** in the shop is still a placeholder purchase. Wire it to a real in-app purchase,
-  or hide it, before release.
+- **Remove Ads** is hidden from the shop for now (no in-app purchases yet), so there is nothing
+  to set up in App Store Connect for purchases.
 - **Version**: set the version and build number on the App target in Xcode (`MARKETING_VERSION`
   and `CURRENT_PROJECT_VERSION`).
 - The app icon is already in `ios/App/App/Assets.xcassets/AppIcon.appiconset`, and the launch

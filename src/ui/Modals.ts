@@ -296,10 +296,9 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
       } else {
         const left = meta.shopBundlesLeft();
         body = `<div class="list-item"><div class="thumb">${icon('coin').replace('class="ico ', 'class="ico " style="width:40px;height:40px"')}</div>
-            <div class="body"><div class="name">Free coin bundle</div><div class="desc">${left} of ${AD_REWARDS.shopBundlePerDay} left today</div></div><div class="ad-slot"></div></div>
-          <div class="list-item"><div class="thumb">${icon('tv').replace('class="ico ', 'class="ico " style="width:36px;height:36px;filter:invert(.6)"')}</div>
-            <div class="body"><div class="name">Remove Ads</div><div class="desc">Removes interstitial ads. Rewarded ads stay optional. (Placeholder purchase)</div></div>
-            ${d.ads.removeAds ? `<button class="btn small gold disabled" disabled>Owned</button>` : `<button class="btn small gold" data-removeads>$2.99</button>`}</div>`;
+            <div class="body"><div class="name">Free coin bundle</div><div class="desc">${left} of ${AD_REWARDS.shopBundlePerDay} left today</div></div><div class="ad-slot"></div></div>`;
+        // A paid "Remove Ads" goes here once it's a real in-app purchase (the save and AdManager
+        // already honour d.ads.removeAds).
       }
       m.innerHTML = `<div class="ribbon">Shop</div>${currencyBar(game)}
         <div class="muted" style="text-align:center;margin:-4px 0 8px">Permanent upgrades paid with coins. They boost every tower, forever.</div>
@@ -340,12 +339,6 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
         game.refreshCosmetics();
         render();
       }));
-      m.querySelector<HTMLButtonElement>('[data-removeads]')?.addEventListener('click', () => {
-        meta.d.ads.removeAds = true;
-        meta.commit();
-        game.s.ui.toast('Interstitial ads removed. Thank you!');
-        render();
-      });
       const slot = m.querySelector('.ad-slot');
       if (slot) {
         if (meta.shopBundlesLeft() > 0) {
@@ -753,7 +746,6 @@ export function settings(game: Game): void {
         <div class="setting"><label>Graphics</label>${seg('quality', [['low', 'Low'], ['high', 'High']], st.quality)}</div>
         <div class="setting"><label>Vibration</label>${seg('vib', [['0', 'Off'], ['1', 'On']], st.vibration ? '1' : '0')}</div>
         <div class="setting"><label>Show FPS</label>${seg('fps', [['0', 'Off'], ['1', 'On']], st.showFps ? '1' : '0')}</div>
-        <div class="setting"><label>Ads</label><span class="muted">${save.data.ads.removeAds ? 'Interstitials removed' : 'Standard'}</span></div>
         <h3 style="margin:12px 0 4px;font-size:15px">Developer</h3>
         <div class="setting"><label>Mock ad result</label></div>
         ${seg('ad', [['completed', 'Complete'], ['skipped', 'Skip'], ['failed', 'Fail'], ['random', 'Random']], st.debugAdOutcome)}

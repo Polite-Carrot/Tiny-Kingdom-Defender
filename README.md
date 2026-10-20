@@ -311,4 +311,4 @@ Notes:
 * **Falling isn't a reset.** Losing the castle only sends you back to the last checkpoint. Replaying those waves earns gold and coins, and that grind loop is what makes the siege "endless in theory". The difficulty curve outgrows any fixed set of towers, so permanent upgrades, star levels and land are what push the frontier further.
 * **The campaign was removed** (60 levels, world map, stars, weekly challenge and the separate endless mode) in favour of the single kingdom.
 * **Balance comes from the AI**, which is greedy and worse than a human player.
-* **Real purchases aren't implemented.** "Remove Ads" is a placeholder flag. Wire it to a real in-app purchase plugin (for example `@capacitor-community/in-app-purchases`) before shipping.
+* **No paid purchases yet.** The "Remove Ads" shop item is hidden until it can be a real in-app purchase; the save flag (`ads.removeAds`) and the interstitial rules already honour it, so wiring it up means adding a purchase plugin and a shop row.
