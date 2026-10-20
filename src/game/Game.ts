@@ -3,7 +3,7 @@
 import { Renderer } from '../core/Renderer';
 import { CameraRig, type SafeRect } from '../core/CameraRig';
 import { Input } from '../core/Input';
-import { SaveSystem } from '../core/Save';
+import { SaveSystem, type StorageLike } from '../core/Save';
 import { AudioSystem, type MusicTrack } from '../systems/Audio';
 import { UI } from '../ui/UI';
 import { Hud } from '../ui/Hud';
@@ -45,8 +45,8 @@ export class Game {
   private pauseModalOpen = false;
   private safeProbe: HTMLElement;
 
-  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
-    const save = new SaveSystem();
+  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, storage?: StorageLike) {
+    const save = new SaveSystem(storage);
     const analytics = new LocalAnalytics(import.meta.env.DEV);
     const renderer = new Renderer(canvas, save.data.settings.quality);
     const rig = new CameraRig(renderer.camera, GRID_SIZE / 2 + 0.7);

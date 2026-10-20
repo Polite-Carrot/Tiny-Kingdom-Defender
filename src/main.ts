@@ -1,5 +1,6 @@
 import './ui/styles.css';
 import { Game } from './game/Game';
+import { durableStorage } from './core/DurableStorage';
 import { renderThumbnails } from './ui/Thumbnails';
 
 async function boot() {
@@ -13,7 +14,9 @@ async function boot() {
   await new Promise((r) => requestAnimationFrame(r));
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const ui = document.getElementById('ui') as HTMLElement;
-  const game = new Game(canvas, ui);
+  // In the iOS app the save lives in native storage; load it before the game reads it.
+  const storage = await durableStorage();
+  const game = new Game(canvas, ui, storage);
   (window as unknown as { tkd: Game }).tkd = game;
   await game.start();
   setProgress(1);

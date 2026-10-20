@@ -22,7 +22,7 @@ You need a Mac with **Xcode**, **Node.js** and **CocoaPods** (`sudo gem install 
 
 ```sh
 npm install
-npm run ios:sync      # builds the game, copies it into the app and installs the pods (incl. Unity Ads)
+npm run ios:sync      # builds the game, copies it into the app and installs the pods (Unity Ads, Preferences)
 npm run ios:open      # opens ios/App/App.xcworkspace in Xcode
 ```
 
@@ -30,6 +30,14 @@ In Xcode: select the **App** target, then **Signing & Capabilities**, and pick y
 Developer team. Plug in your iPhone or iPad, choose it as the run destination and press Run.
 
 Run `npm run ios:sync` again after any change to the game.
+
+## Saves
+
+In the app, the save lives in iOS's own storage for the app (UserDefaults, through
+`@capacitor/preferences`) instead of only in the web view's localStorage, which iOS can clear to
+free up space. `src/core/DurableStorage.ts` loads it at start-up and every save is written to both
+(localStorage stays as a fallback copy). The first time a player opens a build with this, any save
+already in the web view is carried over. The website keeps using localStorage as before.
 
 ## Ads: test mode first
 
