@@ -1,11 +1,12 @@
-# Tiny Kingdom: Android app
+# Tiny Kingdom Defender: Android app
 
 Like the iOS app, the Android app is a [Capacitor](https://capacitorjs.com) wrapper around the
 same single-file game build, in `android/`, with real **Unity Ads**.
 
 | | |
 |---|---|
-| App name (home screen) | Tiny Kingdom |
+| Store name (Play Console) | Tiny Kingdom Defender |
+| App name (home screen) | Tiny Kingdom (the full name would be cut off under the icon) |
 | Package name (application ID) | `com.politecarrot.tinykingdomdefender` |
 | Minimum Android | 7.0 (API 24); targets API 36 |
 | Unity Ads SDK | `com.unity3d.ads:unity-ads:4.20.1` (from Maven Central) |

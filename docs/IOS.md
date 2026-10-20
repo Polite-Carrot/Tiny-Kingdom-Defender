@@ -1,4 +1,4 @@
-# Tiny Kingdom: iOS app
+# Tiny Kingdom Defender: iOS app
 
 The iOS app is a [Capacitor](https://capacitorjs.com) wrapper around the same single-file game
 build that GitHub Pages serves. It lives in `ios/`, with real **Unity Ads** in place of the mock
@@ -6,7 +6,8 @@ ads the website uses.
 
 | | |
 |---|---|
-| App name (home screen) | Tiny Kingdom |
+| Store name (App Store Connect) | Tiny Kingdom Defender |
+| App name (home screen) | Tiny Kingdom (the full name would be cut off under the icon) |
 | Bundle ID | `com.politecarrot.tinykingdomdefender` |
 | Unity Game ID | `800404139` |
 | Rewarded placement | `BP_Rewarded_iOS` (shared by every "▶ AD" button) |
