@@ -11,6 +11,7 @@ import { LocalAnalytics } from '../analytics/Analytics';
 import { AdManager } from '../ads/AdManager';
 import { MockAdProvider } from '../ads/MockAdProvider';
 import { UnityAdsProvider, unityIds } from '../ads/UnityAdsProvider';
+import { UNITY_ADS } from '../data/ads';
 import { Meta } from './Meta';
 import { Battle } from './Battle';
 import { AutoPlayer } from './AutoPlayer';
@@ -59,7 +60,7 @@ export class Game {
     // Real Unity ads inside the apps; the website (and an app with no Unity IDs yet) keeps the mock ads.
     const ids = unityIds();
     const provider = ids
-      ? new UnityAdsProvider(ids)
+      ? new UnityAdsProvider(ids, UNITY_ADS.testMode || save.data.settings.devMode, () => save.data.settings.personalisedAds === true)
       : new MockAdProvider(() => save.data.settings.debugAdOutcome, () => save.data.settings.debugAdsUnavailable);
     const ads = new AdManager(provider, analytics, {
       onOpen: () => this.onAdOpen(),
@@ -140,7 +141,9 @@ export class Game {
       best_wave: meta.bestWave(), coins: save.data.coins, first_session: !save.data.base, save_recovered: save.recovered,
     });
     if (save.recovered !== 'none') this.s.ui.toast(save.recovered === 'backup' ? 'Save was damaged — restored from backup.' : 'Save was damaged and had to be reset.', 4000);
-    void ads.init();
+    // In the apps, the first launch asks about personalised ads before the ad network starts.
+    const askAds = ads.real && save.data.settings.personalisedAds === null;
+    if (!askAds) void ads.init();
     this.onResize();
     // What happened while away is worked out before "last seen" moves on.
     const away = meta.welcomeBack();
@@ -152,7 +155,11 @@ export class Game {
     this.goTitle();
     requestAnimationFrame(this.frame);
     if (abandoned) this.s.ui.toast(`Your unfinished Daily Challenge was scored: +${abandoned.coins} coins`, 3000);
-    if (away) setTimeout(() => this.showWelcomeBack(away), 350);
+    if (askAds) setTimeout(() => Modals.adChoice(this, () => {
+      void ads.init();
+      if (away) this.showWelcomeBack(away);
+    }), 900);
+    else if (away) setTimeout(() => this.showWelcomeBack(away), 350);
   }
 
   // --- Loop --------------------------------------------------------------------------

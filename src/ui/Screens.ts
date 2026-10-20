@@ -68,10 +68,16 @@ export class TitleScreen {
     q('.rp-prev').onclick = () => step(-1);
     q('.rp-next').onclick = () => step(1);
     q('.rp-cur').onclick = () => Modals.realms(game);
+    // Five taps on the version number turn developer mode on or off (developer settings, and
+    // Unity's test ads in the apps from the next launch).
     q('.version').onclick = () => {
       if (++this.versionTaps >= 5) {
         this.versionTaps = 0;
-        Modals.debug(game);
+        const st = game.s.save.data.settings;
+        st.devMode = !st.devMode;
+        game.s.save.save();
+        game.s.ui.toast(st.devMode ? 'Developer mode on (test ads from the next launch)' : 'Developer mode off');
+        if (st.devMode) Modals.debug(game);
       }
     };
     window.addEventListener('keydown', (e) => {

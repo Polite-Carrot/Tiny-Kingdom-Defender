@@ -7,6 +7,7 @@ import { UNITY_ADS, type UnityAdIds } from '../data/ads';
 
 interface UnityAdsPlugin {
   initialize(o: { gameId: string; testMode: boolean }): Promise<void>;
+  setConsent(o: { personalised: boolean }): Promise<void>;
   load(o: { placementId: string }): Promise<void>;
   isLoaded(o: { placementId: string }): Promise<{ loaded: boolean }>;
   show(o: { placementId: string }): Promise<{ result: RewardedResult }>;
@@ -25,11 +26,14 @@ export class UnityAdsProvider implements AdProvider {
   /** Whether each ad unit has an ad loaded, polled from the plugin (the game asks synchronously). */
   private loaded = { rewarded: false, interstitial: false };
 
-  constructor(private ids: UnityAdIds) {}
+  /** testMode: Unity's test ads (on for testers; real ads on your own phone can get the account flagged). */
+  constructor(private ids: UnityAdIds, private testMode: boolean, private personalised: () => boolean) {}
 
   async init(): Promise<void> {
     const ids = this.ids;
-    await UnityAds.initialize({ gameId: ids.gameId, testMode: UNITY_ADS.testMode });
+    // Consent goes in before the SDK starts, so the first ad already respects it.
+    await UnityAds.setConsent({ personalised: this.personalised() }).catch(() => {});
+    await UnityAds.initialize({ gameId: ids.gameId, testMode: this.testMode });
     for (const id of [ids.rewarded, ids.interstitial]) await UnityAds.load({ placementId: id });
     const poll = async () => {
       try {
@@ -41,6 +45,10 @@ export class UnityAdsProvider implements AdProvider {
     };
     await poll();
     window.setInterval(poll, 2000);
+  }
+
+  setPersonalised(on: boolean): void {
+    void UnityAds.setConsent({ personalised: on }).catch(() => {});
   }
 
   isRewardedReady(): boolean {

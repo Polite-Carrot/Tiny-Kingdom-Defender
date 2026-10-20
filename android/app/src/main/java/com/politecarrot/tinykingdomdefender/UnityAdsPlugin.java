@@ -13,6 +13,7 @@ import com.unity3d.ads.IUnityAdsInitializationListener;
 import com.unity3d.ads.IUnityAdsLoadListener;
 import com.unity3d.ads.IUnityAdsShowListener;
 import com.unity3d.ads.UnityAds;
+import com.unity3d.ads.metadata.MetaData;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,6 +64,24 @@ public class UnityAdsPlugin extends Plugin implements IUnityAdsInitializationLis
         main.post(() -> {
             if (initCall != null) initCall.reject(message);
             initCall = null;
+        });
+    }
+
+    /**
+     * The player's choice about personalised ads, passed to Unity as consent (GDPR in the EU and
+     * UK, and US privacy laws). Applies immediately, before or after initialising.
+     */
+    @PluginMethod
+    public void setConsent(PluginCall call) {
+        boolean personalised = Boolean.TRUE.equals(call.getBoolean("personalised", false));
+        main.post(() -> {
+            MetaData gdpr = new MetaData(getContext());
+            gdpr.set("gdpr.consent", personalised);
+            gdpr.commit();
+            MetaData privacy = new MetaData(getContext());
+            privacy.set("privacy.consent", personalised);
+            privacy.commit();
+            call.resolve();
         });
     }
 

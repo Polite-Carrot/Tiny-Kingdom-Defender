@@ -38,11 +38,12 @@ export interface UnityAdIds {
  * Unity Ads in the iOS and Android apps (the website keeps the mock ads). Every rewarded
  * placement in the game shares the one rewarded ad unit; interstitials only ever show at
  * checkpoints. A platform with no gameId yet keeps the mock ads.
- * Set testMode to false for the store builds: real ads on your own phone can get the
- * account flagged, so keep it on while testing.
+ * Players get real ads. Testers get Unity's test ads by turning on developer mode (tap the
+ * version number on the main menu five times, then restart the app): real ads on your own
+ * phone can get the account flagged. testMode: true forces test ads for everyone.
  */
 export const UNITY_ADS: { testMode: boolean; ios: UnityAdIds; android: UnityAdIds } = {
-  testMode: true,
+  testMode: false,
   ios: { gameId: '800404139', rewarded: 'BP_Rewarded_iOS', interstitial: 'BP_Interstitial_iOS' },
   android: { gameId: '800404140', rewarded: 'BP_Rewarded_Android', interstitial: 'BP_Interstitial_Android' },
 };

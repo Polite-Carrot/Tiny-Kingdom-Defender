@@ -8,4 +8,6 @@ export interface AdProvider {
   showRewarded(placement: string): Promise<RewardedResult>;
   isInterstitialReady(): boolean;
   showInterstitial(placement: string): Promise<void>;
+  /** Whether the player allows personalised ads (real ad networks only). */
+  setPersonalised?(on: boolean): void;
 }

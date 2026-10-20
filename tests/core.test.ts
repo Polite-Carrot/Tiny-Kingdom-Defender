@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SaveSystem, migrate, SAVE_KEY, BACKUP_KEY, SAVE_VERSION, type StorageLike } from '../src/core/Save';
-import { evaluateInterstitial, type InterstitialState } from '../src/ads/AdManager';
+import { AdManager, evaluateInterstitial, type InterstitialState } from '../src/ads/AdManager';
 import { metaCost } from '../src/data/economy';
 import { Run, newKingdom, type MetaBonuses } from '../src/game/Run';
 import { Meta } from '../src/game/Meta';
@@ -543,5 +543,25 @@ describe('realms 5 to 10', () => {
     const nb = d.realms.saved.twin!.base!;
     expect(nb.towers).toHaveLength(4);
     expect(nb.wave).toBe(41);
+  });
+});
+
+describe('ads privacy and developer mode', () => {
+  it('new saves have developer mode off and the personalised-ads question unanswered', () => {
+    const s = new SaveSystem(mem());
+    expect(s.data.settings.devMode).toBe(false);
+    expect(s.data.settings.personalisedAds).toBeNull();
+  });
+
+  it('the personalised-ads choice reaches the ad network, and the website mock ignores it', async () => {
+    const seen: boolean[] = [];
+    const real = new AdManager({ init: async () => {}, isRewardedReady: () => true, showRewarded: async () => 'completed', isInterstitialReady: () => true, showInterstitial: async () => {}, setPersonalised: (on) => seen.push(on) }, nullAnalytics, { onOpen() {}, onClose() {}, toast() {} });
+    expect(real.real).toBe(true);
+    real.setPersonalised(true);
+    real.setPersonalised(false);
+    expect(seen).toEqual([true, false]);
+    const mock = new AdManager({ init: async () => {}, isRewardedReady: () => true, showRewarded: async () => 'completed', isInterstitialReady: () => true, showInterstitial: async () => {} }, nullAnalytics, { onOpen() {}, onClose() {}, toast() {} });
+    expect(mock.real).toBe(false);
+    expect(() => mock.setPersonalised(true)).not.toThrow();
   });
 });

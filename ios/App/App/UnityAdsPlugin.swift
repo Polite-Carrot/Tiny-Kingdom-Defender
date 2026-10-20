@@ -9,6 +9,7 @@ public class UnityAdsPlugin: CAPPlugin, CAPBridgedPlugin, UnityAdsInitialization
     public let jsName = "UnityAds"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setConsent", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "load", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isLoaded", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "show", returnType: CAPPluginReturnPromise),
@@ -41,6 +42,21 @@ public class UnityAdsPlugin: CAPPlugin, CAPBridgedPlugin, UnityAdsInitialization
         DispatchQueue.main.async {
             self.initCall?.reject(message)
             self.initCall = nil
+        }
+    }
+
+    /// The player's choice about personalised ads, passed to Unity as consent (GDPR in the EU and
+    /// UK, and US privacy laws). Applies immediately, before or after initialising.
+    @objc func setConsent(_ call: CAPPluginCall) {
+        let personalised = call.getBool("personalised") ?? false
+        DispatchQueue.main.async {
+            let gdpr = UADSMetaData()
+            _ = gdpr.set("gdpr.consent", value: personalised)
+            gdpr.commit()
+            let privacy = UADSMetaData()
+            _ = privacy.set("privacy.consent", value: personalised)
+            privacy.commit()
+            call.resolve()
         }
     }
 

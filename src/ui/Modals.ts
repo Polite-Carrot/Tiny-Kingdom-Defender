@@ -746,11 +746,14 @@ export function settings(game: Game): void {
         <div class="setting"><label>Graphics</label>${seg('quality', [['low', 'Low'], ['high', 'High']], st.quality)}</div>
         <div class="setting"><label>Vibration</label>${seg('vib', [['0', 'Off'], ['1', 'On']], st.vibration ? '1' : '0')}</div>
         <div class="setting"><label>Show FPS</label>${seg('fps', [['0', 'Off'], ['1', 'On']], st.showFps ? '1' : '0')}</div>
-        <h3 style="margin:12px 0 4px;font-size:15px">Developer</h3>
+        ${game.s.ads.real ? `<div class="setting"><label>Personalised ads</label>${seg('pads', [['0', 'Off'], ['1', 'On']], st.personalisedAds ? '1' : '0')}</div>
+        <div class="muted" style="font-size:12px;margin:-2px 0 6px">${PERSONALISED_ADS_NOTE}</div>` : ''}
+        ${st.devMode ? `<h3 style="margin:12px 0 4px;font-size:15px">Developer</h3>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">Shown because developer mode is on (tap the version number on the main menu five times to turn it off). The apps show Unity's test ads while it's on, from the next launch.</div>
         <div class="setting"><label>Mock ad result</label></div>
         ${seg('ad', [['completed', 'Complete'], ['skipped', 'Skip'], ['failed', 'Fail'], ['random', 'Random']], st.debugAdOutcome)}
-        <div class="setting"><label>Ads unavailable</label>${seg('noads', [['0', 'No'], ['1', 'Yes']], st.debugAdsUnavailable ? '1' : '0')}</div>
-        <div class="actions"><button class="btn small blue dbg">Analytics debug</button><button class="btn small red reset">Reset progress</button></div>
+        <div class="setting"><label>Ads unavailable</label>${seg('noads', [['0', 'No'], ['1', 'Yes']], st.debugAdsUnavailable ? '1' : '0')}</div>` : ''}
+        <div class="actions">${st.devMode ? '<button class="btn small blue dbg">Analytics debug</button>' : ''}<button class="btn small red reset">Reset progress</button></div>
         <div class="muted" style="text-align:center;margin-top:8px">Tiny Kingdom Defender v1.0.0 · All art & audio generated in code.</div>`;
       const music = $(m, '.music') as HTMLInputElement;
       const sfx = $(m, '.sfx') as HTMLInputElement;
@@ -772,16 +775,45 @@ export function settings(game: Game): void {
             case 'vib': st.vibration = v === '1'; break;
             case 'ad': st.debugAdOutcome = v as typeof st.debugAdOutcome; break;
             case 'noads': st.debugAdsUnavailable = v === '1'; break;
+            case 'pads':
+              st.personalisedAds = v === '1';
+              game.s.ads.setPersonalised(st.personalisedAds);
+              break;
           }
           game.applySettings();
           render();
         }));
       });
-      $(m, '.dbg').onclick = () => debug(game);
+      m.querySelector<HTMLButtonElement>('.dbg')?.addEventListener('click', () => debug(game));
       $(m, '.reset').onclick = () => resetProgress(game);
     };
     render();
   });
+}
+
+const PERSONALISED_ADS_NOTE = 'Personalised ads are chosen using information about your device and how you use apps. With them off you still see ads, just not tailored ones.';
+
+/**
+ * Asked once in the apps, before any ad is shown: may the ad network personalise ads? The answer
+ * is passed to Unity as consent, and can be changed any time in Settings.
+ */
+export function adChoice(game: Game, after?: () => void): void {
+  const { save, ads, audio } = game.s;
+  game.s.ui.modal((m, h) => {
+    m.innerHTML = `<div class="ribbon">Ads in Tiny Kingdom</div>
+      <p style="margin:4px 2px 10px;line-height:1.45">Tiny Kingdom is free, paid for by ads. Most are ones you choose to watch for a reward. Can we show ads that match your interests?</p>
+      <p class="muted" style="margin:0 2px 12px;font-size:13px">${PERSONALISED_ADS_NOTE} You can change this any time in Settings.</p>
+      <div class="stack"><button class="btn yes">Allow personalised ads</button><button class="btn ghost no">Show non-personalised ads</button></div>`;
+    const pick = (on: boolean) => {
+      save.data.settings.personalisedAds = on;
+      save.save();
+      ads.setPersonalised(on);
+      audio.play('select');
+      h.close();
+    };
+    $(m, '.yes').onclick = () => pick(true);
+    $(m, '.no').onclick = () => pick(false);
+  }, { closable: false, onClose: () => after?.() });
 }
 
 /** How long the erase button must be held down. */

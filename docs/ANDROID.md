@@ -65,7 +65,10 @@ for each new upload.
 
 ## Before release
 
-- **Turn test mode off**: `UNITY_ADS.testMode = false` in `src/data/ads.ts` (it's shared with iOS).
+- **Test ads**: testers turn on developer mode (tap the version number on the main menu five times,
+  then reopen the app) to get Unity's test ads; players always get real ads. See docs/IOS.md.
+- **Personalised ads**: the app asks on first launch and has a Settings toggle; the answer goes to
+  Unity as consent. In the Play Console's Data safety form, say ads can be personalised with consent.
 - **Play Console**: fill in the Data safety form (third-party ads; Unity collects device and usage
   data), the content rating, and "Contains ads: Yes".
 - Saves use native storage on Android too (`@capacitor/preferences`), the same as on iOS.

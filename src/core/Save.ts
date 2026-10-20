@@ -37,6 +37,10 @@ export interface Settings {
   debugAdOutcome: AdOutcomeSetting;
   /** Debug: mock ads report "not ready". */
   debugAdsUnavailable: boolean;
+  /** Developer options shown in Settings, and Unity's test ads (from the next launch). */
+  devMode: boolean;
+  /** Personalised ads allowed (null: not asked yet; treated as no). */
+  personalisedAds: boolean | null;
   /** Game speed the siege opens at (1, 2 or 3). */
   speed: number;
   /** Start the next wave as soon as the field is clear. */
@@ -146,7 +150,7 @@ export function defaultSave(now = Date.now()): SaveData {
     heroXp: {},
     cosmetics: { owned: ['castle_default', 'trail_none'], castle: 'castle_default', trail: 'trail_none', hero: 'hero_none', tower: 'tower_none', flag: 'flag_none', heroSkins: {} },
     pass: { month: '', stars: 0, claimed: [], bonusPaid: 0, day: '', waveStars: 0, challenge: false, login: false, carried: 0 },
-    settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false, vibration: true },
+    settings: { music: 0.6, sfx: 0.8, quality: 'high', showFps: false, debugAdOutcome: 'completed', debugAdsUnavailable: false, speed: 1, autoWave: false, vibration: true, devMode: false, personalisedAds: null },
     treasury: { lastCollect: now },
     chest: { nextFree: now, pendingMilestone: 0 },
     daily: { lastClaimDay: null, streak: 0 },

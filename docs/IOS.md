@@ -39,14 +39,22 @@ free up space. `src/core/DurableStorage.ts` loads it at start-up and every save 
 (localStorage stays as a fallback copy). The first time a player opens a build with this, any save
 already in the web view is carried over. The website keeps using localStorage as before.
 
-## Ads: test mode first
+## Ads: test ads for testers, real ads for players
 
-`UNITY_ADS.testMode` is `true`, so the app shows Unity's test ads. Keep it on while testing:
-tapping real ads on your own device can get the Unity account flagged. You can also register
-your device under **Unity Dashboard → Monetization → Settings → Test device**.
+Players get real ads. To test, turn on **developer mode**: tap the version number (top left of
+the main menu) five times, then close and reopen the app. While it's on, the app shows Unity's
+test ads and Settings shows the developer options; tap five times again to turn it off. Tapping
+real ads on your own device can get the Unity account flagged, so always test in developer
+mode. You can also register test devices under **Unity Dashboard → Monetization → Settings →
+Test device**. (`UNITY_ADS.testMode = true` in `src/data/ads.ts` forces test ads for everyone.)
 
-Before the App Store build, set `testMode: false` in `src/data/ads.ts` and run
-`npm run ios:sync` again.
+## Personalised ads
+
+On first launch the app asks whether ads may be personalised ("Allow personalised ads" / "Show
+non-personalised ads"), before any ad loads; players can change it any time in Settings. The
+answer is passed to Unity as consent (`gdpr.consent` and `privacy.consent` metadata), so it
+covers GDPR (EU/UK) and US privacy laws. The app doesn't use Apple's tracking prompt (ATT), so on
+iOS Unity doesn't get the advertising ID either way.
 
 How it fits together:
 
@@ -59,7 +67,7 @@ How it fits together:
 
 ## Before submitting to the App Store
 
-- **Turn test mode off** (see above).
+- **Test ads**: make sure developer mode is off on the device you take store screenshots on.
 - **SKAdNetwork IDs**: `Info.plist` has Unity's own ID. Unity publishes a longer list of partner
   network IDs for better ad revenue; paste it into `SKAdNetworkItems`.
 - **Privacy**: in App Store Connect, declare that the app shows third-party ads and that Unity

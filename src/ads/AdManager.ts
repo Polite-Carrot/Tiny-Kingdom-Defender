@@ -58,6 +58,16 @@ export class AdManager {
     return this.busy;
   }
 
+  /** Passes the player's personalised-ads choice to the ad network. */
+  setPersonalised(on: boolean): void {
+    this.provider.setPersonalised?.(on);
+  }
+
+  /** Whether real ad networks are in use (the apps), so the privacy choice matters. */
+  get real(): boolean {
+    return !!this.provider.setPersonalised;
+  }
+
   isRewardedReady(): boolean {
     return this.provider.isRewardedReady();
   }
