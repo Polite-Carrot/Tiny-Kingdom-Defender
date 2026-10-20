@@ -15,6 +15,7 @@ npm run preview    # serve the production build
 npm test           # unit tests (save migrations, ad rules, economy, towers, siege)
 npm run sim        # headless balance simulator (see "Balancing")
 npm run ios:sync   # iOS app: build the game into the Xcode project (see docs/IOS.md)
+npm run android:sync # Android app: build the game into the Android project (see docs/ANDROID.md)
 ```
 
 ### Play it on GitHub Pages

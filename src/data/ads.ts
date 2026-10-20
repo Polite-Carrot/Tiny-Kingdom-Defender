@@ -28,17 +28,24 @@ export const INTERSTITIAL_RULES = {
   rewardedCooldownSeconds: 180,
 };
 
+export interface UnityAdIds {
+  gameId: string;
+  rewarded: string;
+  interstitial: string;
+}
+
 /**
- * Unity Ads (iOS app only; the website keeps the mock ads). Every rewarded placement in the
- * game shares the one rewarded ad unit; interstitials only ever show at checkpoints.
- * Set testMode to false for the App Store build: real ads on your own phone can get the
+ * Unity Ads in the iOS and Android apps (the website keeps the mock ads). Every rewarded
+ * placement in the game shares the one rewarded ad unit; interstitials only ever show at
+ * checkpoints. A platform with no gameId yet keeps the mock ads.
+ * Set testMode to false for the store builds: real ads on your own phone can get the
  * account flagged, so keep it on while testing.
  */
-export const UNITY_ADS = {
-  gameId: '800404139',
-  rewarded: 'BP_Rewarded_iOS',
-  interstitial: 'BP_Interstitial_iOS',
+export const UNITY_ADS: { testMode: boolean; ios: UnityAdIds; android: UnityAdIds } = {
   testMode: true,
+  ios: { gameId: '800404139', rewarded: 'BP_Rewarded_iOS', interstitial: 'BP_Interstitial_iOS' },
+  // From the Unity dashboard once the Android app is added (Monetization > Placements).
+  android: { gameId: '', rewarded: 'Rewarded_Android', interstitial: 'Interstitial_Android' },
 };
 
 export const MOCK_AD = {

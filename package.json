@@ -12,9 +12,13 @@
     "test": "vitest run",
     "pages": "tsc --noEmit && node tools/build-pages.mjs",
     "ios:sync": "npm run pages && node -e \"require('fs').mkdirSync('www',{recursive:true});require('fs').copyFileSync('index.html','www/index.html')\" && cap sync ios",
-    "ios:open": "cap open ios"
+    "ios:open": "cap open ios",
+    "android:sync": "npm run pages && node -e \"require('fs').mkdirSync('www',{recursive:true});require('fs').copyFileSync('index.html','www/index.html')\" && cap sync android",
+    "android:open": "cap open android",
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capacitor/preferences": "^8.0.1",
