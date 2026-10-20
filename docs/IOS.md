@@ -69,8 +69,9 @@ How it fits together:
 ## Before submitting to the App Store
 
 - **Test ads**: make sure developer mode is off on the device you take store screenshots on.
-- **SKAdNetwork IDs**: `Info.plist` has Unity's own ID. Unity publishes a longer list of partner
-  network IDs for better ad revenue; paste it into `SKAdNetworkItems`.
+- **SKAdNetwork IDs**: `Info.plist` has Unity's ID plus the main ID of every network in Unity's LevelPlay table (18 in all).
+  Unity's extra partner list (the "View" link on the UnityAds row of that page) can be pasted into
+  `SKAdNetworkItems` too.
 - **Privacy**: in App Store Connect, declare that the app shows third-party ads and that Unity
   collects device and usage data for advertising (Unity documents the exact answers). The app does
   not ask for tracking permission (ATT), so ads are not personalised with the IDFA.
