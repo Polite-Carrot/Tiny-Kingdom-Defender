@@ -365,7 +365,7 @@ export function heroes(game: Game): void {
       const slot2 = d.unlocks.heroSlot2;
       const partner = meta.secondHero();
       const slotRow = slot2
-        ? `<div class="slot2-row on">${icon('swords', 'inline')}<b>Two heroes:</b> your <b>Leader</b> and a <b>Partner</b> both join every siege.</div>`
+        ? `<div class="slot2-row on">${icon('swords', 'inline')}<span><b>Two heroes:</b> your <b>Leader</b> and a <b>Partner</b> both join every siege.</span></div>`
         : meta.heroSlot2Available()
           ? `<div class="slot2-row"><div>${icon('swords', 'inline')}<b>Second hero slot</b><br/><small>Bring a Partner hero into every siege.</small></div><button class="btn small gold ${d.coins < HERO_SLOT2_COST ? 'disabled' : ''}" data-slot2>${costHtml(HERO_SLOT2_COST)}</button></div>`
           : `<div class="slot2-row locked">${icon('lock', 'inline')}A second hero slot opens at wave ${UNLOCK_WAVE.heroSlot2}.</div>`;
