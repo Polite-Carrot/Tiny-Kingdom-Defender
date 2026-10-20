@@ -1,3 +1,4 @@
+import AppTrackingTransparency
 import Capacitor
 import UnityAds
 
@@ -13,6 +14,8 @@ public class UnityAdsPlugin: CAPPlugin, CAPBridgedPlugin, UnityAdsInitialization
         CAPPluginMethod(name: "load", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isLoaded", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "show", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "trackingStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestTracking", returnType: CAPPluginReturnPromise),
     ]
 
     // All state is touched on the main thread only.
@@ -57,6 +60,31 @@ public class UnityAdsPlugin: CAPPlugin, CAPBridgedPlugin, UnityAdsInitialization
             _ = privacy.set("privacy.consent", value: personalised)
             privacy.commit()
             call.resolve()
+        }
+    }
+
+    /// Apple's App Tracking Transparency answer, without asking: "authorized", "denied",
+    /// "restricted" or "notDetermined". Unity can only use the advertising ID when "authorized".
+    @objc func trackingStatus(_ call: CAPPluginCall) {
+        call.resolve(["status": Self.describe(ATTrackingManager.trackingAuthorizationStatus)])
+    }
+
+    /// Shows Apple's "Allow to track?" prompt (only ever once per install; later calls just
+    /// return the answer) and resolves with the status, as trackingStatus does.
+    @objc func requestTracking(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            ATTrackingManager.requestTrackingAuthorization { status in
+                call.resolve(["status": Self.describe(status)])
+            }
+        }
+    }
+
+    private static func describe(_ status: ATTrackingManager.AuthorizationStatus) -> String {
+        switch status {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        default: return "notDetermined"
         }
     }
 

@@ -51,11 +51,17 @@ Test device**. (`UNITY_ADS.testMode = true` in `src/data/ads.ts` forces test ads
 
 ## Personalised ads
 
-On first launch the app asks whether ads may be personalised ("Allow personalised ads" / "Show
-non-personalised ads"), before any ad loads; players can change it any time in Settings. The
-answer is passed to Unity as consent (`gdpr.consent` and `privacy.consent` metadata), so it
-covers GDPR (EU/UK) and US privacy laws. The app doesn't use Apple's tracking prompt (ATT), so on
-iOS Unity doesn't get the advertising ID either way.
+The privacy flow matches Color Match & Merge. On first launch, before any ad loads, a "Before you
+start" card explains the ads and links the privacy policy (https://politecarrot.com/privacy).
+Continue leads straight into Apple's tracking prompt (App Tracking Transparency, worded by
+`NSUserTrackingUsageDescription` in `Info.plist`). Allow counts as yes to personalised ads;
+decline and ads are generic. Players can change it any time in **Settings → Privacy & Data**;
+switching personalised ads on there asks Apple's question if it hasn't been answered, and if
+tracking was declined it points them to the iPhone's Settings → Privacy & Security → Tracking.
+
+Unity is told the ads may be personalised only when the player said yes *and* Apple's tracking is
+allowed. That goes in as consent (`gdpr.consent` and `privacy.consent` metadata), so it covers GDPR
+(EU/UK) and US privacy laws as well.
 
 How it fits together:
 
@@ -73,8 +79,9 @@ How it fits together:
   Unity's extra partner list (the "View" link on the UnityAds row of that page) can be pasted into
   `SKAdNetworkItems` too.
 - **Privacy**: in App Store Connect, declare that the app shows third-party ads and that Unity
-  collects device and usage data for advertising (Unity documents the exact answers). The app does
-  not ask for tracking permission (ATT), so ads are not personalised with the IDFA.
+  collects device and usage data for advertising (Unity documents the exact answers), and that the
+  app uses data for tracking (it asks with Apple's tracking prompt). Privacy policy URL:
+  https://politecarrot.com/privacy.
 - **Remove Ads** is hidden from the shop for now (no in-app purchases yet), so there is nothing
   to set up in App Store Connect for purchases.
 - **Version**: set the version and build number on the App target in Xcode (`MARKETING_VERSION`

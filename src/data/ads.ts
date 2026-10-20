@@ -54,3 +54,6 @@ export const MOCK_AD = {
   /** Simulated load delay in ms. */
   loadDelayMs: 300,
 };
+
+/** Linked from the first-run card and Privacy & Data; the same URL goes on both store listings. */
+export const PRIVACY_POLICY_URL = 'https://politecarrot.com/privacy';

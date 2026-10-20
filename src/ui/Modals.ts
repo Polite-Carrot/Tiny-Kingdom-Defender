@@ -12,7 +12,8 @@ import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, PERKS, PERK_TIERS, xpForLev
 const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
 import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, HERO_SLOT2_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
 import { summarise } from '../analytics/Analytics';
-import type { RewardedPlacement } from '../data/ads';
+import { PRIVACY_POLICY_URL, type RewardedPlacement } from '../data/ads';
+import { Capacitor } from '@capacitor/core';
 import type { ChestReward, MetaUpgradeKey } from '../game/Meta';
 import { vibrate } from '../core/Haptics';
 import type { ModalHandle } from './UI';
@@ -746,8 +747,7 @@ export function settings(game: Game): void {
         <div class="setting"><label>Graphics</label>${seg('quality', [['low', 'Low'], ['high', 'High']], st.quality)}</div>
         <div class="setting"><label>Vibration</label>${seg('vib', [['0', 'Off'], ['1', 'On']], st.vibration ? '1' : '0')}</div>
         <div class="setting"><label>Show FPS</label>${seg('fps', [['0', 'Off'], ['1', 'On']], st.showFps ? '1' : '0')}</div>
-        ${game.s.ads.real ? `<div class="setting"><label>Personalised ads</label>${seg('pads', [['0', 'Off'], ['1', 'On']], st.personalisedAds ? '1' : '0')}</div>
-        <div class="muted" style="font-size:12px;margin:-2px 0 6px">${PERSONALISED_ADS_NOTE}</div>` : ''}
+        <div class="setting"><label>Privacy &amp; Data</label><button class="btn small blue privacy">Open…</button></div>
         ${st.devMode ? `<h3 style="margin:12px 0 4px;font-size:15px">Developer</h3>
         <div class="muted" style="font-size:12px;margin-bottom:6px">Shown because developer mode is on (tap the version number on the main menu five times to turn it off). The apps show Unity's test ads while it's on, from the next launch.</div>
         <div class="setting"><label>Mock ad result</label></div>
@@ -775,15 +775,12 @@ export function settings(game: Game): void {
             case 'vib': st.vibration = v === '1'; break;
             case 'ad': st.debugAdOutcome = v as typeof st.debugAdOutcome; break;
             case 'noads': st.debugAdsUnavailable = v === '1'; break;
-            case 'pads':
-              st.personalisedAds = v === '1';
-              game.s.ads.setPersonalised(st.personalisedAds);
-              break;
           }
           game.applySettings();
           render();
         }));
       });
+      $(m, '.privacy').onclick = () => privacyData(game);
       m.querySelector<HTMLButtonElement>('.dbg')?.addEventListener('click', () => debug(game));
       $(m, '.reset').onclick = () => resetProgress(game);
     };
@@ -791,29 +788,65 @@ export function settings(game: Game): void {
   });
 }
 
-const PERSONALISED_ADS_NOTE = 'Personalised ads are chosen using information about your device and how you use apps. With them off you still see ads, just not tailored ones.';
+const PERSONALISED_ADS_NOTE = 'Ads matched to your interests. Left off, ads still appear but are generic.';
+
+const policyLink = (cls = '') => `<a class="btn ghost small ${cls}" href="${PRIVACY_POLICY_URL}" target="_blank" rel="noopener">Privacy policy</a>`;
 
 /**
- * Asked once in the apps, before any ad is shown: may the ad network personalise ads? The answer
- * is passed to Unity as consent, and can be changed any time in Settings.
+ * The first launch in the apps, before any ad loads (the same card as Color Match & Merge). On
+ * iOS, Continue leads straight into Apple's tracking prompt; elsewhere ads stay generic until
+ * personalised ads are switched on in Privacy & Data.
  */
-export function adChoice(game: Game, after?: () => void): void {
-  const { save, ads, audio } = game.s;
+export function beforeYouStart(game: Game, after: () => void): void {
+  const ios = Capacitor.getPlatform() === 'ios';
   game.s.ui.modal((m, h) => {
-    m.innerHTML = `<div class="ribbon">Ads in Tiny Kingdom</div>
-      <p style="margin:4px 2px 10px;line-height:1.45">Tiny Kingdom is free, paid for by ads. Most are ones you choose to watch for a reward. Can we show ads that match your interests?</p>
-      <p class="muted" style="margin:0 2px 12px;font-size:13px">${PERSONALISED_ADS_NOTE} You can change this any time in Settings.</p>
-      <div class="stack"><button class="btn yes">Allow personalised ads</button><button class="btn ghost no">Show non-personalised ads</button></div>`;
-    const pick = (on: boolean) => {
-      save.data.settings.personalisedAds = on;
-      save.save();
-      ads.setPersonalised(on);
-      audio.play('select');
+    m.innerHTML = `<div class="ribbon">Before you start</div>
+      <p style="margin:4px 2px 10px;line-height:1.45">Tiny Kingdom Defender is free, paid for by ads. Most are ones you choose to watch for a reward.</p>
+      <p class="muted" style="margin:0 2px 12px;font-size:13px">${ios
+        ? 'Next, your iPhone will ask whether the game may use its advertising ID. Allow it and ads are matched to your interests; decline and the game plays exactly the same, with generic ads.'
+        : 'Ads are generic unless you switch on personalised ads.'} You can change this any time in Settings → Privacy &amp; Data.</p>
+      <div class="stack"><button class="btn go">Continue</button>${policyLink()}</div>`;
+    $(m, '.go').onclick = () => {
+      game.s.audio.play('select');
       h.close();
     };
-    $(m, '.yes').onclick = () => pick(true);
-    $(m, '.no').onclick = () => pick(false);
-  }, { closable: false, onClose: () => after?.() });
+  }, { closable: false, onClose: after });
+}
+
+/**
+ * Settings → Privacy & Data: the personalised-ads choice (apps only) and the privacy policy.
+ * On iOS, switching personalised ads on asks Apple's tracking question; if tracking was
+ * declined, it can only be allowed again from the iPhone's own Settings.
+ */
+export function privacyData(game: Game): void {
+  const { save, ads } = game.s;
+  const ios = Capacitor.getPlatform() === 'ios';
+  let blocked = false;
+  game.s.ui.modal((m, h) => {
+    const render = () => {
+      const on = save.data.settings.personalisedAds === true;
+      m.innerHTML = `<div class="ribbon">Privacy &amp; Data</div>
+        ${ads.real ? `<div class="setting"><label>Personalised ads</label><div class="seg"><button data-v="0" class="${on ? '' : 'on'}">Off</button><button data-v="1" class="${on ? 'on' : ''}">On</button></div></div>
+        <div class="muted" style="font-size:12px;margin:-2px 0 8px">${PERSONALISED_ADS_NOTE}</div>
+        ${blocked ? '<div class="muted" style="font-size:12px;margin:0 0 8px">Tracking is turned off for this game. To allow it, open your iPhone\'s Settings → Privacy &amp; Security → Tracking.</div>' : ''}` : ''}
+        <p class="muted" style="margin:4px 2px 10px;font-size:13px">Your kingdom's progress is saved on this device and never leaves it.</p>
+        <div class="stack">${policyLink()}<button class="btn done">Done</button></div>`;
+      m.querySelectorAll<HTMLButtonElement>('.seg button').forEach((b) => (b.onclick = async () => {
+        let want = b.dataset.v === '1';
+        if (want && ios) {
+          const status = await ads.requestTracking();
+          blocked = status !== 'authorized';
+          want = !blocked;
+        } else blocked = false;
+        save.data.settings.personalisedAds = want;
+        save.save();
+        ads.setPersonalised(want);
+        if (!h.closed) render();
+      }));
+      $(m, '.done').onclick = () => h.close();
+    };
+    render();
+  });
 }
 
 /** How long the erase button must be held down. */

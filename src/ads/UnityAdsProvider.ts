@@ -2,7 +2,7 @@
 // android/app/src/main/java/com/politecarrot/tinykingdomdefender/UnityAdsPlugin.java).
 
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import type { AdProvider, RewardedResult } from './AdProvider';
+import type { AdProvider, RewardedResult, TrackingStatus } from './AdProvider';
 import { UNITY_ADS, type UnityAdIds } from '../data/ads';
 
 interface UnityAdsPlugin {
@@ -11,6 +11,9 @@ interface UnityAdsPlugin {
   load(o: { placementId: string }): Promise<void>;
   isLoaded(o: { placementId: string }): Promise<{ loaded: boolean }>;
   show(o: { placementId: string }): Promise<{ result: RewardedResult }>;
+  // iOS only.
+  trackingStatus(): Promise<{ status: TrackingStatus }>;
+  requestTracking(): Promise<{ status: TrackingStatus }>;
 }
 
 const UnityAds = registerPlugin<UnityAdsPlugin>('UnityAds');
@@ -25,14 +28,18 @@ export function unityIds(): UnityAdIds | null {
 export class UnityAdsProvider implements AdProvider {
   /** Whether each ad unit has an ad loaded, polled from the plugin (the game asks synchronously). */
   private loaded = { rewarded: false, interstitial: false };
+  private ios = Capacitor.getPlatform() === 'ios';
+  /** Apple's tracking answer on iOS; Unity may only personalise ads once it is "authorized". */
+  private att: TrackingStatus | null = null;
 
   /** testMode: Unity's test ads (on for testers; real ads on your own phone can get the account flagged). */
   constructor(private ids: UnityAdIds, private testMode: boolean, private personalised: () => boolean) {}
 
   async init(): Promise<void> {
     const ids = this.ids;
+    if (this.ios && !this.att) this.att = (await UnityAds.trackingStatus().catch(() => null))?.status ?? null;
     // Consent goes in before the SDK starts, so the first ad already respects it.
-    await UnityAds.setConsent({ personalised: this.personalised() }).catch(() => {});
+    await UnityAds.setConsent({ personalised: this.consent(this.personalised()) }).catch(() => {});
     await UnityAds.initialize({ gameId: ids.gameId, testMode: this.testMode });
     for (const id of [ids.rewarded, ids.interstitial]) await UnityAds.load({ placementId: id });
     const poll = async () => {
@@ -48,7 +55,19 @@ export class UnityAdsProvider implements AdProvider {
   }
 
   setPersonalised(on: boolean): void {
-    void UnityAds.setConsent({ personalised: on }).catch(() => {});
+    void UnityAds.setConsent({ personalised: this.consent(on) }).catch(() => {});
+  }
+
+  async requestTracking(): Promise<TrackingStatus | null> {
+    if (!this.ios) return null;
+    this.att = (await UnityAds.requestTracking().catch(() => null))?.status ?? this.att;
+    this.setPersonalised(this.personalised());
+    return this.att;
+  }
+
+  /** What Unity is told: the player's choice, and on iOS only with Apple's tracking allowed too. */
+  private consent(on: boolean): boolean {
+    return on && (!this.ios || this.att === 'authorized');
   }
 
   isRewardedReady(): boolean {

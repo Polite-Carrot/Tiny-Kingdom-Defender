@@ -1,7 +1,7 @@
 // AdManager: wraps an AdProvider, enforces interstitial rules, tracks analytics,
 // and pauses/mutes the game while an ad is showing.
 
-import type { AdProvider, RewardedResult } from './AdProvider';
+import type { AdProvider, RewardedResult, TrackingStatus } from './AdProvider';
 import type { Analytics } from '../analytics/Analytics';
 import { INTERSTITIAL_RULES, type RewardedPlacement } from '../data/ads';
 
@@ -61,6 +61,11 @@ export class AdManager {
   /** Passes the player's personalised-ads choice to the ad network. */
   setPersonalised(on: boolean): void {
     this.provider.setPersonalised?.(on);
+  }
+
+  /** iOS: asks Apple's tracking question (once per install) and returns the answer; null elsewhere. */
+  async requestTracking(): Promise<TrackingStatus | null> {
+    return (await this.provider.requestTracking?.().catch(() => null)) ?? null;
   }
 
   /** Whether real ad networks are in use (the apps), so the privacy choice matters. */

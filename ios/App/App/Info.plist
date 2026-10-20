@@ -55,6 +55,10 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Shown by Apple's tracking prompt (App Tracking Transparency), asked once after the
+	     game's "Before you start" card, or when personalised ads are switched on in Privacy & Data. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This lets us show ads matched to your interests instead of generic ones. We do not collect your name, email, contacts, photos or location, and your kingdom's progress never leaves your device. Decline and the game plays exactly the same, with generic ads.</string>
 	<!-- SKAdNetwork IDs: Unity Ads first, then the main ID of each network in Unity's LevelPlay
 	     table ("Add SKAdNetwork IDs manually", docs.unity.com). Unity's extra partner list
 	     (the "View" link on the UnityAds row) can be appended here. -->

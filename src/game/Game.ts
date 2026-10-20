@@ -141,7 +141,8 @@ export class Game {
       best_wave: meta.bestWave(), coins: save.data.coins, first_session: !save.data.base, save_recovered: save.recovered,
     });
     if (save.recovered !== 'none') this.s.ui.toast(save.recovered === 'backup' ? 'Save was damaged — restored from backup.' : 'Save was damaged and had to be reset.', 4000);
-    // In the apps, the first launch asks about personalised ads before the ad network starts.
+    // In the apps, the first launch shows "Before you start" (and on iOS, Apple's tracking prompt)
+    // before the ad network starts.
     const askAds = ads.real && save.data.settings.personalisedAds === null;
     if (!askAds) void ads.init();
     this.onResize();
@@ -155,7 +156,12 @@ export class Game {
     this.goTitle();
     requestAnimationFrame(this.frame);
     if (abandoned) this.s.ui.toast(`Your unfinished Daily Challenge was scored: +${abandoned.coins} coins`, 3000);
-    if (askAds) setTimeout(() => Modals.adChoice(this, () => {
+    if (askAds) setTimeout(() => Modals.beforeYouStart(this, async () => {
+      // Allowing tracking on iOS counts as yes to personalised ads; elsewhere they start off.
+      const personalised = (await ads.requestTracking()) === 'authorized';
+      save.data.settings.personalisedAds = personalised;
+      save.save();
+      ads.setPersonalised(personalised);
       void ads.init();
       if (away) this.showWelcomeBack(away);
     }), 900);
