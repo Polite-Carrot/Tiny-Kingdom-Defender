@@ -40,7 +40,7 @@ LEAD YOUR HEROES
 • 6 heroes, each with their own skills, from the archer Robin to the shadowy Kage
 • Station a hero on the battlefield or keep them at the castle
 • Level them up, choose their skills and kit them out with gear
-• Field two heroes at once once you've earned the second slot
+• Take two heroes into battle once you've earned the second slot
 
 SURVIVE THE AGES
 • Endless waves that grow tougher as you journey through four Ages: Meadows, Sands, Frost and Fire
