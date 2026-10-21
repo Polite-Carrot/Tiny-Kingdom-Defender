@@ -18,10 +18,12 @@
     "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
+    "@capacitor-firebase/analytics": "^8.5.2",
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capacitor/preferences": "^8.0.1",
+    "@politecarrot/capacitor-unity-ads": "github:Polite-Carrot/polite-carrot-unity-ads#96f31aa21ee8cd5e966797b37c438540c092f444",
     "three": "^0.180.0"
   },
   "devDependencies": {

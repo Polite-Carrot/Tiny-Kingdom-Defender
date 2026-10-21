@@ -792,46 +792,69 @@ const PERSONALISED_ADS_NOTE = 'Ads matched to your interests. Left off, ads stil
 
 const policyLink = (cls = '') => `<a class="btn ghost small ${cls}" href="${PRIVACY_POLICY_URL}" target="_blank" rel="noopener">Privacy policy</a>`;
 
+const USAGE_DATA_NOTE = 'Which waves people reach and where they get stuck, so we can fix the ones that are too hard.';
+
+const toggle = (cls: string, on: boolean) =>
+  `<div class="seg ${cls}"><button data-v="0" class="${on ? '' : 'on'}">Off</button><button data-v="1" class="${on ? 'on' : ''}">On</button></div>`;
+
 /**
- * The first launch in the apps, before any ad loads (the same card as Color Match & Merge). On
- * iOS, Continue leads straight into Apple's tracking prompt; elsewhere ads stay generic until
- * personalised ads are switched on in Privacy & Data.
+ * The first launch in the apps, before any ad loads (the same card as Color Match & Merge). It
+ * offers "Send usage data" (off unless switched on). On iOS, Continue leads straight into Apple's
+ * tracking prompt; elsewhere ads stay generic until personalised ads are switched on in Privacy &
+ * Data. Players who already answered the ads question only see the usage-data choice.
  */
-export function beforeYouStart(game: Game, after: () => void): void {
+export function beforeYouStart(game: Game, after: (usageData: boolean) => void): void {
+  const { save, analytics } = game.s;
   const ios = Capacitor.getPlatform() === 'ios';
+  const askTracking = ios && save.data.settings.personalisedAds === null;
+  let usageData = save.data.settings.usageData === true;
   game.s.ui.modal((m, h) => {
     m.innerHTML = `<div class="ribbon">Before you start</div>
       <p style="margin:4px 2px 10px;line-height:1.45">Tiny Kingdom Defender is free, paid for by ads. Most are ones you choose to watch for a reward.</p>
-      <p class="muted" style="margin:0 2px 12px;font-size:13px">${ios
+      ${analytics.remote ? `<div class="setting"><label>Send usage data</label>${toggle('usage', usageData)}</div>
+      <div class="muted" style="font-size:12px;margin:-2px 0 8px">${USAGE_DATA_NOTE}</div>` : ''}
+      <p class="muted" style="margin:0 2px 12px;font-size:13px">${askTracking
         ? 'Next, your iPhone will ask whether the game may use its advertising ID. Allow it and ads are matched to your interests; decline and the game plays exactly the same, with generic ads.'
         : 'Ads are generic unless you switch on personalised ads.'} You can change this any time in Settings → Privacy &amp; Data.</p>
       <div class="stack"><button class="btn go">Continue</button>${policyLink()}</div>`;
+    m.querySelectorAll<HTMLButtonElement>('.usage button').forEach((b) => (b.onclick = () => {
+      usageData = b.dataset.v === '1';
+      m.querySelectorAll<HTMLButtonElement>('.usage button').forEach((o) => o.classList.toggle('on', o === b));
+    }));
     $(m, '.go').onclick = () => {
       game.s.audio.play('select');
       h.close();
     };
-  }, { closable: false, onClose: after });
+  }, { closable: false, onClose: () => after(usageData) });
 }
 
 /**
- * Settings → Privacy & Data: the personalised-ads choice (apps only) and the privacy policy.
- * On iOS, switching personalised ads on asks Apple's tracking question; if tracking was
+ * Settings → Privacy & Data: the usage-data and personalised-ads choices (apps only) and the
+ * privacy policy. On iOS, switching personalised ads on asks Apple's tracking question; if tracking was
  * declined, it can only be allowed again from the iPhone's own Settings.
  */
 export function privacyData(game: Game): void {
-  const { save, ads } = game.s;
+  const { save, ads, analytics } = game.s;
   const ios = Capacitor.getPlatform() === 'ios';
   let blocked = false;
   game.s.ui.modal((m, h) => {
     const render = () => {
       const on = save.data.settings.personalisedAds === true;
       m.innerHTML = `<div class="ribbon">Privacy &amp; Data</div>
-        ${ads.real ? `<div class="setting"><label>Personalised ads</label><div class="seg"><button data-v="0" class="${on ? '' : 'on'}">Off</button><button data-v="1" class="${on ? 'on' : ''}">On</button></div></div>
+        ${analytics.remote ? `<div class="setting"><label>Send usage data</label>${toggle('usage', save.data.settings.usageData === true)}</div>
+        <div class="muted" style="font-size:12px;margin:-2px 0 8px">${USAGE_DATA_NOTE}</div>` : ''}
+        ${ads.real ? `<div class="setting"><label>Personalised ads</label>${toggle('ads', on)}</div>
         <div class="muted" style="font-size:12px;margin:-2px 0 8px">${PERSONALISED_ADS_NOTE}</div>
         ${blocked ? '<div class="muted" style="font-size:12px;margin:0 0 8px">Tracking is turned off for this game. To allow it, open your iPhone\'s Settings → Privacy &amp; Security → Tracking.</div>' : ''}` : ''}
         <p class="muted" style="margin:4px 2px 10px;font-size:13px">Your kingdom's progress is saved on this device and never leaves it.</p>
         <div class="stack">${policyLink()}<button class="btn done">Done</button></div>`;
-      m.querySelectorAll<HTMLButtonElement>('.seg button').forEach((b) => (b.onclick = async () => {
+      m.querySelectorAll<HTMLButtonElement>('.usage button').forEach((b) => (b.onclick = () => {
+        save.data.settings.usageData = b.dataset.v === '1';
+        save.save();
+        game.applyAnalyticsConsent();
+        render();
+      }));
+      m.querySelectorAll<HTMLButtonElement>('.ads button').forEach((b) => (b.onclick = async () => {
         let want = b.dataset.v === '1';
         if (want && ios) {
           const status = await ads.requestTracking();
@@ -841,6 +864,7 @@ export function privacyData(game: Game): void {
         save.data.settings.personalisedAds = want;
         save.save();
         ads.setPersonalised(want);
+        game.applyAnalyticsConsent();
         if (!h.closed) render();
       }));
       $(m, '.done').onclick = () => h.close();

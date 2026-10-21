@@ -1,22 +1,14 @@
-// Unity Ads, through the native plugin in the apps (ios/App/App/UnityAdsPlugin.swift and
-// android/app/src/main/java/com/politecarrot/tinykingdomdefender/UnityAdsPlugin.java).
+// Unity Ads in the apps, through the shared @politecarrot/capacitor-unity-ads plugin (the same one
+// Color Match & Merge uses). It owns the native SDK, consent signals and Apple's tracking prompt;
+// this adapter keeps an ad of each kind loaded so the game can ask synchronously.
 
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { createUnityAds, type UnityAdsClient } from '@politecarrot/capacitor-unity-ads';
 import type { AdProvider, RewardedResult, TrackingStatus } from './AdProvider';
 import { UNITY_ADS, type UnityAdIds } from '../data/ads';
 
-interface UnityAdsPlugin {
-  initialize(o: { gameId: string; testMode: boolean }): Promise<void>;
-  setConsent(o: { personalised: boolean }): Promise<void>;
-  load(o: { placementId: string }): Promise<void>;
-  isLoaded(o: { placementId: string }): Promise<{ loaded: boolean }>;
-  show(o: { placementId: string }): Promise<{ result: RewardedResult }>;
-  // iOS only.
-  trackingStatus(): Promise<{ status: TrackingStatus }>;
-  requestTracking(): Promise<{ status: TrackingStatus }>;
-}
-
-const UnityAds = registerPlugin<UnityAdsPlugin>('UnityAds');
+/** How often a missing ad is asked for again. */
+const RELOAD_MS = 15000;
 
 /** This app's Unity ad IDs, or null where none are set yet (the game then keeps the mock ads). */
 export function unityIds(): UnityAdIds | null {
@@ -26,65 +18,73 @@ export function unityIds(): UnityAdIds | null {
 }
 
 export class UnityAdsProvider implements AdProvider {
-  /** Whether each ad unit has an ad loaded, polled from the plugin (the game asks synchronously). */
-  private loaded = { rewarded: false, interstitial: false };
-  private ios = Capacitor.getPlatform() === 'ios';
-  /** Apple's tracking answer on iOS; Unity may only personalise ads once it is "authorized". */
-  private att: TrackingStatus | null = null;
+  private client: UnityAdsClient;
+  private started = false;
+  private loading = { rewarded: false, interstitial: false };
+  private ios: boolean;
 
   /** testMode: Unity's test ads (on for testers; real ads on your own phone can get the account flagged). */
-  constructor(private ids: UnityAdIds, private testMode: boolean, private personalised: () => boolean) {}
+  constructor(ids: UnityAdIds, testMode: boolean, private personalised: () => boolean, bridge: typeof Capacitor = Capacitor) {
+    const config = { gameId: ids.gameId, rewarded: ids.rewarded, interstitial: ids.interstitial };
+    this.ios = bridge.getPlatform() === 'ios';
+    this.client = createUnityAds({ ios: config, android: config, testMode, capacitor: bridge });
+  }
 
   async init(): Promise<void> {
-    const ids = this.ids;
-    if (this.ios && !this.att) this.att = (await UnityAds.trackingStatus().catch(() => null))?.status ?? null;
     // Consent goes in before the SDK starts, so the first ad already respects it.
-    await UnityAds.setConsent({ personalised: this.consent(this.personalised()) }).catch(() => {});
-    await UnityAds.initialize({ gameId: ids.gameId, testMode: this.testMode });
-    for (const id of [ids.rewarded, ids.interstitial]) await UnityAds.load({ placementId: id });
-    const poll = async () => {
-      try {
-        this.loaded.rewarded = (await UnityAds.isLoaded({ placementId: ids.rewarded })).loaded;
-        this.loaded.interstitial = (await UnityAds.isLoaded({ placementId: ids.interstitial })).loaded;
-      } catch {
-        /* keep the last known state */
-      }
-    };
-    await poll();
-    window.setInterval(poll, 2000);
+    await this.client.setPersonalized(this.personalised()).catch(() => {});
+    if (!(await this.client.init())) throw new Error('Unity Ads did not start');
+    this.started = true;
+    this.prepare();
+    window.setInterval(() => this.prepare(), RELOAD_MS);
+  }
+
+  /** Loads whichever ads are missing (after a show, a failed load, or a consent change). */
+  private prepare(): void {
+    if (!this.started) return;
+    const { prepared, showing } = this.client.state();
+    if (showing) return;
+    for (const kind of ['rewarded', 'interstitial'] as const) {
+      if (prepared[kind] || this.loading[kind]) continue;
+      this.loading[kind] = true;
+      const load = kind === 'rewarded' ? this.client.prepareRewarded() : this.client.prepareInterstitial();
+      void load.catch(() => {}).finally(() => (this.loading[kind] = false));
+    }
   }
 
   setPersonalised(on: boolean): void {
-    void UnityAds.setConsent({ personalised: this.consent(on) }).catch(() => {});
+    // A consent change discards loaded ads, so load fresh ones under the new choice.
+    void this.client.setPersonalized(on).catch(() => {}).finally(() => this.prepare());
   }
 
   async requestTracking(): Promise<TrackingStatus | null> {
     if (!this.ios) return null;
-    this.att = (await UnityAds.requestTracking().catch(() => null))?.status ?? this.att;
-    this.setPersonalised(this.personalised());
-    return this.att;
-  }
-
-  /** What Unity is told: the player's choice, and on iOS only with Apple's tracking allowed too. */
-  private consent(on: boolean): boolean {
-    return on && (!this.ios || this.att === 'authorized');
+    const status = await this.client.requestTracking().catch(() => null);
+    return status === 'authorized' || status === 'denied' || status === 'restricted' || status === 'notDetermined' ? status : null;
   }
 
   isRewardedReady(): boolean {
-    return this.loaded.rewarded;
+    return this.client.state().prepared.rewarded;
   }
 
   isInterstitialReady(): boolean {
-    return this.loaded.interstitial;
+    return this.client.state().prepared.interstitial;
   }
 
   async showRewarded(_placement: string): Promise<RewardedResult> {
-    this.loaded.rewarded = false;
-    return (await UnityAds.show({ placementId: this.ids.rewarded })).result;
+    try {
+      const r = await this.client.showRewarded();
+      return r.rewarded ? 'completed' : r.shown && r.finishState === 'skipped' ? 'skipped' : 'failed';
+    } finally {
+      this.prepare();
+    }
   }
 
   async showInterstitial(_placement: string): Promise<void> {
-    this.loaded.interstitial = false;
-    await UnityAds.show({ placementId: this.ids.interstitial });
+    try {
+      await this.client.showInterstitial();
+    } finally {
+      this.prepare();
+    }
   }
 }

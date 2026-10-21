@@ -3,6 +3,11 @@
 buildscript {
     
     repositories {
+        // Aliyun mirror first (as in Color Match & Merge): dl.google.com drops mid-transfer and fails
+        // TLS on this network. Aliyun serves the same Google Maven artifacts; google() stays as a
+        // fallback for anything the mirror is missing.
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
     }
@@ -19,8 +24,24 @@ apply from: "variables.gradle"
 
 allprojects {
     repositories {
+        // Aliyun mirror first (as in Color Match & Merge): dl.google.com drops mid-transfer and fails
+        // TLS on this network. Aliyun serves the same Google Maven artifacts; google() stays as a
+        // fallback for anything the mirror is missing.
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
+    }
+}
+
+// Every Android module builds with Build-Tools 36.1.0. AGP 8.13's default (35.0.0) is not
+// installed and can't be downloaded on this network. Set here rather than per module because
+// `cap sync` regenerates capacitor-cordova-android-plugins/build.gradle.
+subprojects {
+    afterEvaluate { proj ->
+        if (proj.hasProperty('android')) {
+            proj.android.buildToolsVersion = "36.1.0"
+        }
     }
 }
 

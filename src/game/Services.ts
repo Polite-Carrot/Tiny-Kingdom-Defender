@@ -5,7 +5,7 @@ import type { CameraRig } from '../core/CameraRig';
 import type { SaveSystem } from '../core/Save';
 import type { AudioSystem } from '../systems/Audio';
 import type { UI } from '../ui/UI';
-import type { Analytics } from '../analytics/Analytics';
+import type { ConsentedAnalytics } from '../analytics/FirebaseAnalytics';
 import type { AdManager } from '../ads/AdManager';
 import type { Meta } from './Meta';
 
@@ -15,7 +15,7 @@ export interface Services {
   save: SaveSystem;
   audio: AudioSystem;
   ui: UI;
-  analytics: Analytics;
+  analytics: ConsentedAnalytics;
   ads: AdManager;
   meta: Meta;
 }

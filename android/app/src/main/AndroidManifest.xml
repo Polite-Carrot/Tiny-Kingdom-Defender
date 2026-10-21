@@ -33,6 +33,28 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Firebase Analytics starts with collection off so nothing goes out
+             before the player has said yes to "Send usage data". The
+             FirebaseTracker (src/analytics/Analytics.ts) calls setEnabled(true)
+             after consent. Do NOT use firebase_analytics_collection_deactivated
+             here: that flag is permanent and Firebase silently ignores runtime
+             setEnabled calls. -->
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_analytics_storage"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_storage"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_user_data"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_personalization_signals"
+            android:value="false"/>
     </application>
 
     <!-- Permissions -->

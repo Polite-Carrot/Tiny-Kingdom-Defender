@@ -60,7 +60,7 @@ The editable source page is `game.html` (`npm run dev` opens it). After changing
 | Sound & vibration | All sound is synthesized with Web Audio (`systems/Audio.ts`). Every tower, spell and hero has its own sound, with jingles for nightfall, dawn and checkpoints. On phones the game vibrates on boss entrances, castle hits and meteor strikes (`core/Haptics.ts`); Settings has a Vibration toggle. |
 | Opening screen | The game opens on the Polite Carrot studio lockup (the carrot pops in, then the name), shared with Color Match & Merge, before fading into the game's own loader. |
 | Ads | `AdManager` plus a mock provider, 8 rewarded placements, interstitial rules, and a "Remove ads" flag. |
-| Analytics | `Analytics` interface with a console/local implementation, plus a hidden debug screen. |
+| Analytics | `Analytics` interface with a console/local implementation, consented Google Analytics (Firebase) in the apps, plus a hidden debug screen. |
 
 ### Controls
 * **Tap** a stone pad to build. Tap a card once to preview its range, then tap it again to build. Tap a tower to upgrade or sell it.
@@ -84,7 +84,7 @@ src/
   systems/     Audio (Web Audio synth + sequencer), Effects (instanced particles, rings, lightning)
   ui/          DOM overlay: UI (screens/modals/toasts/float text), Hud, Screens (title, world map), Modals, Thumbnails
   ads/         AdProvider interface, MockAdProvider, AdManager (+ pure interstitial rule evaluation)
-  analytics/   Analytics interface, LocalAnalytics, summarise() for the debug screen
+  analytics/   Analytics interface, LocalAnalytics, summarise() for the debug screen; ConsentedAnalytics (Firebase)
 tools/sim.ts   headless balance simulator
 tests/         vitest unit tests
 ```
@@ -258,7 +258,7 @@ The mock provider shows a fullscreen overlay with a 5 s countdown and a close bu
 
 `src/analytics/Analytics.ts` defines `Analytics.track(name, params)`. `LocalAnalytics` logs structured events to the console (in dev builds), keeps the session's events in memory, and keeps a rolling buffer of the last 200 in `localStorage`.
 
-To use a real backend (Firebase, GameAnalytics, Amplitude and so on), implement the same interface and swap it in at `Game.ts`.
+In the iOS and Android apps, `ConsentedAnalytics` (`src/analytics/FirebaseAnalytics.ts`) wraps it and also sends every event to Google Analytics through [`@capacitor-firebase/analytics`](https://github.com/capawesome-team/capacitor-firebase) (Firebase project `tiny-kingdom-defender`, configured by `ios/App/App/GoogleService-Info.plist` and `android/app/google-services.json`), but only once the player has switched on **Send usage data** (asked on the first-launch "Before you start" card, changeable in **Settings → Privacy & Data**). Collection is off by default in `Info.plist` and `AndroidManifest.xml`; the Consent Mode v2 ad types are granted only while personalised ads are on too. `session_start` is reserved by Firebase, so it is sent there as `game_launch`. The website sends nothing.
 
 Events logged: `session_start`, `level_start` (entering the kingdom), `level_end` (a push ending at a `checkpoint` or a `retreat`, with wave reached, duration and castle HP), `wave_complete`, `tower_built`, `tower_upgraded`, `hero_ability_used`, `ad_offer_shown`, `ad_offer_clicked`, `ad_result`, `interstitial_shown`, `coins_earned` (with source), `coins_spent` (with sink), `upgrade_purchased`, `mission_complete`, `daily_reward_claimed`.
 

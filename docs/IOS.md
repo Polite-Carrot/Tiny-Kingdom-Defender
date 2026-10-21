@@ -8,23 +8,27 @@ ads the website uses.
 |---|---|
 | Store name (App Store Connect) | Tiny Kingdom Defender |
 | App name (home screen) | Tiny Kingdom (the full name would be cut off under the icon) |
-| Bundle ID | `com.politecarrot.tinykingdomdefender` |
+| Bundle ID | `com.politecarrot.tinykingdom` |
 | Unity Game ID | `800404139` |
 | Rewarded placement | `BP_Rewarded_iOS` (shared by every "▶ AD" button) |
 | Interstitial placement | `BP_Interstitial_iOS` (checkpoints only) |
 | Minimum iOS | 15.0, iPhone and iPad |
+| Google Analytics | Firebase project `tiny-kingdom-defender`, config in `ios/App/App/GoogleService-Info.plist` (only sends after "Send usage data" is switched on) |
 
 The ad IDs and the test-mode switch are in `src/data/ads.ts` (`UNITY_ADS`).
 
 ## Building on a Mac
 
-You need a Mac with **Xcode**, **Node.js** and **CocoaPods** (`sudo gem install cocoapods` or
-`brew install cocoapods`).
+You need a Mac with **Xcode** and **Node.js**. Native libraries come in through **Swift Package
+Manager** (as in Color Match & Merge), so CocoaPods is not needed: `ios/App/CapApp-SPM/Package.swift`
+is written by `cap sync` and lists Capacitor, Preferences, Firebase Analytics and the shared
+`@politecarrot/capacitor-unity-ads` plugin (which brings in the Unity Ads SDK). Package versions are
+pinned in `ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 
 ```sh
 npm install
-npm run ios:sync      # builds the game, copies it into the app and installs the pods (Unity Ads, Preferences)
-npm run ios:open      # opens ios/App/App.xcworkspace in Xcode
+npm run ios:sync      # builds the game, copies it into the app and updates CapApp-SPM/Package.swift
+npm run ios:open      # opens ios/App/App.xcodeproj in Xcode (it resolves the Swift packages)
 ```
 
 In Xcode: select the **App** target, then **Signing & Capabilities**, and pick your Apple
@@ -65,11 +69,13 @@ allowed. That goes in as consent (`gdpr.consent` and `privacy.consent` metadata)
 
 How it fits together:
 
-- `ios/App/App/UnityAdsPlugin.swift` is the native bridge. It initialises the SDK, keeps both
-  placements loaded (and reloads after each ad or a failed load), and shows them.
-- `ios/App/App/MainViewController.swift` registers the plugin and hides the status bar.
-- `src/ads/UnityAdsProvider.ts` is the game's side; `Game.ts` uses it when running inside the
+- `@politecarrot/capacitor-unity-ads` (shared with Color Match & Merge) is the native bridge. It
+  initialises the SDK, passes consent and asks Apple's tracking question.
+- `src/ads/UnityAdsProvider.ts` is the game's side: it keeps both placements loaded (reloading
+  after each ad, a failed load or a consent change). `Game.ts` uses it when running inside the
   app and keeps `MockAdProvider` on the web.
+- `ios/App/App/MainViewController.swift` hides the status bar; the home indicator is hidden by
+  Capacitor's SystemBars plugin (`plugins.SystemBars.hidden` in `capacitor.config.ts`).
 - The game's own rules (`AdManager`) still decide when an interstitial may show.
 
 ## Before submitting to the App Store

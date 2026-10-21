@@ -1,13 +1,10 @@
 import UIKit
 import Capacitor
 
-/// The game's web view: registers the app's own plugins and keeps the screen full-bleed.
+/// The game's web view, kept full-bleed.
 class MainViewController: CAPBridgeViewController {
-    override open func capacitorDidLoad() {
-        bridge?.registerPluginInstance(UnityAdsPlugin())
-    }
-
     override var prefersStatusBarHidden: Bool { true }
 
-    override var prefersHomeIndicatorAutoHidden: Bool { true }
+    // The home indicator is hidden by Capacitor's SystemBars plugin (`hidden` in capacitor.config.ts),
+    // which already overrides prefersHomeIndicatorAutoHidden and does not allow it to be overridden again.
 }

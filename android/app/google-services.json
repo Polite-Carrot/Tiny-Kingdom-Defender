@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "97272740479",
+    "project_id": "tiny-kingdom-defender",
+    "storage_bucket": "tiny-kingdom-defender.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97272740479:android:4b3566ce3653dcf86e5d4a",
+        "android_client_info": {
+          "package_name": "com.politecarrot.tinykingdom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCsqvtyxp3todB2x25C34sz1xtxztfNsX4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

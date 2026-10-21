@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.politecarrot.tinykingdomdefender"
+    namespace = "com.politecarrot.tinykingdom"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.politecarrot.tinykingdomdefender"
+        applicationId "com.politecarrot.tinykingdom"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -52,8 +52,6 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
-    // Unity Ads (see UnityAdsPlugin.java and src/data/ads.ts).
-    implementation "com.unity3d.ads:unity-ads:4.20.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

@@ -152,5 +152,21 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Firebase Analytics starts with collection off so nothing goes out
+	     before the player has said yes to "Send usage data". The
+	     FirebaseTracker (src/analytics/Analytics.ts) calls setEnabled(true)
+	     after consent. Do NOT use FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED
+	     here: that flag is permanent and Firebase silently ignores runtime
+	     setEnabled calls. -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_ANALYTICS_STORAGE</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_USER_DATA</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
 </dict>
 </plist>

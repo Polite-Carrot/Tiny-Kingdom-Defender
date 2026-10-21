@@ -8,6 +8,7 @@ import { AudioSystem, type MusicTrack } from '../systems/Audio';
 import { UI } from '../ui/UI';
 import { Hud } from '../ui/Hud';
 import { LocalAnalytics } from '../analytics/Analytics';
+import { ConsentedAnalytics } from '../analytics/FirebaseAnalytics';
 import { AdManager } from '../ads/AdManager';
 import { MockAdProvider } from '../ads/MockAdProvider';
 import { UnityAdsProvider, unityIds } from '../ads/UnityAdsProvider';
@@ -47,7 +48,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, storage?: StorageLike) {
     const save = new SaveSystem(storage);
-    const analytics = new LocalAnalytics(import.meta.env.DEV);
+    const analytics = new ConsentedAnalytics(new LocalAnalytics(import.meta.env.DEV));
     const renderer = new Renderer(canvas, save.data.settings.quality);
     const rig = new CameraRig(renderer.camera, GRID_SIZE / 2 + 0.7);
     const audio = new AudioSystem();
@@ -137,13 +138,15 @@ export class Game {
     audio.setVolumes(save.data.settings.music, save.data.settings.sfx);
     setHaptics(save.data.settings.vibration);
     meta.refreshMissions();
+    this.applyAnalyticsConsent();
     analytics.track('session_start', {
       best_wave: meta.bestWave(), coins: save.data.coins, first_session: !save.data.base, save_recovered: save.recovered,
     });
     if (save.recovered !== 'none') this.s.ui.toast(save.recovered === 'backup' ? 'Save was damaged — restored from backup.' : 'Save was damaged and had to be reset.', 4000);
     // In the apps, the first launch shows "Before you start" (and on iOS, Apple's tracking prompt)
-    // before the ad network starts.
+    // before the ad network starts. It also asks about usage data until that has been answered.
     const askAds = ads.real && save.data.settings.personalisedAds === null;
+    const askUsage = analytics.remote && save.data.settings.usageData === null;
     if (!askAds) void ads.init();
     this.onResize();
     // What happened while away is worked out before "last seen" moves on.
@@ -156,13 +159,17 @@ export class Game {
     this.goTitle();
     requestAnimationFrame(this.frame);
     if (abandoned) this.s.ui.toast(`Your unfinished Daily Challenge was scored: +${abandoned.coins} coins`, 3000);
-    if (askAds) setTimeout(() => Modals.beforeYouStart(this, async () => {
-      // Allowing tracking on iOS counts as yes to personalised ads; elsewhere they start off.
-      const personalised = (await ads.requestTracking()) === 'authorized';
-      save.data.settings.personalisedAds = personalised;
+    if (askAds || askUsage) setTimeout(() => Modals.beforeYouStart(this, async (usageData) => {
+      save.data.settings.usageData = usageData;
+      if (askAds) {
+        // Allowing tracking on iOS counts as yes to personalised ads; elsewhere they start off.
+        const personalised = (await ads.requestTracking()) === 'authorized';
+        save.data.settings.personalisedAds = personalised;
+        ads.setPersonalised(personalised);
+        void ads.init();
+      }
       save.save();
-      ads.setPersonalised(personalised);
-      void ads.init();
+      this.applyAnalyticsConsent();
       if (away) this.showWelcomeBack(away);
     }), 900);
     else if (away) setTimeout(() => this.showWelcomeBack(away), 350);
@@ -483,6 +490,12 @@ export class Game {
   /** Debug: hand the current battle to the heuristic AI. */
   autoplay(): void {
     if (this.battle) this.battle.autoPlayer = new AutoPlayer(this.battle.run, 1);
+  }
+
+  /** Sends usage data to Google Analytics (apps only) only while the player allows it. */
+  applyAnalyticsConsent(): void {
+    const st = this.s.save.data.settings;
+    void this.s.analytics.setConsent(st.usageData === true, st.personalisedAds === true);
   }
 
   applySettings(): void {
