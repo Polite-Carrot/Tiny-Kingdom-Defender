@@ -25,7 +25,7 @@ export class UI {
   private hintEl: HTMLElement | null = null;
   private hintRing: HTMLElement | null = null;
   private hintAnchor: (() => { x: number; y: number } | null) | null = null;
-  private hintPlacement: 'above' | 'below' | 'free' = 'above';
+  private hintSide: 'above' | 'below' = 'above';
   onClick: () => void = () => {};
 
   constructor(root: HTMLElement) {
@@ -250,9 +250,9 @@ export class UI {
 
   showHint(text: string, anchor: (() => { x: number; y: number } | null) | null, placement: 'above' | 'below' | 'free' = 'above'): void {
     this.clearHint();
-    this.hintEl = el('div', `hint ${placement === 'above' ? 'down' : placement === 'below' ? 'up' : 'free'}`, text);
+    this.hintEl = el('div', 'hint', text);
     this.hintAnchor = anchor;
-    this.hintPlacement = placement;
+    this.hintSide = placement === 'below' ? 'below' : 'above';
     this.root.append(this.hintEl);
     if (anchor) {
       this.hintRing = el('div', 'hint-ring');
@@ -273,25 +273,43 @@ export class UI {
   }
 
   updateHint(): void {
-    if (!this.hintEl) return;
+    const hint = this.hintEl;
+    if (!hint) return;
     const W = window.innerWidth;
-    const pos = this.hintAnchor ? this.hintAnchor() : null;
+    const H = window.innerHeight;
+    // Keep clear of the top bar and the bottom controls.
+    const top = 84;
+    const bottom = H - 96;
+    const w = hint.offsetWidth;
+    const h = hint.offsetHeight;
+    const raw = this.hintAnchor ? this.hintAnchor() : null;
+    // An anchor off the screen (an enemy still in its tunnel) is shown as a free card instead.
+    const pos = raw && raw.x > 0 && raw.x < W && raw.y > 0 && raw.y < H ? raw : null;
     if (!pos) {
-      this.hintEl.style.left = `${Math.max(10, W / 2 - 125)}px`;
-      this.hintEl.style.top = `${window.innerHeight * 0.18}px`;
+      hint.className = 'hint free';
+      hint.style.left = `${Math.round((W - w) / 2)}px`;
+      hint.style.top = `${Math.round(Math.max(top + 8, H * 0.2))}px`;
       if (this.hintRing) this.hintRing.style.display = 'none';
       return;
     }
-    const w = this.hintEl.offsetWidth;
-    const h = this.hintEl.offsetHeight;
+    const gap = 44;
+    const fitsAbove = pos.y - gap - h >= top;
+    const fitsBelow = pos.y + gap + h <= bottom;
+    // Stay on the current side while it fits, so a bubble following a moving target doesn't flicker.
+    if (this.hintSide === 'above' && !fitsAbove && fitsBelow) this.hintSide = 'below';
+    else if (this.hintSide === 'below' && !fitsBelow && fitsAbove) this.hintSide = 'above';
     const left = Math.max(8, Math.min(W - w - 8, pos.x - w / 2));
-    const top = this.hintPlacement === 'below' ? pos.y + 44 : pos.y - h - 44;
-    this.hintEl.style.left = `${left}px`;
-    this.hintEl.style.top = `${Math.max(8, top)}px`;
+    const y = this.hintSide === 'above' ? pos.y - gap - h : pos.y + gap;
+    hint.className = `hint ${this.hintSide === 'above' ? 'down' : 'up'}`;
+    hint.style.left = `${Math.round(left)}px`;
+    hint.style.top = `${Math.round(Math.max(8, Math.min(H - h - 8, y)))}px`;
+    // Point the arrow at the target even when the bubble is pushed in from a screen edge.
+    hint.style.setProperty('--ax', `${Math.round(Math.max(18, Math.min(w - 18, pos.x - left)))}px`);
     if (this.hintRing) {
       this.hintRing.style.display = 'block';
       this.hintRing.style.left = `${pos.x}px`;
       this.hintRing.style.top = `${pos.y}px`;
     }
   }
+
 }

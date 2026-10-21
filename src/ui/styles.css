@@ -378,12 +378,14 @@ body.landscape .seg.targets button { font-size: 12px; padding: 0 4px; }
 .vignette.hit { box-shadow: inset 0 0 120px rgba(255,40,40,.55); }
 
 /* Hints */
-.hint { position: absolute; z-index: 30; max-width: 250px; background: #fff; color: var(--ink); border-radius: 16px; padding: 10px 14px; font-weight: 800; font-size: 15px; pointer-events: none;
-  box-shadow: 0 0 0 3px var(--gold), 0 6px 0 rgba(0,0,0,.25); animation: hintBob 1.4s ease-in-out infinite; }
+.hint { position: absolute; z-index: 30; max-width: min(250px, calc(100vw - 32px)); background: #fff; color: var(--ink); border-radius: 16px; padding: 10px 14px; font-weight: 800; font-size: 15px; pointer-events: none;
+  box-shadow: 0 0 0 3px var(--gold), 0 6px 0 rgba(0,0,0,.25); animation: hintIn .25s ease-out, hintBob 1.4s ease-in-out .25s infinite; }
 .hint::after { content: ''; position: absolute; width: 16px; height: 16px; background: #fff; transform: rotate(45deg); box-shadow: 3px 3px 0 var(--gold); }
-.hint.down::after { bottom: -9px; left: calc(50% - 8px); }
-.hint.up::after { top: -9px; left: calc(50% - 8px); box-shadow: -3px -3px 0 var(--gold); }
+.hint.down::after { bottom: -9px; left: calc(var(--ax, 50%) - 8px); }
+.hint.up::after { top: -9px; left: calc(var(--ax, 50%) - 8px); box-shadow: -3px -3px 0 var(--gold); }
+.hint.free { text-align: center; }
 .hint.free::after { display: none; }
+@keyframes hintIn { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
 @keyframes hintBob { 0%,100% { margin-top: 0; } 50% { margin-top: -6px; } }
 .hint-ring { position: absolute; z-index: 29; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; border: 4px solid var(--gold); pointer-events: none; animation: hintRing 1.2s ease-out infinite; }
 @keyframes hintRing { from { transform: scale(.6); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }

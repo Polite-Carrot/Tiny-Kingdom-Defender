@@ -38,7 +38,8 @@ export class Battle {
   speed = 1;
   paused = false;
   /** The siege is frozen for a cinematic (the view keeps animating). */
-  private holdSim = false;
+  /** The simulation is held for a cinematic (a new front or a boss arriving). */
+  holdSim = false;
   private achT = 1;
   /** Seconds left of a timed cinematic (boss entrance); 0 = none. */
   private cinematicT = 0;
@@ -425,6 +426,7 @@ export class Battle {
   update(dt: number): void {
     if (this.holdSim) {
       this.view.update(dt, 1);
+      this.tutorial?.update();
       if (this.cinematicT > 0 && (this.cinematicT -= dt) <= 0) {
         this.holdSim = false;
         this.s.rig.clearFocus();

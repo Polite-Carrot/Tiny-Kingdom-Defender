@@ -9,9 +9,16 @@ import type { Hud } from '../ui/Hud';
 
 type Anchor = (() => { x: number; y: number } | null) | null;
 
+/** How long a hint stays up unless it says otherwise. */
+const HINT_MS = 8000;
+/** Hints that point at something on the field (hidden by the build and upgrade panels). */
+const FIELD_HINTS = new Set<HintId>(['build_spot', 'more_towers', 'upgrade_tap', 'hero_tap', 'path', 'clear_land']);
+
 export class Tutorial {
   private active: HintId | `enemy_${string}` | null = null;
   private activeUntil = 0;
+  /** A short pause between one hint closing and the next, so they don't arrive back to back. */
+  private quietUntil = 0;
   private flags = { built: false, upgraded: false, heroSelected: false, heroMoved: false, spotOpen: false, towerOpen: false };
   private unsub: (() => void)[] = [];
   private enemyQueue: EnemyId[] = [];
@@ -41,7 +48,11 @@ export class Tutorial {
     this.s.save.markDirty();
   }
 
-  private show(id: HintId | `enemy_${string}`, text: string, anchor: Anchor, placement: 'above' | 'below' | 'free' = 'above', ms = 0): void {
+  /**
+   * ms: how long the hint stays before it counts as seen. 0 keeps it until the player does what it
+   * asks; only the first steps of a brand-new kingdom (build, pick a tower, start) work that way.
+   */
+  private show(id: HintId | `enemy_${string}`, text: string, anchor: Anchor, placement: 'above' | 'below' | 'free' = 'above', ms = HINT_MS): void {
     if (this.active === id) return;
     this.active = id;
     this.activeUntil = ms ? performance.now() + ms : 0;
@@ -52,7 +63,14 @@ export class Tutorial {
     const cur = this.active;
     if (!cur || (id && cur !== id)) return;
     this.markSeen(cur);
+    this.clear();
+  }
+
+  /** Takes the current hint down without marking it seen (it can come back later). */
+  private clear(): void {
+    if (!this.active) return;
     this.active = null;
+    this.quietUntil = performance.now() + 1200;
     this.s.ui.clearHint();
   }
 
@@ -116,7 +134,7 @@ export class Tutorial {
     if (this.active === 'hero_tap') {
       this.markSeen('hero_tap');
       this.active = null;
-      this.show('hero_move', HINTS.hero_move, null, 'free');
+      this.show('hero_move', HINTS.hero_move, null, 'free', 9000);
     }
   }
 
@@ -137,26 +155,21 @@ export class Tutorial {
     const run = this.battle.run;
     const now = performance.now();
     if (this.active && this.activeUntil && now > this.activeUntil) this.done();
-    if (this.s.ui.modalOpen || run.state === 'lost') {
-      if (this.active) {
-        this.s.ui.clearHint();
-        this.active = null;
-      }
+    // Stay out of the way of menus, cinematics and the fall of the castle.
+    if (this.s.ui.modalOpen || run.state === 'lost' || this.battle.paused || this.battle.holdSim) {
+      this.clear();
       return;
     }
     this.s.ui.updateHint();
     if (this.active) {
       // Some hints auto-resolve when their condition no longer holds.
-      if (this.active === 'build_card' && this.hud.mode !== 'build') {
-        this.active = null;
-        this.s.ui.clearHint();
-      }
-      if (this.active === 'upgrade_btn' && this.hud.mode !== 'tower') {
-        this.active = null;
-        this.s.ui.clearHint();
-      }
+      if (this.active === 'build_card' && this.hud.mode !== 'build') this.clear();
+      if (this.active === 'upgrade_btn' && this.hud.mode !== 'tower') this.clear();
+      // A hint about the field is hidden by the build / upgrade panel, so take it down.
+      if (this.hud.mode !== 'none' && FIELD_HINTS.has(this.active as HintId)) this.clear();
       return;
     }
+    if (now < this.quietUntil) return;
     const mode = this.hud.mode;
     const w = run.waveIndex;
 
@@ -164,17 +177,17 @@ export class Tutorial {
     if (this.fresh) {
       if (run.state === 'prep' && run.towers.length === 0 && mode === 'none' && !this.seen('build_spot')) {
         const sp = run.map.buildSpots[this.bestFreeSpot()];
-        if (sp) return this.show('build_spot', HINTS.build_spot, this.world(sp.x, 0.2, sp.z), 'above');
+        if (sp) return this.show('build_spot', HINTS.build_spot, this.world(sp.x, 0.2, sp.z), 'above', 0);
       }
       if (mode === 'build' && run.towers.length === 0 && !this.seen('build_card')) {
-        return this.show('build_card', HINTS.build_card, () => this.hud.rectOf('card-archer'), 'above');
+        return this.show('build_card', HINTS.build_card, () => this.hud.rectOf('card-archer'), 'above', 0);
       }
       if (run.state === 'prep' && run.towers.length > 0 && mode === 'none' && !this.seen('start_wave')) {
-        return this.show('start_wave', HINTS.start_wave, () => this.hud.rectOf('next'), 'above');
+        return this.show('start_wave', HINTS.start_wave, () => this.hud.rectOf('next'), 'above', 0);
       }
       if (run.state === 'playing' && !this.seen('path') && run.waveIndex === 1) {
         const sp = run.map.spawns[0];
-        return this.show('path', HINTS.path, this.world(sp.x, 0.4, sp.z), 'below', 4500);
+        return this.show('path', HINTS.path, this.world(sp.x, 0.4, sp.z), 'below', 5000);
       }
       if (run.state === 'playing' && run.towers.length < 2 && run.gold >= TOWERS.archer.cost && mode === 'none' && !this.seen('more_towers')) {
         const sp = run.map.buildSpots[this.bestFreeSpot()];
@@ -184,12 +197,12 @@ export class Tutorial {
         const t = run.towers[0];
         const cost = run.upgradeCost(t);
         if (cost !== null && run.gold >= cost) {
-          if (mode === 'tower') return this.show('upgrade_btn', HINTS.upgrade_btn, () => this.hud.rectOf('upgrade'), 'above');
+          if (mode === 'tower') return this.show('upgrade_btn', HINTS.upgrade_btn, () => this.hud.rectOf('upgrade'), 'above', 0);
           if (mode === 'none' && !this.seen('upgrade_tap')) return this.show('upgrade_tap', HINTS.upgrade_tap, this.world(t.x, 1.2, t.z), 'above');
         }
       }
       if (run.state === 'playing' && run.waveIndex >= 2 && run.nextWaveTimer > 3 && !this.seen('early_call')) {
-        return this.show('early_call', HINTS.early_call, () => this.hud.rectOf('next'), 'above', 6000);
+        return this.show('early_call', HINTS.early_call, () => this.hud.rectOf('next'), 'above', 5000);
       }
     }
 
@@ -200,7 +213,7 @@ export class Tutorial {
         return this.show('hero_tap', HINTS.hero_tap, () => this.battle.view.project(h.x, h.y + 0.6, h.z), 'above');
       }
       if (run.state === 'playing' && run.heroAbilityReady() && !this.seen('hero_ability') && run.aliveCount() >= 3) {
-        return this.show('hero_ability', HINTS.hero_ability, () => this.hud.rectOf('ability'), 'above', 7000);
+        return this.show('hero_ability', HINTS.hero_ability, () => this.hud.rectOf('ability'), 'above', 6000);
       }
     }
     if (mode === 'build') {
@@ -208,17 +221,17 @@ export class Tutorial {
       if (run.isTowerAvailable('frost') && !this.seen('new_frost')) return this.show('new_frost', HINTS.new_frost, null, 'free', 6000);
     }
     if (mode === 'tower' && !this.seen('materials') && run.towers.some((t) => t.tier === 2)) {
-      return this.show('materials', HINTS.materials, null, 'free', 7000);
+      return this.show('materials', HINTS.materials, null, 'free', 6000);
     }
     if (mode === 'tower' && !this.seen('specialise') && run.towers.some((t) => t.tier === BRANCH_TIER)) {
       const anchor = this.hud.rectOf('upgrade');
-      if (anchor) return this.show('specialise', HINTS.specialise, () => this.hud.rectOf('upgrade'), 'above', 7000);
+      if (anchor) return this.show('specialise', HINTS.specialise, () => this.hud.rectOf('upgrade'), 'above', 6000);
     }
     if (w >= 3 && run.state === 'playing' && !this.seen('speed') && this.battle.speed === 1) {
       return this.show('speed', HINTS.speed, () => this.hud.rectOf('speed'), 'above', 4000);
     }
     if (w >= 6 && w < 10 && run.state === 'playing' && !this.seen('checkpoint')) {
-      return this.show('checkpoint', HINTS.checkpoint, null, 'free', 7000);
+      return this.show('checkpoint', HINTS.checkpoint, null, 'free', 6000);
     }
     // No free pads left: point at the cheapest overgrown land next to a road.
     if (mode === 'none' && !this.seen('clear_land') && run.gold >= run.clearLandCost() && run.towers.length >= 3) {
@@ -231,14 +244,18 @@ export class Tutorial {
     }
 
     // New enemy introductions (any level).
-    const next = this.enemyQueue.shift();
+    // Only with the field in view, and only for an enemy you can actually see.
+    const next = mode === 'none' ? this.enemyQueue.shift() : undefined;
     if (next) {
       const e = run.enemies.find((x) => x.alive && x.def.id === next);
       const key = `enemy_${next}` as const;
-      if (e && !this.seen(key)) {
+      const p = e && this.battle.view.project(e.x, e.y, e.z);
+      if (e && !e.hidden && p && p.x > 20 && p.x < innerWidth - 20 && p.y > 90 && p.y < innerHeight - 120 && !this.seen(key)) {
         const def = ENEMIES[next];
         return this.show(key, `<b>${def.name}</b>: ${def.description}`, () => this.battle.view.project(e.x, e.y + 0.9, e.z), 'above', 4500);
       }
+      // Not in view yet: ask again shortly.
+      if (e && !this.seen(key)) this.enemyQueue.unshift(next);
     }
   }
 
