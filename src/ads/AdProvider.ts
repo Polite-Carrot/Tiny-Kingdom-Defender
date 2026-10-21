@@ -15,4 +15,6 @@ export interface AdProvider {
   setPersonalised?(on: boolean): void;
   /** iOS: shows Apple's tracking prompt (once per install) and resolves with the answer; null elsewhere. */
   requestTracking?(): Promise<TrackingStatus | null>;
+  /** What the ad network last reported, for the Developer section of Settings. */
+  status?(): string[];
 }

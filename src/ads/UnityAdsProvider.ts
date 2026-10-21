@@ -22,18 +22,29 @@ export class UnityAdsProvider implements AdProvider {
   private started = false;
   private loading = { rewarded: false, interstitial: false };
   private ios: boolean;
+  private testMode: boolean;
+  /** Why the SDK didn't start, and why each kind of ad last failed to load (developer mode shows these). */
+  private initError = '';
+  private lastReason = { rewarded: '', interstitial: '' };
 
   /** testMode: Unity's test ads (on for testers; real ads on your own phone can get the account flagged). */
   constructor(ids: UnityAdIds, testMode: boolean, private personalised: () => boolean, bridge: typeof Capacitor = Capacitor) {
     const config = { gameId: ids.gameId, rewarded: ids.rewarded, interstitial: ids.interstitial };
     this.ios = bridge.getPlatform() === 'ios';
+    this.testMode = testMode;
     this.client = createUnityAds({ ios: config, android: config, testMode, capacitor: bridge });
   }
 
   async init(): Promise<void> {
     // Consent goes in before the SDK starts, so the first ad already respects it.
     await this.client.setPersonalized(this.personalised()).catch(() => {});
-    if (!(await this.client.init())) throw new Error('Unity Ads did not start');
+    if (!(await this.client.init())) {
+      this.initError = 'Unity Ads did not start (check the Game ID and the network); retrying';
+      // No network at launch must not mean no ads all session: try again shortly.
+      window.setTimeout(() => void this.init().catch(() => {}), RELOAD_MS);
+      throw new Error(this.initError);
+    }
+    this.initError = '';
     this.started = true;
     this.prepare();
     window.setInterval(() => this.prepare(), RELOAD_MS);
@@ -48,7 +59,12 @@ export class UnityAdsProvider implements AdProvider {
       if (prepared[kind] || this.loading[kind]) continue;
       this.loading[kind] = true;
       const load = kind === 'rewarded' ? this.client.prepareRewarded() : this.client.prepareInterstitial();
-      void load.catch(() => {}).finally(() => (this.loading[kind] = false));
+      void load
+        .then((r: { loaded: boolean; reason?: string; code?: unknown }) => {
+          this.lastReason[kind] = r.loaded ? '' : `${r.reason ?? 'not loaded'}${r.code !== undefined ? ` (code ${String(r.code)})` : ''}`;
+        })
+        .catch((e: unknown) => (this.lastReason[kind] = String((e as Error)?.message ?? e)))
+        .finally(() => (this.loading[kind] = false));
     }
   }
 
@@ -61,6 +77,18 @@ export class UnityAdsProvider implements AdProvider {
     if (!this.ios) return null;
     const status = await this.client.requestTracking().catch(() => null);
     return status === 'authorized' || status === 'denied' || status === 'restricted' || status === 'notDetermined' ? status : null;
+  }
+
+  status(): string[] {
+    const st = this.client.state();
+    const line = (kind: 'rewarded' | 'interstitial') =>
+      `${kind === 'rewarded' ? 'Rewarded' : 'Interstitial'}: ${st.prepared[kind] ? 'ready' : this.loading[kind] ? 'loading…' : this.lastReason[kind] || 'not loaded yet'}`;
+    return [
+      `Unity Ads: ${this.initError || (st.ready ? 'started' : 'starting…')}${this.testMode ? ' · test ads' : ' · real ads'}`,
+      line('rewarded'),
+      line('interstitial'),
+      `Personalised: ${st.effectivePersonalized ? 'yes' : 'no'}${this.ios ? ` · Apple tracking: ${st.attStatus ?? 'unknown'}` : ''}`,
+    ];
   }
 
   isRewardedReady(): boolean {

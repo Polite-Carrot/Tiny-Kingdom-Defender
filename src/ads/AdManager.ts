@@ -68,6 +68,11 @@ export class AdManager {
     return (await this.provider.requestTracking?.().catch(() => null)) ?? null;
   }
 
+  /** What the ad network last reported (empty for the mock ads). */
+  status(): string[] {
+    return this.provider.status?.() ?? [];
+  }
+
   /** Whether real ad networks are in use (the apps), so the privacy choice matters. */
   get real(): boolean {
     return !!this.provider.setPersonalised;

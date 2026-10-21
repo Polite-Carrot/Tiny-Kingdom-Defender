@@ -54,6 +54,20 @@ describe('UnityAdsProvider', () => {
     }
   });
 
+  it('reports why an ad did not load, for developer mode', async () => {
+    const { bridge } = fakeBridge('ios');
+    const plugin = bridge.registerPlugin('UnityAds') as unknown as Record<string, unknown>;
+    plugin.prepareRewarded = async () => ({ loaded: false, reason: 'No fill', code: 3 });
+    const p = new UnityAdsProvider(IDS, false, () => false, bridge);
+    await p.init();
+    await settle();
+    await settle();
+    const status = p.status();
+    expect(status[0]).toContain('real ads');
+    expect(status[1]).toBe('Rewarded: No fill (code 3)');
+    expect(status[2]).toBe('Interstitial: ready');
+  });
+
   it('asks Apple for tracking only on iOS', async () => {
     expect(await new UnityAdsProvider(IDS, true, () => false, fakeBridge('android').bridge).requestTracking()).toBeNull();
     expect(await new UnityAdsProvider(IDS, true, () => false, fakeBridge('ios').bridge).requestTracking()).toBe('denied');

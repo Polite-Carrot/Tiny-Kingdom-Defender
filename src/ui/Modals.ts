@@ -752,7 +752,8 @@ export function settings(game: Game): void {
         <div class="muted" style="font-size:12px;margin-bottom:6px">Shown because developer mode is on (tap the version number on the main menu five times to turn it off). The apps show Unity's test ads while it's on, from the next launch.</div>
         <div class="setting"><label>Mock ad result</label></div>
         ${seg('ad', [['completed', 'Complete'], ['skipped', 'Skip'], ['failed', 'Fail'], ['random', 'Random']], st.debugAdOutcome)}
-        <div class="setting"><label>Ads unavailable</label>${seg('noads', [['0', 'No'], ['1', 'Yes']], st.debugAdsUnavailable ? '1' : '0')}</div>` : ''}
+        <div class="setting"><label>Ads unavailable</label>${seg('noads', [['0', 'No'], ['1', 'Yes']], st.debugAdsUnavailable ? '1' : '0')}</div>
+        ${game.s.ads.real ? `<div class="muted ad-status" style="font-size:12px;line-height:1.5;margin:4px 0 6px;user-select:text;-webkit-user-select:text">${game.s.ads.status().map((l) => l.replace(/[<>&]/g, '')).join('<br/>')}</div>` : ''}` : ''}
         <div class="actions">${st.devMode ? '<button class="btn small blue dbg">Analytics debug</button>' : ''}<button class="btn small red reset">Reset progress</button></div>
         <div class="muted" style="text-align:center;margin-top:8px">Tiny Kingdom Defender v1.0.0 · All art & audio generated in code.</div>`;
       const music = $(m, '.music') as HTMLInputElement;
