@@ -248,9 +248,18 @@ export class UI {
 
   // --- Hints ---------------------------------------------------------------------
 
-  showHint(text: string, anchor: (() => { x: number; y: number } | null) | null, placement: 'above' | 'below' | 'free' = 'above'): void {
+  /** onDismiss: the player closed the hint with its ✕ (it is taken down before this runs). */
+  showHint(text: string, anchor: (() => { x: number; y: number } | null) | null, placement: 'above' | 'below' | 'free' = 'above', onDismiss?: () => void): void {
     this.clearHint();
     this.hintEl = el('div', 'hint', text);
+    const x = el('button', 'hint-x', '✕');
+    x.setAttribute('aria-label', 'Close tip');
+    x.onclick = (e) => {
+      e.stopPropagation();
+      this.clearHint();
+      onDismiss?.();
+    };
+    this.hintEl.append(x);
     this.hintAnchor = anchor;
     this.hintSide = placement === 'below' ? 'below' : 'above';
     this.root.append(this.hintEl);

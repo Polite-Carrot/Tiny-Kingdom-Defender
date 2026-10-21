@@ -56,7 +56,8 @@ export class Tutorial {
     if (this.active === id) return;
     this.active = id;
     this.activeUntil = ms ? performance.now() + ms : 0;
-    this.s.ui.showHint(text, anchor, placement);
+    // Closing a tip with its ✕ counts as having seen it.
+    this.s.ui.showHint(text, anchor, placement, () => this.done(id));
   }
 
   private done(id?: string): void {
