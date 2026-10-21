@@ -15,7 +15,7 @@ import { HERO_LEVELS, HERO_GEAR, gearTierFor, type HeroId } from '../data/heroes
 import { ageTitle, themeOf, kingdomMap, hpMultFor, nightOf, activeRoads, weatherOf, WEATHER_NAMES } from './Siege';
 import { towerThumb } from '../ui/Thumbnails';
 import { el } from '../ui/dom';
-import { MASTERY, masteryTitle } from '../data/mastery';
+import { MASTERY, masteryTitle, masteryPerkText } from '../data/mastery';
 import type { SpellId } from '../data/spells';
 import { vibrate } from '../core/Haptics';
 import { challengeMods, CHALLENGE, type ChallengeDef } from '../data/challenge';
@@ -243,7 +243,7 @@ export class Battle {
       const lvl = meta.addMasteryXp(type, xp);
       if (lvl === null) continue;
       changed = true;
-      const perk = lvl === MASTERY.veteranLevel ? 'Veteran: +8% range and a silver banner' : lvl === MASTERY.masterLevel ? 'Master: 12% faster firing and a golden crown' : `+${Math.round(lvl * MASTERY.damagePerLevel * 100)}% damage for every ${TOWERS[type].name}`;
+      const perk = masteryPerkText(type, TOWERS[type].name, lvl);
       ui.banner(`${TOWERS[type].name} mastery ${lvl}${lvl >= MASTERY.veteranLevel ? ` · ${masteryTitle(lvl)}` : ''}`, perk);
       audio.play('upgrade');
     }

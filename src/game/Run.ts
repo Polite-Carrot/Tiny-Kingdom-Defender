@@ -18,7 +18,7 @@ import { tileToWorld, type LevelMap, type PathPoint } from './LevelMap';
 import { SYNERGIES, SYNERGY_RANGE, type SynergyId } from '../data/synergies';
 import { kingdomMap, siegeWave, clearLandCost, checkpointOf, ageOf, initialSpots, hpMultFor, goldScaleAt, openRoads, nightOf, activeRoads } from './Siege';
 import type { WaveDef } from './WaveComposer';
-import { MASTERY } from '../data/mastery';
+import { MASTERY, towerBonus } from '../data/mastery';
 import type { ChallengeMods } from '../data/challenge';
 import { SPELL_RULES, spellPower, spellCooldown, type SpellId } from '../data/spells';
 import type { PerkId } from '../data/heroes';
@@ -739,13 +739,17 @@ export class Run {
     const meta = this.config.meta;
     const lvl = meta.towerLevels[def.id] ?? 0;
     const mastery = meta.mastery?.[def.id] ?? 0;
-    const dmg = (1 + lvl * TOWER_META.damagePerLevel) * (1 + mastery * MASTERY.damagePerLevel) * (1 + (meta.towerDamage ?? 0)) * (this.config.mods?.towerDamage ?? 1);
+    // Shop and mastery levels: damage for attack towers, gold for the mine, boost for the beacon.
+    const bonus = towerBonus(def.id, lvl, mastery);
+    const gain = bonus.mult * bonus.masteryMult;
+    const dmg = (bonus.kind === 'damage' ? gain : 1) * (1 + (meta.towerDamage ?? 0)) * (this.config.mods?.towerDamage ?? 1);
     return {
       ...base,
       damage: base.damage * dmg,
-      income: base.income * (1 + lvl * TOWER_META.damagePerLevel) * (1 + mastery * MASTERY.damagePerLevel),
+      income: base.income * (bonus.kind === 'gold' ? gain : 1),
+      buff: base.buff * (bonus.kind === 'boost' ? gain : 1),
       range: base.range * (1 + lvl * TOWER_META.rangePerLevel) * (mastery >= MASTERY.veteranLevel ? 1 + MASTERY.veteranRange : 1),
-      cooldown: base.cooldown * (mastery >= MASTERY.masterLevel ? MASTERY.masterCooldown : 1),
+      cooldown: base.cooldown * (bonus.kind === 'damage' && mastery >= MASTERY.masterLevel ? MASTERY.masterCooldown : 1),
     };
   }
 

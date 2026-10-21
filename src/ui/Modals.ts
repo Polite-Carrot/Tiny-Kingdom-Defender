@@ -22,7 +22,7 @@ import { ENEMIES, BOSS_BY_CHAPTER, type EnemyDef, type EnemyId } from '../data/e
 import { newKingdom } from '../game/Run';
 import { TWISTS, CHALLENGE } from '../data/challenge';
 import { BUILDINGS, BUILDING_BY_ID, type BuildingId } from '../data/kingdom';
-import { MASTERY, masteryTitle } from '../data/mastery';
+import { MASTERY, masteryTitle, towerBonusText } from '../data/mastery';
 import { ageTitle } from '../game/Siege';
 import { MAPS, MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
 import { GRID_SIZE, UNLOCK_WAVE } from '../data/base';
@@ -247,7 +247,7 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
               <small>${ml >= MASTERY.maxLevel ? 'Mastered' : `${need - have} ${isSupport(t) ? 'XP' : 'kills'} to ${ml + 1}`}</small></div>`;
           return `<div class="list-item"><div class="thumb"><img src="${towerThumb(t, Math.min(10, 1 + Math.floor(lvl / 2)))}" alt=""/></div>
             <div class="body"><div class="name">${def.name} ${locked ? icon('lock').replace('class="ico ', 'class="ico " style="width:16px;height:16px;display:inline-block"') : `<span class="muted">Lv ${lvl}</span>`}</div>
-            <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : `+${Math.round(lvl * TOWER_META.damagePerLevel * 100)}% damage · +${Math.round(lvl * TOWER_META.rangePerLevel * 100)}% range${ml ? ` · mastery +${Math.round(ml * MASTERY.damagePerLevel * 100)}% damage` : ''}`}</div>
+            <div class="desc">${locked ? 'Chains lightning between 3-5 enemies.' : towerBonusText(t, lvl, ml)}</div>
             <div class="levelpips">${Array.from({ length: TOWER_META.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>${mastery}</div>${btn}</div>`;
         }).join('');
       } else if (current === 'spells') {
@@ -302,7 +302,7 @@ export function shop(game: Game, tab: 'towers' | 'spells' | 'kingdom' | 'cosmeti
         // already honour d.ads.removeAds).
       }
       m.innerHTML = `<div class="ribbon">Shop</div>${currencyBar(game)}
-        <div class="muted" style="text-align:center;margin:-4px 0 8px">Permanent upgrades paid with coins. They boost every tower, forever.</div>
+        <div class="muted" style="text-align:center;margin:-4px 0 8px">Permanent upgrades paid with coins. Each one lasts forever.</div>
         <div class="tabs">${(['towers', 'spells', 'kingdom', 'cosmetics', 'free'] as const).map((t) => `<button class="tab ${t === current ? 'on' : ''}" data-tab="${t}">${{ towers: 'Towers', spells: 'Spells', kingdom: 'Castle', cosmetics: 'Style', free: 'Free' }[t]}</button>`).join('')}</div>
         <div class="list">${body}</div>`;
       m.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.onclick = () => {

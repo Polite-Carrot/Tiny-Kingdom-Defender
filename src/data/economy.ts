@@ -19,8 +19,11 @@ export interface MetaUpgradeDef {
 export const TOWER_META = {
   baseCost: 60,
   maxLevel: 20,
+  /** Attack towers: damage per shop level. The Gold Mine gets the same share as gold instead. */
   damagePerLevel: 0.06,
   rangePerLevel: 0.015,
+  /** The Beacon's boost to nearby towers grows at this share of the damage rate (it multiplies every tower around it). */
+  beaconShare: 0.5,
 } as const;
 
 export const META_UPGRADES: Record<'castleHp' | 'battlements' | 'warChest' | 'heroPower', MetaUpgradeDef & { perLevel: number }> = {
