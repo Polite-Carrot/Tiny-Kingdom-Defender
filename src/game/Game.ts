@@ -328,20 +328,29 @@ export class Game {
     const b = this.battle;
     if (!b) return;
     Modals.checkpoint(this, wave, coins, firstTime, async () => {
-      // Interstitials only ever appear here: at a checkpoint, never after trouble.
-      const { ads, meta } = this.s;
-      meta.d.ads.winsSinceInterstitial++;
-      const shown = await ads.maybeShowInterstitial('checkpoint', {
-        winsSinceLast: meta.d.ads.winsSinceInterstitial,
-        levelsCompleted: meta.bestWave(),
-        result: 'win',
-        reviveOffered: b.segmentTrouble,
-        removeAds: meta.d.ads.removeAds,
-      });
-      if (shown) meta.d.ads.winsSinceInterstitial = 0;
-      b.segmentTrouble = false;
-      meta.commit();
+      try {
+        await this.checkpointInterstitial(b);
+      } finally {
+        // Only now, after the ad (if any), does the next wave get going.
+        b.run.resumeAfterCheckpoint();
+      }
     });
+  }
+
+  /** Interstitials only ever appear here: after a checkpoint screen, never after trouble. */
+  private async checkpointInterstitial(b: Battle): Promise<void> {
+    const { ads, meta } = this.s;
+    meta.d.ads.winsSinceInterstitial++;
+    const shown = await ads.maybeShowInterstitial('checkpoint', {
+      winsSinceLast: meta.d.ads.winsSinceInterstitial,
+      levelsCompleted: meta.bestWave(),
+      result: 'win',
+      reviveOffered: b.segmentTrouble,
+      removeAds: meta.d.ads.removeAds,
+    });
+    if (shown) meta.d.ads.winsSinceInterstitial = 0;
+    b.segmentTrouble = false;
+    meta.commit();
   }
 
   // --- Battle helpers --------------------------------------------------------------------

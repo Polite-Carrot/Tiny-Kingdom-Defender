@@ -276,8 +276,9 @@ export class Hud {
     if (holding) label = `${ICONS.play} Start wave ${run.holdingFor + 1}`;
     else if (run.state === 'prep') label = `${ICONS.play} ${run.waveIndex > 0 ? 'Resume' : 'Start'}`;
     else if (canCall) label = `Next <span class="cost">+${run.earlyCallBonus()}${ICONS.coin}</span>`;
+    else if (run.waitingForCheckpoint) label = 'Checkpoint ahead';
     else label = 'Incoming…';
-    const key = `${run.state}|${canCall}|${run.earlyCallBonus()}|${run.waveIndex}|${run.holdingFor}`;
+    const key = `${run.state}|${canCall}|${run.earlyCallBonus()}|${run.waveIndex}|${run.holdingFor}|${run.waitingForCheckpoint}`;
     if (key !== this.lastWaveKey) {
       this.lastWaveKey = key;
       this.nextBtn.innerHTML = label.replace(ICONS.coin, `<span class="ico" style="width:18px;height:18px">${ICONS.coin}</span>`);

@@ -389,6 +389,16 @@ export class Run {
   padsCleared: number;
   /** Last checkpoint reached (number of waves cleared). */
   lastCheckpoint: number;
+  /**
+   * The siege's checkpoint break (off for the balance simulator and the Daily Challenge): no wave
+   * past a checkpoint is sent until every enemy before it is defeated, the checkpoint is only
+   * announced once the field is clear, and the next wave waits for resumeAfterCheckpoint().
+   */
+  holdAtCheckpoints = false;
+  /** The checkpoint that has been earned but not yet announced (waiting for the field to clear), or 0. */
+  private pendingCheckpoint = 0;
+  /** The checkpoint screen is up: no wave starts until resumeAfterCheckpoint(). */
+  private checkpointBreak = false;
 
   private spawnQueue: SpawnEntry[] = [];
   private waveRemaining = new Map<number, number>();
@@ -907,6 +917,8 @@ export class Run {
     this.spawnQueue.length = 0;
     this.waveRemaining.clear();
     this.waveSpawnDone.clear();
+    this.pendingCheckpoint = 0;
+    this.checkpointBreak = false;
     this.waveIndex = to;
     this.nextWaveTimer = -1;
     this.castleHp = this.castleMaxHp;
@@ -1161,11 +1173,26 @@ export class Run {
     this.checkWaves();
   }
 
+  /** No more waves until the checkpoint is reached and the player has moved on from it. */
+  get waitingForCheckpoint(): boolean {
+    if (!this.holdAtCheckpoints) return false;
+    const n = this.waveIndex;
+    return this.checkpointBreak || (n > 0 && n % SIEGE.checkpointEvery === 0 && n > this.lastCheckpoint);
+  }
+
+  /** The player tapped Onward on the checkpoint screen: the siege carries on. */
+  resumeAfterCheckpoint(): void {
+    if (!this.checkpointBreak) return;
+    this.checkpointBreak = false;
+    // Count down to the next wave as usual (it can still be called early).
+    if (this.state === 'playing' && this.nextWaveTimer < 0 && this.holdingFor < 0) this.nextWaveTimer = SIEGE.waveGap;
+  }
+
   private startWave(): void {
     const n = this.waveIndex;
     const wave = this.waveDef(n);
     if (!wave) return;
-    if (this.holdingFor >= 0) return;
+    if (this.holdingFor >= 0 || this.waitingForCheckpoint) return;
     for (const h of this.heroes) if (this.heroHasPerk('phoenix', h)) h.abilityCd = 0;
     const newAge = n > 0 && n % SIEGE.ageEvery === 0;
     const roads = activeRoads().map((r, i) => (r.openWave === n && n > 0 ? i : -1)).filter((i) => i >= 0);
@@ -1216,6 +1243,10 @@ export class Run {
 
   private updateWaveTimer(dt: number): void {
     if (this.holdingFor >= 0) return;
+    if (this.waitingForCheckpoint) {
+      this.nextWaveTimer = -1;
+      return;
+    }
     const lastWave = this.waveIndex - 1;
     if (this.nextWaveTimer < 0) {
       if (this.waveSpawnDone.get(lastWave)) this.nextWaveTimer = SIEGE.waveGap;
@@ -1503,15 +1534,25 @@ export class Run {
         }
         for (const h of this.heroes) if (this.heroHasPerk('guardian', h)) this.castleHp = Math.min(this.castleMaxHp, this.castleHp + HERO_POST.guardianHp);
         this.events.emit('waveCleared', { index: w, gold });
-        if ((w + 1) % SIEGE.checkpointEvery === 0 && w + 1 > this.lastCheckpoint) {
-          this.lastCheckpoint = w + 1;
-          // A new checkpoint segment: once-per-segment ad rewards are available again.
-          this.reviveUsed = false;
-          this.reinforcementsUsed = false;
-          this.goldRushUsed = false;
-          this.events.emit('checkpoint', { wave: w + 1 });
-        }
+        if ((w + 1) % SIEGE.checkpointEvery === 0 && w + 1 > this.lastCheckpoint) this.pendingCheckpoint = Math.max(this.pendingCheckpoint, w + 1);
       }
+    }
+    // A save restored right at a checkpoint it never announced (nothing left to clear): award it now
+    // rather than holding the siege for a checkpoint that can no longer be earned.
+    const n = this.waveIndex;
+    if (this.holdAtCheckpoints && !this.pendingCheckpoint && !this.checkpointBreak && n > 0 && n % SIEGE.checkpointEvery === 0 && n > this.lastCheckpoint
+      && this.waveRemaining.size === 0 && this.spawnQueue.length === 0 && this.aliveCount() === 0) this.pendingCheckpoint = n;
+    // With the checkpoint break, wait until the last enemy is down (stragglers from earlier waves too).
+    const cp = this.pendingCheckpoint;
+    if (cp && (!this.holdAtCheckpoints || (this.waveRemaining.size === 0 && this.spawnQueue.length === 0 && this.aliveCount() === 0))) {
+      this.pendingCheckpoint = 0;
+      this.lastCheckpoint = cp;
+      this.checkpointBreak = this.holdAtCheckpoints;
+      // A new checkpoint segment: once-per-segment ad rewards are available again.
+      this.reviveUsed = false;
+      this.reinforcementsUsed = false;
+      this.goldRushUsed = false;
+      this.events.emit('checkpoint', { wave: cp });
     }
   }
 

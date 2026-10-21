@@ -104,6 +104,7 @@ export class Battle {
     this.bindCommonEvents();
     if (c) this.bindChallengeEvents();
     else {
+      this.run.holdAtCheckpoints = true;
       this.bindRunEvents();
       this.tutorial = new Tutorial(s, this, hud);
     }
