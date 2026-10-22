@@ -11,6 +11,9 @@ export interface SafeRect {
 }
 
 const PITCH = THREE.MathUtils.degToRad(58);
+/** How far the view can be tilted towards the horizon (a low, close look at the castle) and back. */
+const MIN_PITCH = THREE.MathUtils.degToRad(18);
+const MAX_PITCH = THREE.MathUtils.degToRad(72);
 
 /** The siege opens this far in from the whole-board view (1), so the board fills the screen. */
 const DEFAULT_ZOOM = 1.3;
@@ -27,6 +30,9 @@ export class CameraRig {
   private targetZoom = DEFAULT_ZOOM;
   /** Glide after a flick (world units per second), slowing to a stop. */
   private vel = new THREE.Vector2();
+  /** Viewing angle down at the board (radians): the player tilts it; eases towards the target. */
+  private pitch = PITCH;
+  private pitchTarget = PITCH;
 
   constructor(private camera: THREE.PerspectiveCamera, private half = 6.9) {
     this.setBounds(half);
@@ -104,7 +110,7 @@ export class CameraRig {
   /** Whether the player has turned, zoomed or panned away from the standard view. */
   isMoved(): boolean {
     const a = Math.atan2(Math.sin(this.yawTarget), Math.cos(this.yawTarget));
-    return Math.abs(a) > 0.02 || Math.abs(this.targetZoom - DEFAULT_ZOOM) > 0.03 || Math.hypot(this.pan.x, this.pan.y) > 0.05;
+    return Math.abs(a) > 0.02 || Math.abs(this.targetZoom - DEFAULT_ZOOM) > 0.03 || Math.hypot(this.pan.x, this.pan.y) > 0.05 || Math.abs(this.pitchTarget - PITCH) > 0.02;
   }
 
   /** Back to the standard view: facing the gate, zoomed out and centred. */
@@ -114,6 +120,17 @@ export class CameraRig {
     this.targetZoom = DEFAULT_ZOOM;
     this.pan.set(0, 0);
     this.vel.set(0, 0);
+    this.pitchTarget = PITCH;
+  }
+
+  /** Tilts the view: negative looks flatter, towards the horizon; positive looks more top-down. */
+  tiltBy(d: number): void {
+    this.pitchTarget = THREE.MathUtils.clamp(this.pitchTarget + d, MIN_PITCH, MAX_PITCH);
+  }
+
+  /** How far the view is tilted from the standard angle (0 = standard, 1 = as flat as it goes). */
+  get tilt(): number {
+    return Math.max(0, (PITCH - this.pitchTarget) / (PITCH - MIN_PITCH));
   }
   /** Cinematic focus: glide to a point and zoom in, then ease back when cleared. */
   private focus: { x: number; z: number; zoom: number } | null = null;
@@ -196,6 +213,7 @@ export class CameraRig {
     this.targetZoom = this.zoom = DEFAULT_ZOOM;
     this.pan.set(0, 0);
     this.vel.set(0, 0);
+    this.pitch = this.pitchTarget = PITCH;
     this.yawTarget = Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
   }
 
@@ -211,6 +229,7 @@ export class CameraRig {
 
   update(dt: number): void {
     this.zoom += (this.targetZoom - this.zoom) * Math.min(1, dt * 12);
+    this.pitch += (this.pitchTarget - this.pitch) * Math.min(1, dt * 10);
     if (dt > 0 && (this.vel.x || this.vel.y)) {
       this.pan.x += this.vel.x * dt;
       this.pan.y += this.vel.y * dt;
@@ -230,7 +249,7 @@ export class CameraRig {
       const target = this.yawTarget + Math.round((this.yaw - this.yawTarget) / (Math.PI * 2)) * Math.PI * 2;
       this.yaw += (target - this.yaw) * Math.min(1, dt * 6);
     }
-    const pitch = this.orbit ? PITCH - 0.42 : PITCH;
+    const pitch = this.orbit ? PITCH - 0.42 : this.pitch;
     // Smoothstep glide in and out of a cinematic focus.
     this.focusK += ((this.focus ? 1 : 0) - this.focusK) * Math.min(1, dt * 2.2);
     const k = this.focusK * this.focusK * (3 - 2 * this.focusK);

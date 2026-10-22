@@ -18,6 +18,10 @@ const TAP_SLOP = 14;
 const TAP_MS = 900;
 /** A two-finger twist must turn this far (radians) before the view starts turning, so pinching doesn't spin it. */
 const TWIST_START = 0.3;
+/** How far (px) two fingers move before deciding whether it's a pinch or a tilt. */
+const GESTURE_DECIDE = 10;
+/** Tilt per pixel of a two-finger slide (radians). */
+const TILT_PER_PX = 0.0045;
 
 export class Input {
   enabled = true;
@@ -28,6 +32,8 @@ export class Input {
   /** How far the fingers have twisted since the pinch began, and whether the view is turning with them. */
   private twistTotal = 0;
   private twisting = false;
+  /** Two fingers: a pinch (zoom, pan, twist) or a tilt (both sliding up or down together). */
+  private twoMode: 'undecided' | 'pinch' | 'tilt' = 'undecided';
   /** Recent drag velocity on the ground (world units per second), for the glide on release. */
   private velX = 0;
   private velZ = 0;
@@ -97,6 +103,12 @@ export class Input {
       this.twistAngle = Math.atan2(b.y - a.y, b.x - a.x);
       this.twistTotal = 0;
       this.twisting = false;
+      this.twoMode = 'undecided';
+      // Measure each finger's slide from here.
+      for (const q of this.pointers.values()) {
+        q.sx = q.x;
+        q.sy = q.y;
+      }
     }
   };
 
@@ -121,6 +133,29 @@ export class Input {
     }
     if (this.pointers.size === 2) {
       const [a, b] = [...this.pointers.values()];
+      if (this.twoMode === 'undecided') {
+        const ma = Math.hypot(a.x - a.sx, a.y - a.sy), mb = Math.hypot(b.x - b.sx, b.y - b.sy);
+        // Fingers report one at a time: wait until both have moved (or one has clearly gone alone).
+        if (Math.max(ma, mb) < GESTURE_DECIDE || (Math.min(ma, mb) < GESTURE_DECIDE * 0.5 && Math.max(ma, mb) < GESTURE_DECIDE * 3)) return;
+        const dya = a.y - a.sy, dyb = b.y - b.sy;
+        const spread = Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, this.pinchDist);
+        // Both fingers sliding the same way up or down, mostly vertically, staying the same distance apart.
+        const tilt = Math.sign(dya) === Math.sign(dyb) && Math.abs(dya) > Math.abs(a.x - a.sx) * 1.4 && Math.abs(dyb) > Math.abs(b.x - b.sx) * 1.4
+          && Math.min(Math.abs(dya), Math.abs(dyb)) > GESTURE_DECIDE * 0.5 && spread > 0.88 && spread < 1.12;
+        this.twoMode = tilt ? 'tilt' : 'pinch';
+        if (!tilt) {
+          // Start the pinch from here, so the decision distance doesn't jump the zoom.
+          this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+          this.pinchZoom = this.rig.zoom;
+          this.twistAngle = Math.atan2(b.y - a.y, b.x - a.x);
+        }
+        return;
+      }
+      if (this.twoMode === 'tilt') {
+        // Fingers up: look flatter, towards the horizon. Down: back towards top-down.
+        this.rig.tiltBy((p.y - py) * 0.5 * TILT_PER_PX);
+        return;
+      }
       // The midpoint before this finger moved, and now.
       const other = a === p ? b : a;
       const mx0 = (px + other.x) / 2, my0 = (py + other.y) / 2;
@@ -147,7 +182,11 @@ export class Input {
       return;
     }
     if (this.turning) {
-      if (this.moved) this.rig.rotateBy(-dx * 0.008);
+      // Right-drag: sideways turns the view, up and down tilts it.
+      if (this.moved) {
+        this.rig.rotateBy(-dx * 0.008);
+        this.rig.tiltBy((p.y - py) * TILT_PER_PX);
+      }
       return;
     }
     if (this.moved && this.pointers.size === 1) {

@@ -22,6 +22,7 @@ export const HINTS = {
   materials: 'Upgrades go <b>Wood → Stone → Iron</b> and beyond.',
   checkpoint: 'Every 10 waves is a <b>checkpoint</b>.',
   camera: 'Drag to look around. Pinch to zoom.',
+  tilt: 'Slide two fingers up to tilt the view.',
 } as const;
 
 /** Short lines for a new enemy's first appearance (the bestiary has the full story). */

@@ -214,6 +214,11 @@ export class Tutorial {
       return this.show('camera', HINTS.camera, null, 'free', 4500);
     }
 
+    // Zoomed in for the first time: you can tilt the view too.
+    if (mode === 'none' && this.seen('camera') && !this.seen('tilt') && this.s.rig.zoom > 1.75) {
+      return this.show('tilt', HINTS.tilt, null, 'free', 4500);
+    }
+
     // Once a tower is up: heroes wait off the board until you place them on a pad.
     if (run.towers.length > 0 && run.heroes.some((h) => h.post < 0) && !this.seen('hero_place') && !this.flags.heroSelected && mode === 'none') {
       return this.show('hero_place', HINTS.hero_place, () => this.hud.rectOf('hero'), 'above', 8000);
