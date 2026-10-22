@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { Renderer } from '../core/Renderer';
 import type { CameraRig } from '../core/CameraRig';
 import { ModelBuilder, mergeTransformed } from '../entities/ModelBuilder';
+import { limbMaterial, STRIDE, FLAP_RATE } from '../entities/LimbShader';
 import { towerModel, enemyModel, heroModel, castleModel, spawnModel, padModel, foundationModel, propModel, barricadeModel, masteryModel, castleBannerModel } from '../entities/Models';
 import { MASTERY } from '../data/mastery';
 import type { BuildingId } from '../data/kingdom';
@@ -94,6 +95,8 @@ export class BattleView {
   private castleArchers = false;
   /** Rigged, animated hero. */
   private heroAnims: HeroAnimator[] = [];
+  /** Each enemy's stride phase and how much it is walking (eases to a stop). */
+  private walkState = new WeakMap<object, { ph: number; amp: number }>();
   /** Soft coloured glow under the hero. */
   private heroAuras: THREE.Mesh[] = [];
   /** Season skins worn by each hero slot (they override the Style hero tint). */
@@ -570,9 +573,13 @@ export class BattleView {
       this.root.add(m);
       return m;
     };
+    // Enemies walk: their tagged limbs move in the shader, driven by a per-instance stride phase.
+    const walkMat = this.track(limbMaterial(this.material));
     for (const id of Object.keys(ENEMIES) as EnemyId[]) {
       const cap = ENEMIES[id].boss ? 4 : id === 'minion' || id === 'slugling' ? 64 : 160;
-      const m = mk(enemyModel(id), this.material, cap);
+      const geo = this.track(enemyModel(id).clone());
+      geo.setAttribute('walk', new THREE.InstancedBufferAttribute(new Float32Array(cap * 2), 2).setUsage(THREE.DynamicDrawUsage));
+      const m = mk(geo, walkMat, cap);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
       m.castShadow = false;
       this.enemyMeshes.set(id, m);
@@ -1416,7 +1423,7 @@ export class BattleView {
     }
   }
 
-  update(dt: number, simSpeed: number): void {
+  update(dt: number, _simSpeed: number): void {
     this.applyNight(false, dt);
     this.updateWeather(dt);
     this.updateFrontier(dt);
@@ -1458,12 +1465,27 @@ export class BattleView {
         y += Math.sin(this.time * 3 + e.phase) * 0.08;
         sy = sc * (1 + flap * 0.15);
         sxz = sc * (1 - flap * 0.1);
-      } else if (!e.frozen) {
-        const speed = e.def.speed * e.slowFactor * simSpeed;
-        const bob = Math.abs(Math.sin(this.time * 9 * Math.max(0.6, speed) + e.phase));
-        y += bob * 0.05 * sc;
-        rz = Math.sin(this.time * 9 * Math.max(0.6, speed) + e.phase) * 0.08;
       }
+      // Walk cycle: the stride phase advances with the distance covered, so slowed enemies step
+      // slowly and fast ones scurry; stunned, frozen or burrowed ones stand still.
+      let w = this.walkState.get(e);
+      if (!w) this.walkState.set(e, (w = { ph: e.phase * 6.283, amp: 0 }));
+      const walking = e.alive && !e.frozen && e.stunTimer <= 0 && !e.hidden;
+      if (e.def.flying) {
+        w.ph += dt * FLAP_RATE;
+        w.amp = e.alive ? 1 : 0;
+      } else {
+        const speed = e.def.speed * e.slowFactor * e.speedMult;
+        if (walking) w.ph += (dt * speed * Math.PI * 2) / (STRIDE * sc);
+        w.amp += ((walking ? 1 : 0) - w.amp) * Math.min(1, dt * 10);
+        if (!dying) {
+          // A little bounce on every step, and a slight sway with the stride.
+          y += Math.abs(Math.sin(w.ph)) * 0.035 * sc * w.amp;
+          rz = Math.sin(w.ph) * 0.03 * w.amp;
+        }
+      }
+      const walkAttr = mesh.geometry.attributes.walk as THREE.InstancedBufferAttribute;
+      walkAttr.setXY(idx, w.ph, w.amp);
       if (e.hidden) {
         // Burrowed: only a ripple of sand shows where it travels.
         y -= 0.42 * sc;
@@ -1547,6 +1569,7 @@ export class BattleView {
       mesh.visible = mesh.count > 0;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      if (mesh.count) mesh.geometry.attributes.walk.needsUpdate = true;
     }
 
     // Freshly laid foundations rise into place.

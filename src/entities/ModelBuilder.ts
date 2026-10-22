@@ -16,8 +16,38 @@ export interface PartOpts {
   sx?: number; sy?: number; sz?: number;
 }
 
+/**
+ * How a tagged part moves when animated in the shader (enemies walk this way):
+ * leg / arm swing forward and back about their hip or shoulder, a wing flaps, a wheel rolls,
+ * a tail swishes, a sweep leg (beetles, scorpions) scuttles side to side.
+ */
+export const LIMB = { leg: 1, arm: 2, wing: 3, wheel: 4, tail: 5, sweep: 6 } as const;
+export type LimbKind = keyof typeof LIMB;
+
+export interface LimbTag {
+  kind: LimbKind;
+  /** Pivot: the hip, shoulder or axle the part turns about. */
+  x?: number; y: number; z?: number;
+  /** -1 left, 1 right (wings flap mirrored; legs and arms alternate by phase). */
+  side?: number;
+  /** Phase offset in radians (π puts it in step with the other side). */
+  phase?: number;
+  /** Multiplies the swing (or the roll rate for wheels). */
+  amp?: number;
+}
+
 export class ModelBuilder {
   private parts: THREE.BufferGeometry[] = [];
+  private tag: LimbTag | null = null;
+
+  /** Tags the parts added inside `fn` as one moving limb. */
+  limb(tag: LimbTag, fn: () => void): this {
+    const prev = this.tag;
+    this.tag = tag;
+    fn();
+    this.tag = prev;
+    return this;
+  }
 
   add(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, o: PartOpts = {}): this {
     let g = geo.index ? geo.toNonIndexed() : geo;
@@ -42,6 +72,16 @@ export class ModelBuilder {
     }
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     for (const key of Object.keys(g.attributes)) if (key !== 'position' && key !== 'color') g.deleteAttribute(key);
+    if (this.tag) {
+      const t = this.tag;
+      const a = new Float32Array(n * 4), pv = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        a.set([LIMB[t.kind], t.side ?? 1, t.phase ?? 0, t.amp ?? 1], i * 4);
+        pv.set([t.x ?? 0, t.y, t.z ?? 0], i * 3);
+      }
+      g.setAttribute('limbA', new THREE.BufferAttribute(a, 4));
+      g.setAttribute('limbP', new THREE.BufferAttribute(pv, 3));
+    }
     this.parts.push(g);
     geo.dispose();
     return this;
@@ -93,6 +133,15 @@ export class ModelBuilder {
 
   build(): THREE.BufferGeometry {
     if (!this.parts.length) return new THREE.BufferGeometry();
+    // Parts must share attributes to merge: give untagged parts a still (zero) limb tag.
+    if (this.parts.some((p) => p.attributes.limbA)) {
+      for (const p of this.parts) {
+        if (p.attributes.limbA) continue;
+        const n = p.attributes.position.count;
+        p.setAttribute('limbA', new THREE.BufferAttribute(new Float32Array(n * 4), 4));
+        p.setAttribute('limbP', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+      }
+    }
     const g = mergeGeometries(this.parts, false) ?? new THREE.BufferGeometry();
     g.computeVertexNormals();
     g.computeBoundingSphere();

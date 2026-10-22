@@ -1,7 +1,7 @@
 // All game models, built procedurally from primitives. Forward is +Z.
 
 import * as THREE from 'three';
-import { ModelBuilder, mergeTransformed } from './ModelBuilder';
+import { ModelBuilder, mergeTransformed, type LimbTag } from './ModelBuilder';
 import { MAX_TIER, BRANCH_TIER, materialFor, starsOf, type TowerId } from '../data/towers';
 import type { EnemyId } from '../data/enemies';
 import { HEROES, HERO_GEAR, type HeroId } from '../data/heroes';
@@ -536,10 +536,12 @@ function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; 
   const h = o.h ?? 1;
   const w = o.w ?? 1;
   const dark = '#' + new THREE.Color(body).multiplyScalar(0.7).getHexString();
-  // Legs with boots.
+  // Legs with boots (they step, swinging from the hip).
   for (const sx of [-1, 1]) {
-    b.cyl(0.035 * w, 0.04 * w, 0.12 * h, 6, '#4a3a2a', { x: sx * 0.07 * w, y: 0.09 * h });
-    b.box(0.08 * w, 0.05, 0.11, '#2e241c', { x: sx * 0.07 * w, y: 0.025, z: 0.015 });
+    b.limb({ kind: 'leg', y: 0.16 * h, side: sx, phase: sx < 0 ? 0 : Math.PI }, () => {
+      b.cyl(0.035 * w, 0.04 * w, 0.12 * h, 6, '#4a3a2a', { x: sx * 0.07 * w, y: 0.09 * h });
+      b.box(0.08 * w, 0.05, 0.11, '#2e241c', { x: sx * 0.07 * w, y: 0.025, z: 0.015 });
+    });
   }
   // Tapered torso, belt with buckle, shoulders.
   b.cyl(0.12 * w, 0.14 * w, 0.24 * h, 8, body, { y: 0.27 * h, sz: 0.75 });
@@ -547,9 +549,11 @@ function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; 
   b.box(0.04, 0.03, 0.02, GOLD, { y: 0.17 * h, z: 0.11 });
   for (const sx of [-1, 1]) {
     b.ball(0.05 * w, 0, dark, { x: sx * 0.14 * w, y: 0.36 * h });
-    // Arms and hands.
-    b.cyl(0.028, 0.032, 0.17 * h, 5, body, { x: sx * 0.165 * w, y: 0.28 * h, rz: sx * 0.15 });
-    b.ball(0.035, 0, skin, { x: sx * 0.18 * w, y: 0.19 * h, z: 0.01 });
+    // Arms and hands, swinging against the legs.
+    b.limb(armTag(sx, 0.36 * h), () => {
+      b.cyl(0.028, 0.032, 0.17 * h, 5, body, { x: sx * 0.165 * w, y: 0.28 * h, rz: sx * 0.15 });
+      b.ball(0.035, 0, skin, { x: sx * 0.18 * w, y: 0.19 * h, z: 0.01 });
+    });
   }
   // Head on a short neck, with eyes.
   b.cyl(0.04, 0.05, 0.04, 6, skin, { y: 0.39 * h });
@@ -561,6 +565,15 @@ function humanoid(b: ModelBuilder, body: string, skin: string, o: { h?: number; 
     }
   }
 }
+
+/** An arm swings against the leg on its own side (left arm forward with the right leg). */
+function armTag(sx: number, shoulderY: number, amp = 1): LimbTag {
+  return { kind: 'arm', y: shoulderY, side: sx, phase: sx < 0 ? Math.PI : 0, amp };
+}
+
+/** Weapons carried in the right hand swing with the right arm. */
+const RIGHT_HAND = (h = 1) => armTag(1, 0.36 * h, 0.8);
+const LEFT_HAND = (h = 1) => armTag(-1, 0.36 * h, 0.6);
 
 const _ua = new THREE.Vector3(0, 1, 0);
 
@@ -620,8 +633,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.cone(0.04, 0.12, 4, SKIN, { x: -0.13, y: 0.5, rz: 1.2 });
       b.cone(0.04, 0.12, 4, SKIN, { x: 0.13, y: 0.5, rz: -1.2 });
       // Spiked club.
-      b.cyl(0.035, 0.06, 0.3, 6, WOOD_D, { x: 0.2, y: 0.3, z: 0.08, rx: 0.6 });
-      for (let k = 0; k < 4; k++) b.cone(0.015, 0.05, 3, '#d9dde3', { x: 0.2 + Math.cos(k * 1.57) * 0.05, y: 0.42, z: 0.17 + Math.sin(k * 1.57) * 0.05, rz: Math.cos(k * 1.57) * -1.2, rx: Math.sin(k * 1.57) * 1.2 });
+      b.limb(RIGHT_HAND(), () => {
+        b.cyl(0.035, 0.06, 0.3, 6, WOOD_D, { x: 0.2, y: 0.3, z: 0.08, rx: 0.6 });
+        for (let k = 0; k < 4; k++) b.cone(0.015, 0.05, 3, '#d9dde3', { x: 0.2 + Math.cos(k * 1.57) * 0.05, y: 0.42, z: 0.17 + Math.sin(k * 1.57) * 0.05, rz: Math.cos(k * 1.57) * -1.2, rx: Math.sin(k * 1.57) * 1.2 });
+      });
       // Little tusks.
       for (const sx of [-1, 1]) b.cone(0.012, 0.04, 3, '#f4f0e0', { x: sx * 0.04, y: 0.44, z: 0.12 });
       break;
@@ -633,23 +648,29 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.box(0.06, 0.02, 0.22, '#d2452f', { x: 0.03, y: 0.37, z: -0.15, rx: 0.4 });
       b.box(0.06, 0.02, 0.16, '#b8382c', { x: -0.03, y: 0.35, z: -0.13, rx: 0.6 });
       b.ball(0.045, 0, '#8a5a34', { x: -0.12, y: 0.17, z: 0.04 });
-      b.box(0.018, 0.12, 0.03, '#d9dde3', { x: 0.17, y: 0.15, z: 0.08, rx: 0.5 });
-      b.box(0.05, 0.016, 0.03, GOLD, { x: 0.17, y: 0.2, z: 0.05, rx: 0.5 });
+      b.limb(RIGHT_HAND(0.95), () => {
+        b.box(0.018, 0.12, 0.03, '#d9dde3', { x: 0.17, y: 0.15, z: 0.08, rx: 0.5 });
+        b.box(0.05, 0.016, 0.03, GOLD, { x: 0.17, y: 0.2, z: 0.05, rx: 0.5 });
+      });
       break;
     case 'knight':
       humanoid(b, '#8a93a3', '#b9c2cf', { w: 1.15 });
       b.cyl(0.14, 0.15, 0.16, 8, '#9ea7b7', { y: 0.52 });
       b.box(0.2, 0.03, 0.03, '#2a2d33', { y: 0.53, z: 0.14 });
       b.cone(0.03, 0.14, 4, '#c73a3a', { y: 0.66 });
-      b.box(0.04, 0.4, 0.04, '#d9dde3', { x: 0.2, y: 0.38, z: 0.06 });
-      b.box(0.12, 0.025, 0.04, GOLD, { x: 0.2, y: 0.2, z: 0.06 });
+      b.limb(RIGHT_HAND(), () => {
+        b.box(0.04, 0.4, 0.04, '#d9dde3', { x: 0.2, y: 0.38, z: 0.06 });
+        b.box(0.12, 0.025, 0.04, GOLD, { x: 0.2, y: 0.2, z: 0.06 });
+      });
       b.box(0.36, 0.06, 0.2, '#6f7888', { y: 0.37 });
       // A red cape and a kite shield with a gold cross.
       b.box(0.3, 0.34, 0.02, '#a8322a', { y: 0.22, z: -0.13, rx: 0.12 });
-      b.box(0.04, 0.14, 0.18, '#c9cfd8', { x: -0.2, y: 0.3, z: 0.04 });
-      b.cone(0.09, 0.12, 4, '#c9cfd8', { x: -0.2, y: 0.17, z: 0.04, rx: Math.PI, ry: Math.PI / 4, sx: 0.45 });
-      b.box(0.012, 0.13, 0.03, GOLD, { x: -0.225, y: 0.3, z: 0.04 });
-      b.box(0.012, 0.03, 0.12, GOLD, { x: -0.225, y: 0.32, z: 0.04 });
+      b.limb(LEFT_HAND(), () => {
+        b.box(0.04, 0.14, 0.18, '#c9cfd8', { x: -0.2, y: 0.3, z: 0.04 });
+        b.cone(0.09, 0.12, 4, '#c9cfd8', { x: -0.2, y: 0.17, z: 0.04, rx: Math.PI, ry: Math.PI / 4, sx: 0.45 });
+        b.box(0.012, 0.13, 0.03, GOLD, { x: -0.225, y: 0.3, z: 0.04 });
+        b.box(0.012, 0.03, 0.12, GOLD, { x: -0.225, y: 0.32, z: 0.04 });
+      });
       break;
     case 'bat': {
       // Furry body and head, tall ears, glowing eyes and fangs, on proper membrane wings.
@@ -664,7 +685,7 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
         b.cone(0.024, 0.09, 4, '#d98aa6', { x: sx * 0.045, y: 0.195, z: 0.06, rz: sx * -0.35 });
         b.ball(0.022, 0, glowC('#ff4a4a', 1.9), { x: sx * 0.032, y: 0.115, z: 0.125 });
         b.cone(0.008, 0.03, 3, '#ffffff', { x: sx * 0.014, y: 0.06, z: 0.145, rx: Math.PI });
-        wing(b, sx, { span: 0.42, chord: 0.24, membrane: '#8a529c', bone: '#2a1a30', x: sx * 0.07, y: 0.04, z: 0.02, tilt: 0.32, sweep: 0.12 });
+        b.limb({ kind: 'wing', x: sx * 0.07, y: 0.04, side: sx }, () => wing(b, sx, { span: 0.42, chord: 0.24, membrane: '#8a529c', bone: '#2a1a30', x: sx * 0.07, y: 0.04, z: 0.02, tilt: 0.32, sweep: 0.12 }));
         // Tucked feet with little claws.
         b.cyl(0.012, 0.012, 0.06, 4, '#2a1a30', { x: sx * 0.035, y: -0.12, z: -0.02 });
         b.cone(0.01, 0.03, 3, '#d9d0c0', { x: sx * 0.035, y: -0.16, z: 0.0, rx: Math.PI });
@@ -681,8 +702,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.box(0.04, 0.12, 0.012, trim, { y: 0.15, z: 0.16, rx: -0.25 });
       for (const sx of [-1, 1]) {
         b.ball(0.06, 0, robe, { x: sx * 0.12, y: 0.33 });
-        b.cyl(0.035, 0.05, 0.18, 6, robe, { x: sx * 0.17, y: 0.25, rz: sx * 0.35 });
-        b.ball(0.035, 0, SKIN, { x: sx * 0.21, y: 0.17, z: 0.04 });
+        b.limb(armTag(sx, 0.33, 0.6), () => {
+          b.cyl(0.035, 0.05, 0.18, 6, robe, { x: sx * 0.17, y: 0.25, rz: sx * 0.35 });
+          b.ball(0.035, 0, SKIN, { x: sx * 0.21, y: 0.17, z: 0.04 });
+        });
         b.ball(0.02, 0, glowC('#7dff9a', 1.8), { x: sx * 0.035, y: 0.45, z: 0.115 });
         b.cone(0.03, 0.11, 4, SKIN, { x: sx * 0.12, y: 0.47, rz: sx * -1.25 });
       }
@@ -692,12 +715,14 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       for (const sx of [-1, 1]) b.box(0.035, 0.025, 0.035, '#1a1218', { x: sx * 0.035, y: 0.455, z: 0.105 });
       b.cone(0.14, 0.24, 7, '#4a3274', { y: 0.58, z: -0.02, rx: -0.15 });
       for (const [k, c] of [[-1, '#d94a3a'], [0, trim], [1, '#3aa0d9']] as const) b.cone(0.018, 0.12, 4, c, { x: k * 0.05, y: 0.66, z: -0.08, rx: -0.5, rz: k * 0.3 });
-      // Staff: knotted wood, a little skull and a ghostly flame.
-      b.cyl(0.018, 0.024, 0.66, 5, WOOD_D, { x: 0.24, y: 0.33, z: 0.05 });
-      b.ball(0.05, 1, '#efe6cf', { x: 0.24, y: 0.68, z: 0.05 });
-      for (const sx of [-1, 1]) b.ball(0.012, 0, '#1a1218', { x: 0.24 + sx * 0.018, y: 0.69, z: 0.093 });
-      b.cone(0.045, 0.14, 6, glowC('#7dff9a', 1.9), { x: 0.24, y: 0.79, z: 0.05 });
-      b.cone(0.025, 0.08, 5, glowC('#e0ffd0', 2.2), { x: 0.24, y: 0.78, z: 0.05 });
+      // Staff: knotted wood, a little skull and a ghostly flame. It plants with each step.
+      b.limb(armTag(1, 0.33, 0.35), () => {
+        b.cyl(0.018, 0.024, 0.66, 5, WOOD_D, { x: 0.24, y: 0.33, z: 0.05 });
+        b.ball(0.05, 1, '#efe6cf', { x: 0.24, y: 0.68, z: 0.05 });
+        for (const sx of [-1, 1]) b.ball(0.012, 0, '#1a1218', { x: 0.24 + sx * 0.018, y: 0.69, z: 0.093 });
+        b.cone(0.045, 0.14, 6, glowC('#7dff9a', 1.9), { x: 0.24, y: 0.79, z: 0.05 });
+        b.cone(0.025, 0.08, 5, glowC('#e0ffd0', 2.2), { x: 0.24, y: 0.78, z: 0.05 });
+      });
       break;
     }
     case 'shield': {
@@ -715,8 +740,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       for (const x of [-0.18, 0.18]) for (const y of [0.12, 0.48]) b.ball(0.018, 0, '#c9cfd8', { x, y, z: sz + 0.035 });
       b.cyl(0.09, 0.09, 0.02, 8, '#b8382c', { y: 0.32, z: sz + 0.03, rx: Math.PI / 2 });
       b.cone(0.05, 0.1, 4, '#f2c94c', { y: 0.32, z: sz + 0.05, rx: Math.PI / 2 });
-      b.cyl(0.014, 0.014, 0.8, 5, WOOD_D, { x: 0.27, y: 0.4, z: 0.05 });
-      b.cone(0.03, 0.12, 4, '#d9dde3', { x: 0.27, y: 0.86, z: 0.05 });
+      b.limb(RIGHT_HAND(1.05), () => {
+        b.cyl(0.014, 0.014, 0.8, 5, WOOD_D, { x: 0.27, y: 0.4, z: 0.05 });
+        b.cone(0.03, 0.12, 4, '#d9dde3', { x: 0.27, y: 0.86, z: 0.05 });
+      });
       break;
     }
     case 'minion':
@@ -724,18 +751,24 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.cone(0.03, 0.1, 4, '#3a1a1a', { x: -0.06, y: 0.55 });
       b.cone(0.03, 0.1, 4, '#3a1a1a', { x: 0.06, y: 0.55 });
       // A forked tail and a little trident.
-      limb(b, new THREE.Vector3(0, 0.15, -0.08), new THREE.Vector3(0, 0.08, -0.22), 0.015, 0.01, '#a02a1a');
-      b.cone(0.03, 0.06, 3, '#3a1a1a', { y: 0.1, z: -0.25, rx: -2.2 });
-      b.cyl(0.012, 0.012, 0.42, 4, '#5a3a24', { x: 0.17, y: 0.25, z: 0.05 });
-      for (const k of [-1, 0, 1]) b.cone(0.012, 0.06, 3, '#c9cfd8', { x: 0.17 + k * 0.03, y: 0.48, z: 0.05 });
-      b.box(0.08, 0.012, 0.015, '#c9cfd8', { x: 0.17, y: 0.45, z: 0.05 });
+      b.limb({ kind: 'tail', y: 0.15, z: -0.08 }, () => {
+        limb(b, new THREE.Vector3(0, 0.15, -0.08), new THREE.Vector3(0, 0.08, -0.22), 0.015, 0.01, '#a02a1a');
+        b.cone(0.03, 0.06, 3, '#3a1a1a', { y: 0.1, z: -0.25, rx: -2.2 });
+      });
+      b.limb(RIGHT_HAND(0.85), () => {
+        b.cyl(0.012, 0.012, 0.42, 4, '#5a3a24', { x: 0.17, y: 0.25, z: 0.05 });
+        for (const k of [-1, 0, 1]) b.cone(0.012, 0.06, 3, '#c9cfd8', { x: 0.17 + k * 0.03, y: 0.48, z: 0.05 });
+        b.box(0.08, 0.012, 0.015, '#c9cfd8', { x: 0.17, y: 0.45, z: 0.05 });
+      });
       break;
     case 'boss_ogre': {
       // The Ogre Warlord: hulking belly, hide kilt, pauldron, tusks, a crown and a spiked tree-trunk club.
       const skin = '#86a656', dark = '#6a8a44';
       for (const sx of [-1, 1]) {
-        b.cyl(0.07, 0.085, 0.18, 7, dark, { x: sx * 0.1, y: 0.1 });
-        b.box(0.12, 0.05, 0.16, '#4a3424', { x: sx * 0.1, y: 0.025, z: 0.02 });
+        b.limb({ kind: 'leg', y: 0.19, side: sx, phase: sx < 0 ? 0 : Math.PI, amp: 0.7 }, () => {
+          b.cyl(0.07, 0.085, 0.18, 7, dark, { x: sx * 0.1, y: 0.1 });
+          b.box(0.12, 0.05, 0.16, '#4a3424', { x: sx * 0.1, y: 0.025, z: 0.02 });
+        });
       }
       b.ball(0.24, 1, skin, { y: 0.36, sy: 0.92, sz: 0.9 });
       b.ball(0.16, 1, '#a8c47a', { y: 0.32, z: 0.1, sy: 0.9 });
@@ -746,8 +779,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       // Arms: one with an iron pauldron, both with big fists.
       for (const sx of [-1, 1]) {
         b.ball(0.1, 1, dark, { x: sx * 0.26, y: 0.5 });
-        b.capsule(0.07, 0.18, skin, { x: sx * 0.31, y: 0.34, rz: sx * 0.25 });
-        b.ball(0.08, 1, dark, { x: sx * 0.35, y: 0.2, z: 0.04 });
+        b.limb(armTag(sx, 0.48, 0.7), () => {
+          b.capsule(0.07, 0.18, skin, { x: sx * 0.31, y: 0.34, rz: sx * 0.25 });
+          b.ball(0.08, 1, dark, { x: sx * 0.35, y: 0.2, z: 0.04 });
+        });
       }
       b.ball(0.12, 1, '#6a7380', { x: -0.26, y: 0.54, sy: 0.7 });
       for (let k = 0; k < 3; k++) b.cone(0.025, 0.08, 4, '#c9cfd8', { x: -0.26 - k * 0.04 + 0.04, y: 0.62, z: (k - 1) * 0.05 });
@@ -765,11 +800,13 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       for (let k = 0; k < 5; k++) b.cone(0.022, 0.07, 4, GOLD, { x: Math.cos((k / 5) * Math.PI * 2) * 0.085, y: 0.81, z: 0.06 + Math.sin((k / 5) * Math.PI * 2) * 0.085, rz: 0.15 });
       b.ball(0.02, 0, glowC('#ff4a6a', 1.5), { y: 0.76, z: 0.155 });
       // Club: a knotted trunk studded with iron spikes.
-      b.cyl(0.05, 0.1, 0.55, 7, WOOD_D, { x: 0.38, y: 0.42, z: 0.12, rx: 0.5 });
-      for (let k = 0; k < 6; k++) {
-        const a = k * 1.05;
-        b.cone(0.02, 0.07, 3, '#c9cfd8', { x: 0.38 + Math.cos(a) * 0.09, y: 0.6 + (k % 2) * 0.05, z: 0.26 + Math.sin(a) * 0.09, rz: -Math.cos(a) * 1.4, rx: Math.sin(a) * 1.4 });
-      }
+      b.limb(armTag(1, 0.48, 0.55), () => {
+        b.cyl(0.05, 0.1, 0.55, 7, WOOD_D, { x: 0.38, y: 0.42, z: 0.12, rx: 0.5 });
+        for (let k = 0; k < 6; k++) {
+          const a = k * 1.05;
+          b.cone(0.02, 0.07, 3, '#c9cfd8', { x: 0.38 + Math.cos(a) * 0.09, y: 0.6 + (k % 2) * 0.05, z: 0.26 + Math.sin(a) * 0.09, rz: -Math.cos(a) * 1.4, rx: Math.sin(a) * 1.4 });
+        }
+      });
       break;
     }
     case 'boss_scorpion': {
@@ -786,9 +823,11 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
         for (let k = 0; k < 4; k++) {
           const z = 0.12 - k * 0.1;
           const hip = new THREE.Vector3(sx * 0.15, 0.2, z), knee = new THREE.Vector3(sx * 0.29, 0.27, z + 0.03 - k * 0.02), foot = new THREE.Vector3(sx * 0.4, 0.0, z + 0.08 - k * 0.07);
-          limb(b, hip, knee, 0.034, 0.028, dark, 6);
-          b.ball(0.032, 0, light, { x: knee.x, y: knee.y, z: knee.z });
-          limb(b, knee, foot, 0.028, 0.01, shell, 6);
+          b.limb({ kind: 'sweep', x: hip.x, y: hip.y, z: hip.z, side: sx, phase: ((k + (sx > 0 ? 1 : 0)) % 2) * Math.PI, amp: 0.8 }, () => {
+            limb(b, hip, knee, 0.034, 0.028, dark, 6);
+            b.ball(0.032, 0, light, { x: knee.x, y: knee.y, z: knee.z });
+            limb(b, knee, foot, 0.028, 0.01, shell, 6);
+          });
         }
         // Pincer arms and claws.
         const sh = new THREE.Vector3(sx * 0.13, 0.22, 0.28), el = new THREE.Vector3(sx * 0.28, 0.28, 0.4), wr = new THREE.Vector3(sx * 0.22, 0.26, 0.56);
@@ -798,18 +837,20 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
         b.cone(0.045, 0.2, 4, light, { x: wr.x - sx * 0.045, y: wr.y, z: wr.z + 0.22, rx: Math.PI / 2, rz: sx * 0.25 });
         b.cone(0.038, 0.17, 4, dark, { x: wr.x + sx * 0.05, y: wr.y, z: wr.z + 0.2, rx: Math.PI / 2, rz: sx * -0.3 });
       }
-      // Tail: shrinking segments in an arc over the back.
-      let prev = new THREE.Vector3(0, 0.22, -0.22);
-      for (let k = 1; k <= 7; k++) {
-        const a = (k / 7) * Math.PI * 0.95;
-        const p = new THREE.Vector3(0, 0.22 + Math.sin(a) * 0.5, -0.22 - Math.sin(a * 0.9) * 0.18 + (1 - Math.cos(a)) * 0.2);
-        const r = 0.075 - k * 0.006;
-        limb(b, prev, p, r, r * 0.9, k % 2 ? shell : dark, 7);
-        b.ball(r, 0, light, { x: p.x, y: p.y, z: p.z });
-        prev = p;
-      }
-      b.ball(0.06, 1, '#5a3a1c', { x: prev.x, y: prev.y - 0.02, z: prev.z + 0.05 });
-      b.cone(0.03, 0.14, 5, glowC('#8af0ff', 1.8), { x: prev.x, y: prev.y - 0.08, z: prev.z + 0.11, rx: 2.4 });
+      // Tail: shrinking segments in an arc over the back, swaying as it walks.
+      b.limb({ kind: 'tail', y: 0.22, z: -0.22, amp: 0.5 }, () => {
+        let prev = new THREE.Vector3(0, 0.22, -0.22);
+        for (let k = 1; k <= 7; k++) {
+          const a = (k / 7) * Math.PI * 0.95;
+          const p = new THREE.Vector3(0, 0.22 + Math.sin(a) * 0.5, -0.22 - Math.sin(a * 0.9) * 0.18 + (1 - Math.cos(a)) * 0.2);
+          const r = 0.075 - k * 0.006;
+          limb(b, prev, p, r, r * 0.9, k % 2 ? shell : dark, 7);
+          b.ball(r, 0, light, { x: p.x, y: p.y, z: p.z });
+          prev = p;
+        }
+        b.ball(0.06, 1, '#5a3a1c', { x: prev.x, y: prev.y - 0.02, z: prev.z + 0.05 });
+        b.cone(0.03, 0.14, 5, glowC('#8af0ff', 1.8), { x: prev.x, y: prev.y - 0.08, z: prev.z + 0.11, rx: 2.4 });
+      });
       b.cone(0.06, 0.1, 6, GOLD, { y: 0.32, z: 0.27 });
       break;
     }
@@ -818,8 +859,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       // and a frosty crown of icicles.
       const fur = '#eef3f7', shade = '#cfdce8', face = '#7aa0c4';
       for (const sx of [-1, 1]) {
-        b.capsule(0.08, 0.1, shade, { x: sx * 0.12, y: 0.1 });
-        b.box(0.14, 0.05, 0.2, '#4a5a70', { x: sx * 0.12, y: 0.025, z: 0.03 });
+        b.limb({ kind: 'leg', y: 0.2, side: sx, phase: sx < 0 ? 0 : Math.PI, amp: 0.65 }, () => {
+          b.capsule(0.08, 0.1, shade, { x: sx * 0.12, y: 0.1 });
+          b.box(0.14, 0.05, 0.2, '#4a5a70', { x: sx * 0.12, y: 0.025, z: 0.03 });
+        });
       }
       b.ball(0.28, 1, fur, { y: 0.4, sy: 1.05, sz: 0.9 });
       // Shaggy tufts all over.
@@ -837,9 +880,11 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
         b.arc(0.07, 0.022, Math.PI * 1.2, '#c9b48a', { x: sx * 0.13, y: 0.76, z: 0.06, ry: sx * 0.6 + (sx < 0 ? Math.PI : 0) });
         // Long shaggy arms down to big dark hands.
         b.ball(0.11, 1, shade, { x: sx * 0.27, y: 0.5 });
-        b.capsule(0.085, 0.22, fur, { x: sx * 0.33, y: 0.32, rz: sx * 0.12 });
-        b.ball(0.085, 1, '#5a6a80', { x: sx * 0.35, y: 0.13, z: 0.05 });
-        for (let k = 0; k < 3; k++) b.cone(0.014, 0.05, 3, '#e8f4ff', { x: sx * 0.35 + (k - 1) * 0.035, y: 0.08, z: 0.12, rx: 1.9 });
+        b.limb(armTag(sx, 0.48, 0.7), () => {
+          b.capsule(0.085, 0.22, fur, { x: sx * 0.33, y: 0.32, rz: sx * 0.12 });
+          b.ball(0.085, 1, '#5a6a80', { x: sx * 0.35, y: 0.13, z: 0.05 });
+          for (let k = 0; k < 3; k++) b.cone(0.014, 0.05, 3, '#e8f4ff', { x: sx * 0.35 + (k - 1) * 0.035, y: 0.08, z: 0.12, rx: 1.9 });
+        });
       }
       for (let k = 0; k < 5; k++) b.cone(0.025, 0.12, 4, glowC('#bff4ff', 1.3), { x: (k - 2) * 0.05, y: 0.82 + (k === 2 ? 0.03 : 0), z: 0.06 });
       break;
@@ -850,7 +895,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.box(0.012, 0.05, 0.3, '#1d4a52', { y: 0.2 });
       b.ball(0.07, 1, '#1d3a40', { y: 0.1, z: 0.17 });
       for (const sx of [-1, 1]) {
-        for (let k = 0; k < 3; k++) b.box(0.12, 0.015, 0.02, '#1d3a40', { x: sx * 0.15, y: 0.05, z: -0.08 + k * 0.08, rz: sx * -0.5 });
+        for (let k = 0; k < 3; k++) {
+          b.limb({ kind: 'sweep', x: sx * 0.1, y: 0.08, z: -0.08 + k * 0.08, side: sx, phase: ((k + (sx > 0 ? 1 : 0)) % 2) * Math.PI }, () =>
+            b.box(0.12, 0.015, 0.02, '#1d3a40', { x: sx * 0.15, y: 0.05, z: -0.08 + k * 0.08, rz: sx * -0.5 }));
+        }
         b.ball(0.018, 0, glowC('#9fffe0', 1.4), { x: sx * 0.035, y: 0.13, z: 0.22 });
         b.cone(0.012, 0.08, 3, '#1d3a40', { x: sx * 0.03, y: 0.12, z: 0.27, rx: Math.PI / 2, rz: sx * 0.3 });
       }
@@ -867,8 +915,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.ball(0.1, 1, '#2a2018', { y: 0.58, z: 0.06 });
       for (const sx of [-1, 1]) {
         b.ball(0.022, 0, glowC('#ffd36a', 1.8), { x: sx * 0.04, y: 0.6, z: 0.14 });
-        b.cone(0.04, 0.2, 5, '#d9c08a', { x: sx * 0.17, y: 0.38, z: 0.05, rz: sx * 1.0 });
-        for (let k = 0; k < 3; k++) b.cone(0.01, 0.06, 3, '#3a2a1a', { x: sx * (0.26 + k * 0.01), y: 0.3 - k * 0.015, z: 0.05 + (k - 1) * 0.025, rz: sx * 1.8 });
+        b.limb(armTag(sx, 0.42, 0.5), () => {
+          b.cone(0.04, 0.2, 5, '#d9c08a', { x: sx * 0.17, y: 0.38, z: 0.05, rz: sx * 1.0 });
+          for (let k = 0; k < 3; k++) b.cone(0.01, 0.06, 3, '#3a2a1a', { x: sx * (0.26 + k * 0.01), y: 0.3 - k * 0.015, z: 0.05 + (k - 1) * 0.025, rz: sx * 1.8 });
+        });
       }
       break;
     }
@@ -883,9 +933,12 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       for (const sx of [-1, 1]) {
         b.cone(0.035, 0.09, 4, dark, { x: sx * 0.055, y: 0.46, z: 0.21 });
         b.ball(0.018, 0, glowC('#8fd8ff', 1.4), { x: sx * 0.045, y: 0.39, z: 0.31 });
-        for (const z of [-0.14, 0.14]) b.capsule(0.03, 0.12, dark, { x: sx * 0.07, y: 0.1, z });
+        for (const z of [-0.14, 0.14]) {
+          const diag = (sx < 0) === (z > 0) ? 0 : Math.PI;
+          b.limb({ kind: 'leg', y: 0.19, z, side: sx, phase: diag, amp: 1.1 }, () => b.capsule(0.03, 0.12, dark, { x: sx * 0.07, y: 0.1, z }));
+        }
       }
-      b.cone(0.06, 0.24, 6, fur, { y: 0.3, z: -0.27, rx: -1.9 });
+      b.limb({ kind: 'tail', y: 0.3, z: -0.18 }, () => b.cone(0.06, 0.24, 6, fur, { y: 0.3, z: -0.27, rx: -1.9 }));
       break;
     }
     case 'thief': {
@@ -897,8 +950,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.ball(0.13, 1, '#a07a4a', { y: 0.36, z: -0.15, sy: 1.15 });
       b.cyl(0.03, 0.05, 0.05, 6, '#7a5a34', { y: 0.5, z: -0.15 });
       b.cyl(0.06, 0.06, 0.02, 8, '#ffcf3f', { y: 0.53, z: -0.14 });
-      b.box(0.02, 0.16, 0.035, '#d9dde3', { x: 0.19, y: 0.2, z: 0.07, rx: 0.4 });
-      b.box(0.06, 0.02, 0.03, GOLD, { x: 0.19, y: 0.13, z: 0.04, rx: 0.4 });
+      b.limb(RIGHT_HAND(0.95), () => {
+        b.box(0.02, 0.16, 0.035, '#d9dde3', { x: 0.19, y: 0.2, z: 0.07, rx: 0.4 });
+        b.box(0.06, 0.02, 0.03, GOLD, { x: 0.19, y: 0.13, z: 0.04, rx: 0.4 });
+      });
       break;
     }
     case 'tunneler': {
@@ -912,8 +967,10 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.ball(0.035, 0, glowC('#fff3b0', 2.2), { y: 0.46, z: 0.21 });
       for (const sx of [-1, 1]) {
         b.ball(0.022, 0, '#1a1218', { x: sx * 0.06, y: 0.34, z: 0.24 });
-        b.box(0.1, 0.05, 0.12, '#f0d8b8', { x: sx * 0.2, y: 0.08, z: 0.14, ry: sx * 0.4 });
-        for (let k = 0; k < 3; k++) b.cone(0.012, 0.06, 3, '#e8e0d0', { x: sx * (0.17 + k * 0.03), y: 0.06, z: 0.22, rx: 1.4 });
+        b.limb({ kind: 'leg', y: 0.2, z: 0.08, side: sx, phase: sx < 0 ? 0 : Math.PI, amp: 0.9 }, () => {
+          b.box(0.1, 0.05, 0.12, '#f0d8b8', { x: sx * 0.2, y: 0.08, z: 0.14, ry: sx * 0.4 });
+          for (let k = 0; k < 3; k++) b.cone(0.012, 0.06, 3, '#e8e0d0', { x: sx * (0.17 + k * 0.03), y: 0.06, z: 0.22, rx: 1.4 });
+        });
       }
       break;
     }
@@ -922,8 +979,12 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.box(0.5, 0.08, 0.62, WOOD_D, { y: 0.16 });
       b.box(0.46, 0.05, 0.58, '#9a6a3f', { y: 0.22 });
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        b.cyl(0.11, 0.11, 0.05, 10, '#5a3a24', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rz: Math.PI / 2 });
-        b.cyl(0.04, 0.04, 0.07, 6, '#8a92a0', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rz: Math.PI / 2 });
+        b.limb({ kind: 'wheel', y: 0.11, z: sz * 0.2 }, () => {
+          b.cyl(0.11, 0.11, 0.05, 10, '#5a3a24', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rz: Math.PI / 2 });
+          // Spokes, so the roll shows.
+          for (let k = 0; k < 3; k++) b.box(0.056, 0.2, 0.025, '#3e2818', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rx: (k * Math.PI) / 3 });
+          b.cyl(0.04, 0.04, 0.07, 6, '#8a92a0', { x: sx * 0.28, y: 0.11, z: sz * 0.2, rz: Math.PI / 2 });
+        });
       }
       for (const sx of [-1, 1]) b.box(0.05, 0.34, 0.05, WOOD_D, { x: sx * 0.16, y: 0.4, z: -0.05 });
       b.cyl(0.03, 0.03, 0.38, 6, '#8a92a0', { y: 0.54, z: -0.05, rz: Math.PI / 2 });
@@ -939,14 +1000,18 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
     case 'golem': {
       // Hulking ice golem: crystal torso, block fists, glowing core and icicles.
       const ice = '#9fd6f0', deep = '#6fb4d8';
-      for (const sx of [-1, 1]) b.box(0.12, 0.2, 0.14, deep, { x: sx * 0.1, y: 0.1 });
+      for (const sx of [-1, 1]) {
+        b.limb({ kind: 'leg', y: 0.2, side: sx, phase: sx < 0 ? 0 : Math.PI, amp: 0.55 }, () => b.box(0.12, 0.2, 0.14, deep, { x: sx * 0.1, y: 0.1 }));
+      }
       b.dodec(0.24, ice, { y: 0.38, sy: 1.1 });
       b.octa(0.07, glowC('#e0faff', 1.7), { y: 0.42, z: 0.19 });
       b.dodec(0.11, deep, { y: 0.68, z: 0.04 });
       for (const sx of [-1, 1]) {
         b.ball(0.022, 0, glowC('#c8f4ff', 2), { x: sx * 0.04, y: 0.7, z: 0.13 });
-        b.box(0.1, 0.26, 0.1, ice, { x: sx * 0.3, y: 0.34, rz: sx * 0.15 });
-        b.dodec(0.09, deep, { x: sx * 0.33, y: 0.18 });
+        b.limb(armTag(sx, 0.47, 0.6), () => {
+          b.box(0.1, 0.26, 0.1, ice, { x: sx * 0.3, y: 0.34, rz: sx * 0.15 });
+          b.dodec(0.09, deep, { x: sx * 0.33, y: 0.18 });
+        });
       }
       for (let k = 0; k < 5; k++) b.cone(0.04, 0.2, 4, '#e6f6ff', { x: (k - 2) * 0.08, y: 0.6, z: -0.15, rx: -0.6 });
       break;
@@ -960,16 +1025,18 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
         b.cone(0.022, 0.1, 4, '#3a1a14', { x: sx * 0.05, y: 0.27, z: 0.03, rz: sx * -0.5 });
         b.ball(0.02, 0, glowC('#ffe066', 2.1), { x: sx * 0.032, y: 0.19, z: 0.112 });
         b.cone(0.008, 0.025, 3, '#ffffff', { x: sx * 0.02, y: 0.135, z: 0.115, rx: Math.PI });
-        b.capsule(0.02, 0.07, '#c03a22', { x: sx * 0.1, y: 0.0, z: 0.03, rz: sx * 0.5 });
-        b.capsule(0.018, 0.05, '#a02a1a', { x: sx * 0.04, y: -0.1, z: 0.02 });
-        wing(b, sx, { span: 0.3, chord: 0.17, membrane: '#d8452a', bone: '#4a1a10', x: sx * 0.06, y: 0.1, z: -0.03, tilt: 0.45, sweep: 0.25 });
+        b.limb(armTag(sx, 0.05, 0.5), () => b.capsule(0.02, 0.07, '#c03a22', { x: sx * 0.1, y: 0.0, z: 0.03, rz: sx * 0.5 }));
+        b.limb({ kind: 'leg', y: -0.06, side: sx, phase: sx < 0 ? 0 : Math.PI, amp: 0.5 }, () => b.capsule(0.018, 0.05, '#a02a1a', { x: sx * 0.04, y: -0.1, z: 0.02 }));
+        b.limb({ kind: 'wing', x: sx * 0.06, y: 0.1, side: sx }, () => wing(b, sx, { span: 0.3, chord: 0.17, membrane: '#d8452a', bone: '#4a1a10', x: sx * 0.06, y: 0.1, z: -0.03, tilt: 0.45, sweep: 0.25 }));
       }
       b.box(0.06, 0.012, 0.01, '#3a1a14', { y: 0.145, z: 0.115 });
       b.cone(0.05, 0.13, 6, glowC('#ffb347', 1.9), { y: 0.27, z: 0.0 });
       b.cone(0.03, 0.09, 5, glowC('#ffe066', 2.2), { y: 0.28, z: 0.02 });
-      limb(b, new THREE.Vector3(0, -0.02, -0.08), new THREE.Vector3(0, -0.06, -0.2), 0.018, 0.012, '#a02a1a');
-      b.cone(0.045, 0.12, 6, glowC('#ffb347', 1.8), { y: -0.07, z: -0.26, rx: -2.0 });
-      b.cone(0.025, 0.08, 5, glowC('#ffe066', 2.1), { y: -0.08, z: -0.29, rx: -2.0 });
+      b.limb({ kind: 'tail', y: -0.02, z: -0.08 }, () => {
+        limb(b, new THREE.Vector3(0, -0.02, -0.08), new THREE.Vector3(0, -0.06, -0.2), 0.018, 0.012, '#a02a1a');
+        b.cone(0.045, 0.12, 6, glowC('#ffb347', 1.8), { y: -0.07, z: -0.26, rx: -2.0 });
+        b.cone(0.025, 0.08, 5, glowC('#ffe066', 2.1), { y: -0.08, z: -0.29, rx: -2.0 });
+      });
       break;
     }
     case 'magmaslug':
@@ -993,9 +1060,12 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
       b.capsule(0.12, 0.28, belly, { y: 0.24, z: 0.02, rx: Math.PI / 2, sx: 1.1 });
       for (let k = 0; k < 4; k++) b.box(0.18, 0.02, 0.06, '#d89a48', { y: 0.13, z: 0.18 - k * 0.11 });
       for (const sx of [-1, 1]) for (const z of [-0.18, 0.16]) {
-        b.capsule(0.06, 0.08, deep, { x: sx * 0.14, y: 0.14, z });
-        b.box(0.1, 0.04, 0.12, deep, { x: sx * 0.14, y: 0.02, z: z + 0.03 });
-        for (let k = 0; k < 3; k++) b.cone(0.012, 0.05, 3, '#f4f0e0', { x: sx * 0.14 + (k - 1) * 0.03, y: 0.02, z: z + 0.11, rx: 1.6 });
+        const diag = (sx < 0) === (z > 0) ? 0 : Math.PI;
+        b.limb({ kind: 'leg', y: 0.22, z, side: sx, phase: diag, amp: 0.7 }, () => {
+          b.capsule(0.06, 0.08, deep, { x: sx * 0.14, y: 0.14, z });
+          b.box(0.1, 0.04, 0.12, deep, { x: sx * 0.14, y: 0.02, z: z + 0.03 });
+          for (let k = 0; k < 3; k++) b.cone(0.012, 0.05, 3, '#f4f0e0', { x: sx * 0.14 + (k - 1) * 0.03, y: 0.02, z: z + 0.11, rx: 1.6 });
+        });
       }
       // Neck and head.
       const n0 = new THREE.Vector3(0, 0.36, 0.22), n1 = new THREE.Vector3(0, 0.56, 0.36);
@@ -1009,18 +1079,20 @@ function buildEnemy(id: EnemyId): THREE.BufferGeometry {
         b.ball(0.012, 0, '#2a0a08', { x: sx * 0.03, y: 0.62, z: 0.615 });
         b.cone(0.03, 0.2, 5, '#f2c94c', { x: sx * 0.07, y: 0.72, z: 0.36, rx: -0.9, rz: sx * -0.3 });
         b.cone(0.012, 0.04, 3, '#ffffff', { x: sx * 0.04, y: 0.55, z: 0.6, rx: Math.PI });
-        wing(b, sx, { span: 0.78, chord: 0.5, membrane: '#c8402c', bone: '#4a100c', x: sx * 0.12, y: 0.44, z: 0.02, tilt: 0.5, sweep: 0.3, thick: 0.016 });
+        b.limb({ kind: 'wing', x: sx * 0.12, y: 0.44, side: sx, amp: 0.7 }, () => wing(b, sx, { span: 0.78, chord: 0.5, membrane: '#c8402c', bone: '#4a100c', x: sx * 0.12, y: 0.44, z: 0.02, tilt: 0.5, sweep: 0.3, thick: 0.016 }));
       }
       b.cone(0.03, 0.08, 5, glowC('#ffb347', 1.6), { y: 0.55, z: 0.64, rx: Math.PI / 2 });
       // Spines from the head to the tail tip.
       for (let k = 0; k < 9; k++) b.cone(0.03 - k * 0.002, 0.09 - k * 0.004, 4, '#f2c94c', { y: 0.47 - k * 0.012 + (k < 2 ? 0.1 : 0), z: 0.3 - k * 0.08 - (k < 2 ? -0.08 : 0), rx: -0.3 });
-      let prev = new THREE.Vector3(0, 0.3, -0.3);
-      for (let k = 1; k <= 5; k++) {
-        const p = new THREE.Vector3(Math.sin(k * 0.7) * 0.06, 0.3 - k * 0.045, -0.3 - k * 0.1);
-        limb(b, prev, p, 0.1 - k * 0.016, 0.1 - (k + 1) * 0.016, k % 2 ? red : deep, 6);
-        prev = p;
-      }
-      b.octa(0.07, '#f2c94c', { x: prev.x, y: prev.y, z: prev.z - 0.06, sy: 0.4, sz: 1.3 });
+      b.limb({ kind: 'tail', y: 0.3, z: -0.3 }, () => {
+        let prev = new THREE.Vector3(0, 0.3, -0.3);
+        for (let k = 1; k <= 5; k++) {
+          const p = new THREE.Vector3(Math.sin(k * 0.7) * 0.06, 0.3 - k * 0.045, -0.3 - k * 0.1);
+          limb(b, prev, p, 0.1 - k * 0.016, 0.1 - (k + 1) * 0.016, k % 2 ? red : deep, 6);
+          prev = p;
+        }
+        b.octa(0.07, '#f2c94c', { x: prev.x, y: prev.y, z: prev.z - 0.06, sy: 0.4, sz: 1.3 });
+      });
       break;
     }
   }
