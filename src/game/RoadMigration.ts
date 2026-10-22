@@ -166,7 +166,7 @@ export function remapBase(id: MapId, base: BaseSnapshot, from: Layout, to: Layou
   for (const t of kept) spots.add(t.spot);
   const startRoads = (to ? to.roads : def.roads).map((r, i) => (r.openWave === 0 ? i : -1)).filter((i) => i >= 0);
   for (const i of initialSpots(newMap, startRoads)) spots.add(i);
-  // A hero whose pad became road goes back to the castle wall (a free move later).
+  // A hero whose pad became road goes back to the reserve, waiting to be placed again (free).
   const post = (p: number | undefined) => (p === undefined || p < 0 ? p : move(p) >= 0 && !taken.has(move(p)) ? move(p) : -1);
   return {
     ...base,

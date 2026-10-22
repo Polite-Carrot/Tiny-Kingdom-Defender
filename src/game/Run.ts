@@ -76,7 +76,7 @@ export interface BaseSnapshot {
   goldRushWaves: number;
   /** Barricades standing on the road (optional in older saves). */
   barricades?: { col: number; row: number; hp: number; maxHp: number }[];
-  /** The pad the hero is stationed on (-1 or absent: the castle wall). */
+  /** The pad the hero is stationed on (-1 or absent: waiting off the field to be placed). */
   heroPost?: number;
   /** Whether the free placement has been used. */
   heroPlaced?: boolean;
@@ -240,13 +240,15 @@ export interface Hero {
   slot: number;
   level: number;
   perks: PerkId[];
-  /** The free placement on a pad has been used (later moves cost gold). */
+  /** Has been on the field this siege (kept for older saves; placing from the reserve is always free). */
   placed: boolean;
   x: number; z: number;
-  /** Height the hero stands at (on the castle wall or a pad). */
+  /** Height the hero stands at (on a pad). */
   y: number;
-  /** Where the hero is stationed: -1 = the castle wall, else a build pad. */
+  /** Where the hero is stationed: a build pad, or -1 while still waiting to be placed. */
   post: number;
+  /** Rapid Fire (the Sniper's ability): seconds left of much faster shooting. */
+  rapidT: number;
   tx: number; tz: number;
   hp: number; maxHp: number;
   damage: number;
@@ -451,7 +453,7 @@ export class Run {
         const slot = this.heroes.length;
         const h: Hero = {
           def, slot, level: sl.level, perks: sl.perks, placed: !!sl.placed, x: 0, y: 0, z: 0, post: -1, tx: 0, tz: 0, hp: 1, maxHp: 1, damage: 0,
-          cooldown: 0, abilityCd: 3 + slot * 2, dead: false, respawn: 0, facing: 0, moving: false, contactTimer: 0, attackAnim: 0,
+          cooldown: 0, abilityCd: 3 + slot * 2, dead: false, respawn: 0, facing: 0, moving: false, contactTimer: 0, attackAnim: 0, rapidT: 0,
         };
         this.heroes.push(h);
         const want = sl.post ?? -1;
@@ -523,9 +525,16 @@ export class Run {
     return h?.perks.includes(p) ?? false;
   }
 
-  /** A hero's attack range from their post (Eagle Eye adds a quarter). */
+  /** A hero's attack range from their post (Eagle Eye adds a quarter). The Sniper reaches the whole map. */
   heroRange(h: Hero | null = this.hero): number {
-    return h ? h.def.postRange * (this.heroHasPerk('eagleEye', h) ? 1.25 : 1) : 0;
+    if (!h) return 0;
+    if (h.def.global) return Infinity;
+    return h.def.postRange * (this.heroHasPerk('eagleEye', h) ? 1.25 : 1);
+  }
+
+  /** On a pad and fighting (not still waiting to be placed). */
+  heroOnField(h: Hero | null = this.hero): boolean {
+    return !!h && h.post >= 0;
   }
 
   /** The hero standing on a pad, if any. */
@@ -533,35 +542,29 @@ export class Run {
     return post < 0 ? undefined : this.heroes.find((h) => h.post === post);
   }
 
-  /** Where a hero stands at a post: -1 is the wall walk above the castle gate, else a build pad. */
-  heroPostPosition(post: number, slot = 0): { x: number; y: number; z: number; post: number; facing: number } {
+  /** Where a hero stands on a pad (-1: waiting off the field, out of sight beside the castle). */
+  heroPostPosition(post: number, _slot = 0): { x: number; y: number; z: number; post: number; facing: number } {
     const c = this.map.castle;
     if (post >= 0) {
       const s = this.map.buildSpots[post];
       return { x: s.x, y: HERO_POST.padHeight, z: s.z, post, facing: Math.atan2(c.x - s.x, c.z - s.z) + Math.PI };
     }
-    // Face down the main road, from the wall above the gate.
-    const p = this.map.paths[0];
-    const n = p.xs.length;
-    const facing = Math.atan2(p.xs[n - 2] - p.xs[n - 1], p.zs[n - 2] - p.zs[n - 1]);
-    // The second hero keeps watch from the side wall.
-    const a = facing + (slot ? Math.PI / 2 : 0);
-    return { x: c.x + Math.sin(a) * HERO_POST.wallOffset, y: HERO_POST.wallHeight, z: c.z + Math.cos(a) * HERO_POST.wallOffset, post: -1, facing: a };
+    return { x: c.x, y: -5, z: c.z, post: -1, facing: 0 };
   }
 
-  /** Gold to move a hero once their free placement is used. */
+  /** Placing a waiting hero is free; moving one from pad to pad costs gold. */
   heroMoveCost(h: Hero | null = this.hero): number {
-    return h?.placed ? Math.round(HERO_POST.moveCost * (1 + this.currentWave * HERO_POST.moveCostPerWave)) : 0;
+    return h && h.post >= 0 ? Math.round(HERO_POST.moveCost * (1 + this.currentWave * HERO_POST.moveCostPerWave)) : 0;
   }
 
-  /** Can the hero be stationed here (an unlocked, empty pad, or -1 for the castle)? */
+  /** Can the hero be stationed here (an unlocked, empty pad)? */
   canStationHero(post: number, h: Hero | null = this.hero): boolean {
-    if (!h || post === h.post) return false;
-    if (post >= 0 && (!this.unlockedSpots.has(post) || this.towerAt(post) || this.heroAt(post))) return false;
+    if (!h || post < 0 || post === h.post) return false;
+    if (!this.unlockedSpots.has(post) || this.towerAt(post) || this.heroAt(post)) return false;
     return this.gold >= this.heroMoveCost(h);
   }
 
-  /** Moves a hero to a post. The first move is free; later ones cost gold. */
+  /** Puts a hero on a pad: free from the reserve, gold to move between pads. */
   stationHero(post: number, h: Hero | null = this.hero): boolean {
     if (!h || !this.canStationHero(post, h)) return false;
     const cost = this.heroMoveCost(h);
@@ -876,7 +879,7 @@ export class Run {
       if (best.stats.haste > 0) t.stats.cooldown *= 1 - best.stats.haste;
     }
     // Rally: a hero inspires the towers around their post (one Rally per tower).
-    const rallies = this.heroes.filter((h) => this.heroHasPerk('vigor', h));
+    const rallies = this.heroes.filter((h) => h.post >= 0 && this.heroHasPerk('vigor', h));
     for (const t of this.towers) {
       if (isSupport(t.def.id)) continue;
       if (rallies.some((h) => (t.x - h.x) ** 2 + (t.z - h.z) ** 2 <= this.heroRange(h) ** 2)) t.stats.damage *= 1 + HERO_POST.rally;
@@ -1057,7 +1060,7 @@ export class Run {
   }
 
   heroAbilityReady(h: Hero | null = this.hero): boolean {
-    return !!h && h.abilityCd <= 0 && this.state === 'playing';
+    return !!h && h.post >= 0 && h.abilityCd <= 0 && this.state === 'playing';
   }
 
   useHeroAbility(h: Hero | null = this.hero): boolean {
@@ -1067,6 +1070,16 @@ export class Run {
     const power = scale.ability;
     let cx = h.x;
     let cz = h.z;
+    if (ab.kind === 'rapidFire') {
+      // The Sniper fires several times faster for a while, still at the toughest enemies anywhere.
+      if (!this.enemies.some((e) => e.alive && !e.hidden)) return false;
+      h.abilityCd = ab.cooldown * scale.cooldown;
+      h.rapidT = ab.duration * (1 + (power - 1) * 0.5);
+      h.cooldown = 0;
+      this.stats.heroAbilityUses++;
+      this.events.emit('heroAbility', { hero: h, x: h.x, z: h.z, radius: ab.radius });
+      return true;
+    }
     if (ab.kind === 'shadowStrike') {
       // Dash through the toughest enemies in reach, then reappear beside the last one.
       const targets = this.enemies
@@ -1536,7 +1549,7 @@ export class Run {
           this.addGold(g);
           this.events.emit('mineGold', { tower: t, gold: g });
         }
-        for (const h of this.heroes) if (this.heroHasPerk('guardian', h)) this.castleHp = Math.min(this.castleMaxHp, this.castleHp + HERO_POST.guardianHp);
+        for (const h of this.heroes) if (h.post >= 0 && this.heroHasPerk('guardian', h)) this.castleHp = Math.min(this.castleMaxHp, this.castleHp + HERO_POST.guardianHp);
         this.events.emit('waveCleared', { index: w, gold });
         if ((w + 1) % SIEGE.checkpointEvery === 0 && w + 1 > this.lastCheckpoint) this.pendingCheckpoint = Math.max(this.pendingCheckpoint, w + 1);
       }
@@ -1960,17 +1973,20 @@ export class Run {
   private updateHero(dt: number): void {
     for (const h of this.heroes) {
       h.attackAnim = Math.max(0, h.attackAnim - dt);
-      if (this.state !== 'playing') continue;
+      // Waiting to be placed: no shooting, and the ability stays charged for when they arrive.
+      if (this.state !== 'playing' || h.post < 0) continue;
       if (h.abilityCd > 0) h.abilityCd -= dt;
+      if (h.rapidT > 0) h.rapidT = Math.max(0, h.rapidT - dt);
       h.cooldown -= dt;
       if (h.cooldown > 0) continue;
-      const target = this.findTarget(h.x, h.z, this.heroRange(h), h.def.hitsAir, true, 'closest');
+      const target = this.findTarget(h.x, h.z, this.heroRange(h), h.def.hitsAir, true, h.def.targeting ?? 'closest');
       if (!target) continue;
-      h.cooldown = h.def.cooldown * (this.heroHasPerk('swift', h) ? 0.8 : 1);
+      const rapid = h.rapidT > 0 ? h.def.ability.rapidRate ?? 1 : 1;
+      h.cooldown = h.def.cooldown * (this.heroHasPerk('swift', h) ? 0.8 : 1) * rapid;
       h.attackAnim = 0.25;
       h.facing = Math.atan2(target.x - h.x, target.z - h.z);
       this.events.emit('heroAttack', { hero: h, target });
-      this.launch(h.def.damageType === 'magic' ? 'heroBolt' : 'heroArrow', h.x, h.y + 0.8, h.z, target, 14, h.damage, h.def.damageType, 0, -10 - h.slot, {});
+      this.launch(h.def.damageType === 'magic' ? 'heroBolt' : 'heroArrow', h.x, h.y + 0.8, h.z, target, h.def.shotSpeed ?? 14, h.damage, h.def.damageType, 0, -10 - h.slot, {});
     }
   }
 

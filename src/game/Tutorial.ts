@@ -133,8 +133,8 @@ export class Tutorial {
 
   onHeroSelected(): void {
     this.flags.heroSelected = true;
-    if (this.active === 'hero_tap') {
-      this.markSeen('hero_tap');
+    if (this.active === 'hero_tap' || this.active === 'hero_place') {
+      this.markSeen(this.active);
       this.active = null;
       this.show('hero_move', HINTS.hero_move, null, 'free', 7000);
     }
@@ -144,6 +144,7 @@ export class Tutorial {
     this.flags.heroMoved = true;
     this.done('hero_move');
     this.done('hero_tap');
+    this.done('hero_place');
   }
 
   onWaveStarted(): void {
@@ -213,12 +214,11 @@ export class Tutorial {
       return this.show('camera', HINTS.camera, null, 'free', 4500);
     }
 
-    // After the first wave: the hero.
+    // Once a tower is up: heroes wait off the board until you place them on a pad.
+    if (run.towers.length > 0 && run.heroes.some((h) => h.post < 0) && !this.seen('hero_place') && !this.flags.heroSelected && mode === 'none') {
+      return this.show('hero_place', HINTS.hero_place, () => this.hud.rectOf('hero'), 'above', 8000);
+    }
     if (w >= 1 && run.hero && !run.hero.dead) {
-      if (!this.seen('hero_tap') && !this.flags.heroSelected && mode === 'none') {
-        const h = run.hero;
-        return this.show('hero_tap', HINTS.hero_tap, () => this.battle.view.project(h.x, h.y + 0.6, h.z), 'above');
-      }
       if (run.state === 'playing' && run.heroAbilityReady() && !this.seen('hero_ability') && run.aliveCount() >= 3) {
         return this.show('hero_ability', HINTS.hero_ability, () => this.hud.rectOf('ability'), 'above', 5000);
       }

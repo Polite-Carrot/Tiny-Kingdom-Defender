@@ -83,13 +83,16 @@ describe('stationed hero', () => {
     return new Run({ snapshot: snap, meta: { ...meta.metaBonuses(), heroId: 'knight' }, availableTowers: ['archer'], seed: 4 });
   };
 
-  it('starts on the castle wall and moves to a pad for free once, then for gold', () => {
+  it('waits off the field until placed on any pad for free, then moves for gold', () => {
     const run = heroRun();
     const h = run.hero!;
-    const c = run.map.castle;
     expect(h.post).toBe(-1);
-    expect(Math.hypot(h.x - c.x, h.z - c.z)).toBeLessThan(0.5);
-    expect(h.y).toBeGreaterThan(0.5);
+    expect(run.heroOnField(h)).toBe(false);
+    // Waiting: no attacks and no ability.
+    h.abilityCd = 0;
+    run.state = 'playing';
+    expect(run.heroAbilityReady(h)).toBe(false);
+    run.state = 'prep';
     const [a, b] = [...run.unlockedSpots];
     const gold = run.gold;
     expect(run.stationHero(a)).toBe(true);
@@ -109,6 +112,7 @@ describe('stationed hero', () => {
 
   it('fights from the post and never falls', () => {
     const run = heroRun();
+    run.stationHero([...run.unlockedSpots][0]);
     run.callNextWave();
     let attacks = 0;
     run.events.on('heroAttack', () => attacks++);
@@ -116,7 +120,16 @@ describe('stationed hero', () => {
     const h = run.hero!;
     expect(attacks).toBeGreaterThan(0);
     expect(h.dead).toBe(false);
-    expect(h.post).toBe(-1);
+    expect(h.post).toBe([...run.unlockedSpots][0]);
+  });
+
+  it('a waiting hero never attacks', () => {
+    const run = heroRun();
+    run.callNextWave();
+    let attacks = 0;
+    run.events.on('heroAttack', () => attacks++);
+    for (let i = 0; i < 60 * 20; i++) run.update(1 / 60);
+    expect(attacks).toBe(0);
   });
 });
 
@@ -179,9 +192,10 @@ describe('second hero slot', () => {
     expect(meta.secondHero()).toBe('knight');
     const run = new Run({ snapshot: newKingdom(), meta: meta.metaBonuses(), availableTowers: ['archer'] });
     expect(run.heroes.map((h) => h.def.id)).toEqual(['ranger', 'knight']);
-    // Both start on the castle walls, in different spots, and can't share a pad.
+    // Both wait to be placed, and can't share a pad.
     const [a, b] = run.heroes;
-    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(0.3);
+    expect(a.post).toBe(-1);
+    expect(b.post).toBe(-1);
     const pad = [...run.unlockedSpots][0];
     expect(run.stationHero(pad, a)).toBe(true);
     expect(run.stationHero(pad, b)).toBe(false);
@@ -221,5 +235,47 @@ describe('foundations', () => {
     const price = run.landCost(field.index);
     expect(run.clearLand(field.index)).toBe(true);
     expect(gold - run.gold).toBe(price);
+  });
+});
+
+describe('the Sniper', () => {
+  const sniperRun = () => {
+    const meta = newMeta();
+    const run = new Run({ snapshot: newKingdom(), meta: { ...meta.metaBonuses(), heroId: 'sniper' }, availableTowers: ['archer'], seed: 4 });
+    run.stationHero([...run.unlockedSpots][0]);
+    run.state = 'playing';
+    return run;
+  };
+
+  it('shoots an enemy anywhere on the map, the toughest first', () => {
+    const run = sniperRun();
+    const h = run.hero!;
+    const weak = run.spawnEnemy('grunt', 0, 0.2, 0, 1);
+    const tough = run.spawnEnemy('knight', 0, 0.4, 0, 5);
+    // Both far from the Sniper, at the road's start.
+    expect(Math.hypot(weak.x - h.x, weak.z - h.z)).toBeGreaterThan(4);
+    const targets: number[] = [];
+    run.events.on('heroAttack', ({ target }) => targets.push(target.id));
+    h.cooldown = 0;
+    run.update(1 / 60);
+    expect(targets[0]).toBe(tough.id);
+  });
+
+  it('Rapid Fire shoots several times as often for a while', () => {
+    const count = (rapid: boolean) => {
+      const run = sniperRun();
+      const h = run.hero!;
+      for (let i = 0; i < 6; i++) run.spawnEnemy('knight', 0, 0.5 + i * 0.3, 0, 50);
+      h.abilityCd = 0;
+      if (rapid) expect(run.useHeroAbility(h)).toBe(true);
+      let shots = 0;
+      run.events.on('heroAttack', () => shots++);
+      for (let i = 0; i < 60 * 5; i++) {
+        for (const e of run.enemies) e.stunTimer = 1;
+        run.update(1 / 60);
+      }
+      return shots;
+    };
+    expect(count(true)).toBeGreaterThanOrEqual(count(false) * 3);
   });
 });

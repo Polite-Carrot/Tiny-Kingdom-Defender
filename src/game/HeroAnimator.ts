@@ -33,7 +33,7 @@ interface Pose {
 }
 
 /** Attack lengths per hero (seconds). */
-const ATTACK_TIME: Record<HeroId, number> = { ranger: 0.45, knight: 0.5, mage: 0.55, dwarf: 0.6, valkyrie: 0.45, ninja: 0.3 };
+const ATTACK_TIME: Record<HeroId, number> = { ranger: 0.45, knight: 0.5, mage: 0.55, dwarf: 0.6, valkyrie: 0.45, ninja: 0.3, sniper: 0.6 };
 const ABILITY_TIME = 0.9;
 
 export class HeroAnimator {
@@ -138,6 +138,11 @@ export class HeroAnimator {
       p.lean = 0.22 * wb;
     }
     if (this.id === 'mage') p.twist *= 0.4;
+    // The Sniper holds the rifle at the ready, off hand under the barrel.
+    if (this.id === 'sniper') {
+      p.armR[0] -= 0.75;
+      p.armL = [p.armL[0] - 0.85, 0.45];
+    }
 
     // Footstep dust.
     if (moving && !this.flying) {
@@ -168,8 +173,7 @@ export class HeroAnimator {
       else scale = Math.max(0.01, easeOutBack(this.respawnT));
     }
 
-    // A little smaller on the castle wall, so the keep still reads as the castle.
-    this.applyPose(p, scale * (h.post < 0 ? 0.72 : 1));
+    this.applyPose(p, scale);
     const flap = Math.sin(time * (moving ? 11 : 5));
     for (const w of this.wings) w.rotation.set(-0.8, 0.2 + flap * 0.45, 0, 'YXZ');
     return true;
@@ -229,6 +233,17 @@ export class HeroAnimator {
         p.lean -= 0.1 * k;
         break;
       }
+      case 'sniper': {
+        // Shoulder the rifle and aim, a sharp recoil on the shot, then back to the ready.
+        const aim = bump(t, 0, 1.1);
+        const kick = bump(t, 0.4, 0.7);
+        p.armR = [-1.5 * aim + 0.35 * kick - 0.75 * (1 - aim), 0.02];
+        p.armL = [-1.45 * aim - 0.85 * (1 - aim), 0.45];
+        p.twist = -0.12 * aim;
+        p.lunge = -0.07 * kick;
+        p.lean -= 0.08 * kick;
+        break;
+      }
       case 'valkyrie': {
         // Spear raised back, then hurled forward.
         const back = ss(0, 0.4, t) * (1 - ss(0.4, 0.55, t));
@@ -274,6 +289,12 @@ export class HeroAnimator {
         p.armL = [-2.7 * k, 0.1];
         p.armR = [-2.5 * k, -0.4 * k];
         p.lean = -0.3 * k;
+        break;
+      case 'sniper': // Rapid Fire: rifle raised high in a salute, then down to aim.
+        p.armR = [-2.8 * k, 0.1];
+        p.armL = [-1.2 * k, 0.45];
+        p.lift += 0.08 * k;
+        p.lean = -0.15 * k;
         break;
       case 'ninja': // Shadow Strike: a full spin with blade out.
         p.twist = ss(0, 0.6, t) * Math.PI * 2;

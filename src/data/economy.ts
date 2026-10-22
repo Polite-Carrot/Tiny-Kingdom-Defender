@@ -87,6 +87,7 @@ export const HERO_UNLOCK_COST: Record<string, number> = {
   dwarf: 1400,
   valkyrie: 1900,
   ninja: 2500,
+  sniper: 3200,
 };
 
 export type CosmeticKind = 'castle' | 'trail' | 'hero' | 'tower' | 'flag';

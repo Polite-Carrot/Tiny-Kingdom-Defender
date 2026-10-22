@@ -366,7 +366,6 @@ export class Battle {
       else if (index % SIEGE.ageEvery !== 0 || index === 0) ui.banner(`Wave ${index + 1}`, ageTitle(index));
     });
     ev.on('waveCleared', ({ index, gold }) => {
-      for (const h of this.run.heroes) this.giveHeroXp(h, HERO_LEVELS.waveXpBase + HERO_LEVELS.waveXpPerWave * index);
       const before = meta.towersAvailable();
       meta.recordWaveCleared(index);
       const done = meta.addMissionProgress('wavesCleared', 1);
@@ -478,14 +477,12 @@ export class Battle {
         best = sp.index;
       }
     }
-    // The tap lands on the ground; the heroes and the castle stand above it, so test where the
-    // tap ray passes at their height instead.
-    const c = run.map.castle;
-    const cp = this.atHeight(x, z, 0.7);
-    const onCastle = (c.x - x) ** 2 + (c.z - z) ** 2 < 0.75 * 0.75 || (c.x - cp.x) ** 2 + (c.z - cp.z) ** 2 < 0.75 * 0.75;
+    // The tap lands on the ground; the heroes stand above it, so test where the tap ray passes
+    // at their height instead.
     let tapped: Hero | null = null;
     let tappedD = Math.min(0.5 * 0.5, bestD + 1e-6);
     for (const h of run.heroes) {
+      if (h.post < 0) continue;
       const hp = this.atHeight(x, z, h.y + 0.35);
       const d = (h.x - hp.x) ** 2 + (h.z - hp.z) ** 2;
       if (d <= tappedD) {
@@ -493,41 +490,18 @@ export class Battle {
         tapped = h;
       }
     }
-    // A tap on the castle picks the nearest hero on its walls.
-    if (!tapped && onCastle && this.selHero < 0) {
-      let bd = Infinity;
-      for (const h of run.heroes) {
-        if (h.post >= 0) continue;
-        const d = (h.x - cp.x) ** 2 + (h.z - cp.z) ** 2;
-        if (d < bd) {
-          bd = d;
-          tapped = h;
-        }
-      }
-    }
     const sel = run.heroes[this.selHero] ?? null;
-    if (tapped && (!sel || tapped === sel || tapped.post >= 0 || !onCastle)) {
+    if (tapped) {
       if (tapped === sel) this.setHeroSelected(-1), this.view.hideRange(), this.s.audio.play('select');
       else this.toggleHero(tapped.slot);
       return;
     }
-    // A selected hero can be stationed on an empty pad, or back on the castle wall.
+    // A selected hero can be stationed on any empty pad.
     if (sel) {
-      const post = onCastle ? -1 : best;
-      if ((post >= 0 || onCastle) && post !== sel.post && (post < 0 || (run.isSpotUnlocked(post) && !run.towerAt(post) && !run.heroAt(post)))) {
-        const cost = run.heroMoveCost(sel);
-        if (run.gold < cost) {
-          this.s.audio.play('error');
-          this.s.ui.toast(`Moving ${sel.def.name} costs ${cost} gold`);
-          return;
-        }
-        if (run.stationHero(post, sel)) {
-          this.setHeroSelected(-1);
-          this.view.hideRange();
-          this.tutorial?.onHeroMoved();
-          this.persist();
-          return;
-        }
+      const post = best;
+      if (post >= 0 && post !== sel.post && run.isSpotUnlocked(post) && !run.towerAt(post) && !run.heroAt(post)) {
+        if (this.placeHeroOn(sel, post)) return;
+        return;
       }
       if (post === sel.post) {
         this.setHeroSelected(-1);
@@ -643,6 +617,33 @@ export class Battle {
     this.hud.setHeroSelected(slot);
   }
 
+  /** Puts a hero on a pad (free from the reserve, gold to move between pads). */
+  private placeHeroOn(h: Hero, post: number): boolean {
+    const run = this.run;
+    const cost = run.heroMoveCost(h);
+    if (run.gold < cost) {
+      this.s.audio.play('error');
+      this.s.ui.toast(`Moving ${h.def.name} costs ${cost} gold`);
+      return false;
+    }
+    if (!run.stationHero(post, h)) return false;
+    this.hud.closeCtx();
+    this.view.highlightSpot(-1);
+    this.setHeroSelected(-1);
+    this.view.hideRange();
+    this.tutorial?.onHeroMoved();
+    this.persist();
+    return true;
+  }
+
+  /** From the build menu: place a waiting hero on the selected pad. */
+  placeHero(slot: number): void {
+    const h = this.run.heroes[slot];
+    const spot = this.hud.selectedSpot;
+    if (!h || spot < 0) return;
+    this.placeHeroOn(h, spot);
+  }
+
   /** Selects (or deselects) the hero in a slot. */
   toggleHero(slot = 0): void {
     const run = this.run;
@@ -654,10 +655,9 @@ export class Battle {
     this.view.hideRange();
     this.setHeroSelected(on ? slot : -1);
     if (on) {
-      this.view.showRange(h.x, h.z, run.heroRange(h), '#7dff9a');
+      if (h.post >= 0 && !h.def.global) this.view.showRange(h.x, h.z, run.heroRange(h), '#7dff9a');
       const cost = run.heroMoveCost(h);
-      const where = h.post < 0 ? 'an empty pad' : 'an empty pad or the castle';
-      this.s.ui.toast(cost > 0 ? `Tap ${where} to move ${h.def.name} (${cost} gold)` : `Tap ${where} to station ${h.def.name} there. Free, once!`);
+      this.s.ui.toast(h.post < 0 ? `Tap an empty pad to place ${h.def.name}` : `Tap an empty pad to move ${h.def.name} (${cost} gold)`);
       this.tutorial?.onHeroSelected();
     }
     this.s.audio.play('select');

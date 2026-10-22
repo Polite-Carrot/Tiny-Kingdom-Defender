@@ -65,6 +65,12 @@ export class AutoPlayer {
 
   private act(): void {
     const run = this.run;
+    // Heroes wait off the board: put each on the best free pad first (free).
+    for (const h of run.heroes) {
+      if (h.post >= 0) continue;
+      const spot = this.best((i) => run.isSpotUnlocked(i) && !run.towerAt(i) && !run.heroAt(i));
+      if (spot >= 0) run.stationHero(run.map.buildSpots[spot].index, h);
+    }
     for (let guard = 0; guard < 8; guard++) {
       const cycle = this.cycle();
       const nextType = cycle[this.cycleIdx % cycle.length];

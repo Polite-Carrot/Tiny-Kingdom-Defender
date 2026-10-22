@@ -292,6 +292,7 @@ describe('kingdom siege', () => {
   it('new hero abilities: quake slows, holy light heals the castle, shadow strike hits several', () => {
     const mk = (heroId: 'dwarf' | 'valkyrie' | 'ninja') => {
       const run = new Run({ snapshot: newKingdom(), meta: { ...noMeta, heroId }, availableTowers: ['archer'] });
+      run.stationHero([...run.unlockedSpots][0]);
       run.state = 'playing';
       const h = run.hero!;
       h.abilityCd = 0;

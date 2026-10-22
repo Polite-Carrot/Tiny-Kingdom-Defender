@@ -11,6 +11,7 @@ export const HINTS = {
   upgrade_btn: 'Upgrade for more damage and range.',
   early_call: 'Tap <b>Next</b> early for bonus gold.',
   hero_tap: 'Tap your <b>hero</b> to move them.',
+  hero_place: 'Tap your <b>hero</b>, then any empty pad.',
   hero_move: 'Now tap an empty pad.',
   hero_ability: 'Use your hero\'s <b>ability</b> on crowds!',
   new_cannon: 'New: <b>Cannon</b>. Big splash, no flyers.',

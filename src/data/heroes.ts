@@ -1,9 +1,10 @@
 // Hero and ally unit data.
 
 import type { IconName } from '../ui/icons';
+import type { TargetMode } from './towers';
 
-export type HeroId = 'ranger' | 'knight' | 'mage' | 'dwarf' | 'valkyrie' | 'ninja';
-export type AbilityKind = 'arrowRain' | 'taunt' | 'meteor' | 'quake' | 'holyLight' | 'shadowStrike';
+export type HeroId = 'ranger' | 'knight' | 'mage' | 'dwarf' | 'valkyrie' | 'ninja' | 'sniper';
+export type AbilityKind = 'arrowRain' | 'taunt' | 'meteor' | 'quake' | 'holyLight' | 'shadowStrike' | 'rapidFire';
 
 export interface HeroDef {
   id: HeroId;
@@ -14,7 +15,7 @@ export interface HeroDef {
   hp: number;
   damage: number;
   range: number;
-  /** Attack range when stationed (on the castle wall or a pad). */
+  /** Attack range from the pad the hero stands on. */
   postRange: number;
   cooldown: number;
   speed: number;
@@ -23,6 +24,12 @@ export interface HeroDef {
   respawnTime: number;
   /** HP regenerated per second while not in contact. */
   regen: number;
+  /** Reaches every enemy on the map, wherever the hero stands (the Sniper). */
+  global?: boolean;
+  /** Which enemy the hero aims at (default: the closest). */
+  targeting?: TargetMode;
+  /** Shot speed (default 14). */
+  shotSpeed?: number;
   ability: {
     kind: AbilityKind;
     name: string;
@@ -36,6 +43,8 @@ export interface HeroDef {
     count?: number;
     /** How far from the hero the ability can be aimed. */
     castRange: number;
+    /** Rapid Fire: the time between shots is multiplied by this while it lasts. */
+    rapidRate?: number;
   };
 }
 
@@ -48,7 +57,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
   },
   knight: {
     id: 'knight', name: 'Sir Bramble', title: 'Castle Knight', color: '#5a7fd1',
-    description: 'Hurls his sword from the walls. Taunt stuns all nearby foes.',
+    description: 'Hurls his mighty sword. Taunt stuns all nearby foes.',
     hp: 480, damage: 28, range: 1.1, postRange: 2.5, cooldown: 0.8, speed: 2.1, damageType: 'physical', hitsAir: false, respawnTime: 12, regen: 10,
     ability: { kind: 'taunt', name: 'Taunt', description: 'Stops every nearby enemy for 3s.', cooldown: 14, damage: 30, radius: 2.2, duration: 3, castRange: 0 },
   },
@@ -76,11 +85,18 @@ export const HEROES: Record<HeroId, HeroDef> = {
     hp: 230, damage: 22, range: 1.3, postRange: 2.6, cooldown: 0.5, speed: 3.6, damageType: 'physical', hitsAir: false, respawnTime: 9, regen: 7,
     ability: { kind: 'shadowStrike', name: 'Shadow Strike', description: 'Dashes through the 6 toughest enemies nearby, striking each.', cooldown: 13, damage: 170, radius: 0.6, duration: 0, castRange: 4.2, count: 6 },
   },
+  sniper: {
+    id: 'sniper', name: 'Wren', title: 'Royal Marksman', color: '#3f6f8f',
+    description: 'Shoots anywhere on the map. Picks off the toughest enemy.',
+    hp: 160, damage: 70, range: 99, postRange: 99, cooldown: 2.3, speed: 2.2, damageType: 'physical', hitsAir: true, respawnTime: 12, regen: 5,
+    global: true, targeting: 'strongest', shotSpeed: 34,
+    ability: { kind: 'rapidFire', name: 'Rapid Fire', description: 'Fires four times as fast for 6 seconds.', cooldown: 22, damage: 0, radius: 0, duration: 6, castRange: 0, rapidRate: 0.25 },
+  },
 };
 
-export const HERO_ORDER: HeroId[] = ['ranger', 'knight', 'mage', 'dwarf', 'valkyrie', 'ninja'];
+export const HERO_ORDER: HeroId[] = ['ranger', 'knight', 'mage', 'dwarf', 'valkyrie', 'ninja', 'sniper'];
 
-/** The hero stands at a post like a free tower: the castle wall to start, or a pad of your choice. */
+/** Heroes are free towers: they wait off the board until placed on any empty pad (moving later costs gold). */
 export const HERO_POST = {
   /** Height of the wall walk above the castle gate, and of a pad. */
   wallHeight: 0.8,
@@ -105,7 +121,7 @@ export const REINFORCEMENT = {
   hitsAir: true,
 };
 
-/** Hero experience: heroes level up from kills and waves cleared, and their gear upgrades with level. */
+/** Hero experience: heroes level up from the enemies they defeat, and their gear upgrades with level. */
 export const HERO_LEVELS = {
   max: 30,
   /** Total XP to reach level L (L ≥ 2): base × (L − 1)^exp. */
@@ -116,13 +132,14 @@ export const HERO_LEVELS = {
   abilityPerLevel: 0.04,
   cooldownPerLevel: 0.01,
   cooldownMin: 0.72,
-  /** XP for a kill: perCost × enemy cost (bosses and elites give more). */
-  xpPerCost: 2,
-  bossXp: 60,
-  eliteXp: 12,
-  /** XP for each wave cleared with the hero on the field: base + perWave × wave. */
-  waveXpBase: 4,
-  waveXpPerWave: 0.25,
+  /**
+   * Heroes level up from their own kills only: perCost × enemy cost (bosses and elites give more).
+   * Tuned so a hero placed in the thick of it reaches about level 5 in a siege or two, level 10
+   * after several sessions, and level 30 is a long-term goal.
+   */
+  xpPerCost: 3,
+  bossXp: 90,
+  eliteXp: 18,
 };
 
 export interface GearTier {

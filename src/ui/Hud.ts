@@ -19,6 +19,8 @@ export interface HudCallbacks {
   castSpell(id: SpellId): void;
   nextWave(): void;
   selectHero(slot: number): void;
+  /** Build menu: put a waiting hero on the selected pad. */
+  placeHero(slot: number): void;
   ability(slot: number): void;
   buildPreview(id: TowerId | null): void;
   build(id: TowerId): void;
@@ -37,7 +39,7 @@ export interface HudCallbacks {
   viewMoved(): boolean;
 }
 
-const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' } as const;
+const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow', rapidFire: 'fast' } as const;
 
 export class Hud {
   readonly el: HTMLElement;
@@ -291,6 +293,8 @@ export class Hud {
     // Heroes.
     run.heroes.forEach((hero, i) => {
       ($(this.heroBtns[i], '.hpring') as HTMLElement).style.boxShadow = `inset 0 0 0 4px ${hero.def.color}`;
+      // Waiting to be placed: the portrait pulses until the hero is on a pad.
+      this.heroBtns[i].classList.toggle('waiting', hero.post < 0);
       this.abilityBtns[i].classList.toggle('ready', run.heroAbilityReady(hero));
       const cdFrac = Math.max(0, hero.abilityCd / hero.def.ability.cooldown);
       const cd = this.abilityCds[i];
@@ -502,13 +506,19 @@ export class Hud {
         <span class="confirm">${poor ? 'Need gold' : 'Tap to build'}</span>
       </button>`;
     }).join('');
-    const info = this.previewId ? `${TOWERS[this.previewId].role}` : 'Choose a tower to see its range.';
+    // Heroes still waiting to be placed come first: free, one tap.
+    const heroCards = run.heroes.filter((h) => h.post < 0).map((h) => `<button class="hero-place-btn" data-hero="${h.slot}" style="--hc:${h.def.color}">
+        <img src="${heroThumb(h.def.id)}" alt=""/><span><b>${h.def.name}</b><small>Place here · Free</small></span>
+      </button>`).join('');
+    const info = this.previewId ? `${TOWERS[this.previewId].role}` : heroCards ? 'Place your hero here, or choose a tower.' : 'Choose a tower to see its range.';
     this.ctx.innerHTML = `
-      <div class="ctx-head"><span class="name">Build tower</span><button class="x" aria-label="Close">✕</button></div>
+      <div class="ctx-head"><span class="name">${heroCards ? 'Build or place a hero' : 'Build tower'}</span><button class="x" aria-label="Close">✕</button></div>
+      ${heroCards ? `<div class="hero-place">${heroCards}</div>` : ''}
       <div class="build-cards">${cards}</div>
       <div class="ctx-info">${info}</div>`;
     $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
-    this.ctx.querySelectorAll<HTMLButtonElement>('.tcard').forEach((b) => {
+    this.ctx.querySelectorAll<HTMLButtonElement>('[data-hero]').forEach((b) => (b.onclick = () => this.cb.placeHero(Number(b.dataset.hero))));
+    this.ctx.querySelectorAll<HTMLButtonElement>('[data-tower]').forEach((b) => {
       b.onclick = () => {
         const id = b.dataset.tower as TowerId;
         if (!run.isTowerAvailable(id)) return;

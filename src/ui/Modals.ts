@@ -9,7 +9,7 @@ import type { Battle } from '../game/Battle';
 import { TOWERS, TOWER_ORDER, isSupport, type TowerId } from '../data/towers';
 import { HEROES, HERO_ORDER, HERO_GEAR, HERO_LEVELS, PERKS, PERK_TIERS, xpForLevel, gearTierFor, type AbilityKind, type HeroId } from '../data/heroes';
 
-const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow' };
+const ABILITY_ICONS: Record<AbilityKind, keyof typeof ICONS> = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow', rapidFire: 'fast' };
 import { TOWER_META, META_UPGRADES, UNLOCKS, AD_REWARDS, COSMETICS, HERO_UNLOCK_COST, HERO_SLOT2_COST, TREASURY, DAILY_LOGIN } from '../data/economy';
 import { summarise } from '../analytics/Analytics';
 import { PRIVACY_POLICY_URL, type RewardedPlacement } from '../data/ads';
@@ -369,7 +369,8 @@ export function heroes(game: Game): void {
         : meta.heroSlot2Available()
           ? `<div class="slot2-row"><div>${icon('swords', 'inline')}<b>Second hero slot</b><br/><small>Bring a Partner hero into every siege.</small></div><button class="btn small gold ${d.coins < HERO_SLOT2_COST ? 'disabled' : ''}" data-slot2>${costHtml(HERO_SLOT2_COST)}</button></div>`
           : `<div class="slot2-row locked">${icon('lock', 'inline')}A second hero slot opens at wave ${UNLOCK_WAVE.heroSlot2}.</div>`;
-      m.innerHTML = `<div class="ribbon">Heroes</div>${currencyBar(game)}${slotRow}<div class="list">${HERO_ORDER.map((id) => {
+      m.innerHTML = `<div class="ribbon">Heroes</div>${currencyBar(game)}${slotRow}
+        <div class="muted" style="text-align:center;font-size:13px;margin:-2px 0 8px">Place heroes on any pad. They level up from the enemies they defeat.</div><div class="list">${HERO_ORDER.map((id) => {
         const h = HEROES[id];
         const owned = d.unlocks.heroes.includes(id);
         const sel = d.selectedHero === id;

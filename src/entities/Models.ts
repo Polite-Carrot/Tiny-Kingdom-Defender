@@ -1265,6 +1265,40 @@ function buildHeroRig(id: HeroId, R: HeroRigBuilder): void {
       S.box(0.08, 0.02, 0.02, GOLD, { x: 0.19, y: 0.78, z: 0.07 });
       break;
     }
+    case 'sniper': {
+      // Wren: steel-blue hooded cloak, leather jerkin with a bandolier of bolts, a gold-rimmed scope
+      // over one eye, and a long scoped crossbow-rifle held at the ready.
+      const cloak = '#3f6f8f';
+      const dark = '#2c4f66';
+      heroBody(R, { pants: '#4a4036', boots: '#3a2c20', torso: '#6a5038', arms: cloak, hands: '#5a4430', belt: '#3b2a1c' });
+      // Bandolier of bolts across the chest.
+      B.box(0.05, 0.3, 0.02, '#4a3424', { x: 0.01, y: 0.3, z: 0.108, rz: 0.55 });
+      for (let k = 0; k < 4; k++) B.box(0.014, 0.05, 0.014, '#c9d2df', { x: -0.06 + k * 0.04, y: 0.24 + k * 0.035, z: 0.12, rz: 0.55 });
+      // Long cloak behind.
+      B.box(0.32, 0.36, 0.025, dark, { y: 0.25, z: -0.12, rx: 0.1 });
+      heroFace(B, 0.55, { iris: '#4a8ab0', brow: '#5a3a24' });
+      // Hood, drawn forward.
+      B.ball(0.168, 1, cloak, { y: 0.59, z: -0.035, sy: 0.98, sz: 0.98 });
+      B.cone(0.15, 0.16, 10, cloak, { y: 0.71, z: -0.07, rx: -0.6 });
+      B.cyl(0.168, 0.172, 0.05, 12, dark, { y: 0.47, z: -0.01 });
+      B.box(0.2, 0.04, 0.06, dark, { y: 0.68, z: 0.11, rx: 0.4 });
+      // Spyglass scope over the right eye.
+      B.torus(0.028, 0.008, 4, 10, GOLD, { x: 0.055, y: 0.55, z: 0.15 });
+      B.cyl(0.02, 0.022, 0.05, 8, '#3a3a44', { x: 0.055, y: 0.55, z: 0.165, rx: Math.PI / 2 });
+      // The crossbow-rifle in the right hand: barrel along the arm, so raising the arm aims it.
+      const G = R.armR;
+      const gx = 0.17, gz = 0.06;
+      G.box(0.05, 0.11, 0.045, '#6a4426', { x: gx, y: 0.27, z: gz });
+      G.box(0.045, 0.1, 0.05, '#3a3a44', { x: gx, y: 0.17, z: gz });
+      G.cyl(0.014, 0.014, 0.42, 6, '#5d6470', { x: gx, y: -0.08, z: gz });
+      G.cyl(0.022, 0.018, 0.04, 8, GOLD, { x: gx, y: -0.29, z: gz });
+      G.cyl(0.016, 0.016, 0.13, 8, '#2a2a33', { x: gx, y: 0.12, z: gz + 0.05 });
+      G.torus(0.017, 0.005, 4, 8, GOLD, { x: gx, y: 0.06, z: gz + 0.05, rx: Math.PI / 2 });
+      // Bow limbs across the front of the stock.
+      G.box(0.26, 0.022, 0.025, WOOD, { x: gx, y: 0.02, z: gz });
+      G.cyl(0.003, 0.003, 0.26, 3, '#f4efe0', { x: gx, y: 0.06, z: gz, rz: Math.PI / 2 });
+      break;
+    }
     case 'ninja': {
       // Kage: midnight garb, masked face, red headband and scarf, katana in hand and on the back.
       const navy = '#2b2a4a';
@@ -1294,7 +1328,7 @@ const rigCache = new Map<string, { parts: HeroRigPart[]; rest: THREE.BufferGeome
 
 /** Where a Legend crown sits on each hero's head (height and radius). */
 const CROWN_AT: Record<HeroId, [number, number]> = {
-  ranger: [0.69, 0.16], knight: [0.72, 0.165], mage: [0.76, 0.13], dwarf: [0.68, 0.16], valkyrie: [0.7, 0.16], ninja: [0.68, 0.162],
+  ranger: [0.69, 0.16], knight: [0.72, 0.165], mage: [0.76, 0.13], dwarf: [0.68, 0.16], valkyrie: [0.7, 0.16], ninja: [0.68, 0.162], sniper: [0.7, 0.165],
 };
 
 /** Gear earned by levelling: pauldron rims, a cape, a glowing weapon gem, a crown. */

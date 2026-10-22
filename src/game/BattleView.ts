@@ -839,7 +839,13 @@ export class BattleView {
       const { hero, x, z, radius } = ev;
       this.heroAnims[hero.slot]?.ability();
       const kind = hero.def.ability.kind;
-      if (kind === 'arrowRain') {
+      if (kind === 'rapidFire') {
+        // The Sniper's Rapid Fire: a golden flare around Wren.
+        this.rings.spawn(x, z, 0.9, '#ffd36a', 0.5);
+        this.rings.spawn(x, z, 0.55, '#ffffff', 0.35);
+        this.particles.burst(x, hero.y + 0.8, z, '#ffd36a', 18, { speed: 1.6, up: 2.2, size: 0.07, life: 0.6 });
+        this.audio.play('upgrade');
+      } else if (kind === 'arrowRain') {
         for (let i = 0; i < 30; i++) {
           const a = Math.random() * Math.PI * 2;
           const r = Math.random() * radius;
@@ -1569,8 +1575,12 @@ export class BattleView {
     for (const hero of run.heroes) {
       const anim = this.heroAnims[hero.slot];
       if (!anim) continue;
-      anim.root.visible = anim.update(dt, this.time, hero);
+      // Still waiting to be placed: not on the board yet.
+      const onField = hero.post >= 0;
+      anim.root.visible = onField && anim.update(dt, this.time, hero);
       const aura = this.heroAuras[hero.slot];
+      if (aura) aura.visible = onField;
+      if (!onField) continue;
       if (aura) {
         aura.position.set(hero.x, hero.y + 0.025, hero.z);
         aura.scale.setScalar(1 + Math.sin(this.time * 3 + hero.slot) * 0.06);

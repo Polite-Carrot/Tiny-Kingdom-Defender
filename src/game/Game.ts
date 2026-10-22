@@ -81,6 +81,7 @@ export class Game {
       castSpell: (id) => this.battle?.castSpell(id),
       nextWave: () => this.battle?.nextWave(),
       selectHero: (slot) => this.battle?.toggleHero(slot),
+      placeHero: (slot) => this.battle?.placeHero(slot),
       ability: (slot) => this.battle?.ability(slot),
       buildPreview: (id) => this.battle?.buildPreview(id),
       build: (id) => this.battle?.build(id),
