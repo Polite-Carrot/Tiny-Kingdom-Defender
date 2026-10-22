@@ -1,6 +1,6 @@
 // Contextual onboarding: hints that react to what the player is doing, instead of a wall of text.
 
-import { HINTS, type HintId } from '../data/onboarding';
+import { HINTS, ENEMY_TIPS, type HintId } from '../data/onboarding';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { TOWERS, BRANCH_TIER } from '../data/towers';
 import type { Services } from './Services';
@@ -10,7 +10,7 @@ import type { Hud } from '../ui/Hud';
 type Anchor = (() => { x: number; y: number } | null) | null;
 
 /** How long a hint stays up unless it says otherwise. */
-const HINT_MS = 8000;
+const HINT_MS = 6000;
 /** Hints that point at something on the field (hidden by the build and upgrade panels). */
 const FIELD_HINTS = new Set<HintId>(['build_spot', 'more_towers', 'upgrade_tap', 'hero_tap', 'path', 'clear_land']);
 
@@ -27,7 +27,8 @@ export class Tutorial {
     const ev = battle.run.events;
     this.unsub.push(ev.on('enemySpawn', (e) => {
       const key = `enemy_${e.def.id}`;
-      if (e.def.id === 'grunt' || e.def.id === 'minion' || this.seen(key) || this.enemyQueue.includes(e.def.id)) return;
+      // Bosses have their own entrance card; sluglings come with their Lava Slug.
+      if (e.def.id === 'grunt' || e.def.id === 'minion' || e.def.id === 'slugling' || e.def.boss || this.seen(key) || this.enemyQueue.includes(e.def.id)) return;
       this.enemyQueue.push(e.def.id);
     }));
   }
@@ -135,7 +136,7 @@ export class Tutorial {
     if (this.active === 'hero_tap') {
       this.markSeen('hero_tap');
       this.active = null;
-      this.show('hero_move', HINTS.hero_move, null, 'free', 9000);
+      this.show('hero_move', HINTS.hero_move, null, 'free', 7000);
     }
   }
 
@@ -188,7 +189,7 @@ export class Tutorial {
       }
       if (run.state === 'playing' && !this.seen('path') && run.waveIndex === 1) {
         const sp = run.map.spawns[0];
-        return this.show('path', HINTS.path, this.world(sp.x, 0.4, sp.z), 'below', 5000);
+        return this.show('path', HINTS.path, this.world(sp.x, 0.4, sp.z), 'below', 4000);
       }
       if (run.state === 'playing' && run.towers.length < 2 && run.gold >= TOWERS.archer.cost && mode === 'none' && !this.seen('more_towers')) {
         const sp = run.map.buildSpots[this.bestFreeSpot()];
@@ -203,8 +204,13 @@ export class Tutorial {
         }
       }
       if (run.state === 'playing' && run.waveIndex >= 2 && run.nextWaveTimer > 3 && !this.seen('early_call')) {
-        return this.show('early_call', HINTS.early_call, () => this.hud.rectOf('next'), 'above', 5000);
+        return this.show('early_call', HINTS.early_call, () => this.hud.rectOf('next'), 'above', 4000);
       }
+    }
+
+    // Moving the camera isn't obvious: say so once, while the first waves are on.
+    if (run.state === 'playing' && mode === 'none' && this.seen('start_wave') && !this.seen('camera') && run.aliveCount() > 0) {
+      return this.show('camera', HINTS.camera, null, 'free', 4500);
     }
 
     // After the first wave: the hero.
@@ -214,25 +220,25 @@ export class Tutorial {
         return this.show('hero_tap', HINTS.hero_tap, () => this.battle.view.project(h.x, h.y + 0.6, h.z), 'above');
       }
       if (run.state === 'playing' && run.heroAbilityReady() && !this.seen('hero_ability') && run.aliveCount() >= 3) {
-        return this.show('hero_ability', HINTS.hero_ability, () => this.hud.rectOf('ability'), 'above', 6000);
+        return this.show('hero_ability', HINTS.hero_ability, () => this.hud.rectOf('ability'), 'above', 5000);
       }
     }
     if (mode === 'build') {
-      if (run.isTowerAvailable('cannon') && !this.seen('new_cannon')) return this.show('new_cannon', HINTS.new_cannon, null, 'free', 6000);
-      if (run.isTowerAvailable('frost') && !this.seen('new_frost')) return this.show('new_frost', HINTS.new_frost, null, 'free', 6000);
+      if (run.isTowerAvailable('cannon') && !this.seen('new_cannon')) return this.show('new_cannon', HINTS.new_cannon, null, 'free', 4000);
+      if (run.isTowerAvailable('frost') && !this.seen('new_frost')) return this.show('new_frost', HINTS.new_frost, null, 'free', 4000);
     }
     if (mode === 'tower' && !this.seen('materials') && run.towers.some((t) => t.tier === 2)) {
-      return this.show('materials', HINTS.materials, null, 'free', 6000);
+      return this.show('materials', HINTS.materials, null, 'free', 4500);
     }
     if (mode === 'tower' && !this.seen('specialise') && run.towers.some((t) => t.tier === BRANCH_TIER)) {
       const anchor = this.hud.rectOf('upgrade');
-      if (anchor) return this.show('specialise', HINTS.specialise, () => this.hud.rectOf('upgrade'), 'above', 6000);
+      if (anchor) return this.show('specialise', HINTS.specialise, () => this.hud.rectOf('upgrade'), 'above', 5000);
     }
     if (w >= 3 && run.state === 'playing' && !this.seen('speed') && this.battle.speed === 1) {
-      return this.show('speed', HINTS.speed, () => this.hud.rectOf('speed'), 'above', 4000);
+      return this.show('speed', HINTS.speed, () => this.hud.rectOf('speed'), 'above', 3500);
     }
     if (w >= 6 && w < 10 && run.state === 'playing' && !this.seen('checkpoint')) {
-      return this.show('checkpoint', HINTS.checkpoint, null, 'free', 6000);
+      return this.show('checkpoint', HINTS.checkpoint, null, 'free', 4500);
     }
     // No free pads left: point at the cheapest overgrown land next to a road.
     if (mode === 'none' && !this.seen('clear_land') && run.gold >= run.clearLandCost() && run.towers.length >= 3) {
@@ -253,7 +259,7 @@ export class Tutorial {
       const p = e && this.battle.view.project(e.x, e.y, e.z);
       if (e && !e.hidden && p && p.x > 20 && p.x < innerWidth - 20 && p.y > 90 && p.y < innerHeight - 120 && !this.seen(key)) {
         const def = ENEMIES[next];
-        return this.show(key, `<b>${def.name}</b>: ${def.description}`, () => this.battle.view.project(e.x, e.y + 0.9, e.z), 'above', 4500);
+        return this.show(key, `<b>${def.name}</b>: ${ENEMY_TIPS[next] ?? def.description}`, () => this.battle.view.project(e.x, e.y + 0.9, e.z), 'above', 3500);
       }
       // Not in view yet: ask again shortly.
       if (e && !this.seen(key)) this.enemyQueue.unshift(next);

@@ -212,8 +212,8 @@ export class Moat {
     u.uNight.value = k;
     this.daySky ??= (u.uSky.value as THREE.Color).clone();
     this.daySun ??= (u.uSunColor.value as THREE.Color).clone();
-    (u.uSky.value as THREE.Color).copy(this.daySky).lerp(new THREE.Color('#121a38'), k);
-    (u.uSunColor.value as THREE.Color).copy(this.daySun).lerp(new THREE.Color('#8fa6e8'), k).multiplyScalar(1 - 0.5 * k);
+    (u.uSky.value as THREE.Color).copy(this.daySky).lerp(new THREE.Color('#1e2a58'), k);
+    (u.uSunColor.value as THREE.Color).copy(this.daySun).lerp(new THREE.Color('#a9bcf0'), k).multiplyScalar(1 - 0.3 * k);
   }
 
   dispose(): void {

@@ -284,6 +284,7 @@ export class Hud {
       this.nextBtn.innerHTML = label.replace(ICONS.coin, `<span class="ico" style="width:18px;height:18px">${ICONS.coin}</span>`);
       this.nextBtn.disabled = !canCall;
       this.nextBtn.classList.toggle('start', run.state === 'prep');
+      this.nextBtn.classList.toggle('long', holding || run.waitingForCheckpoint);
       this.renderPreview();
     }
 

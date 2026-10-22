@@ -238,7 +238,7 @@ export class Scenery {
   setNight(k: number): void {
     const dusk = Math.max(0, 1 - Math.abs(k - 0.5) * 2);
     const skyMat = this.sky.material as THREE.MeshBasicMaterial;
-    skyMat.color.set('#ffffff').lerp(new THREE.Color('#ffb08a'), dusk * 0.45).lerp(new THREE.Color('#1c2552'), k);
+    skyMat.color.set('#ffffff').lerp(new THREE.Color('#ffb08a'), dusk * 0.45).lerp(new THREE.Color('#33407a'), k);
     const sm = this.stars.material as THREE.PointsMaterial;
     sm.opacity = Math.max(0, (k - 0.35) / 0.65);
     this.stars.visible = sm.opacity > 0.01;

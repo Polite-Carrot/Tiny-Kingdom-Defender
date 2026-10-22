@@ -1,5 +1,8 @@
 // Touch-first pointer input: tap, drag-to-pan, pinch/wheel zoom, two-finger twist to turn the view.
 // Mouse: right-drag (or shift-drag) turns, Q/E turn too.
+//
+// Dragging and pinching keep the ground under your fingers: the spot you grabbed stays under the
+// finger as you drag, and a pinch zooms in on the point between your fingers (and pans with it).
 
 import * as THREE from 'three';
 import type { CameraRig } from './CameraRig';
@@ -13,6 +16,8 @@ const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 /** How far (px) a finger may wander and how long (ms) it may stay down and still count as a tap. */
 const TAP_SLOP = 14;
 const TAP_MS = 900;
+/** A two-finger twist must turn this far (radians) before the view starts turning, so pinching doesn't spin it. */
+const TWIST_START = 0.3;
 
 export class Input {
   enabled = true;
@@ -20,6 +25,13 @@ export class Input {
   private pinchDist = 0;
   private pinchZoom = 1;
   private twistAngle = 0;
+  /** How far the fingers have twisted since the pinch began, and whether the view is turning with them. */
+  private twistTotal = 0;
+  private twisting = false;
+  /** Recent drag velocity on the ground (world units per second), for the glide on release. */
+  private velX = 0;
+  private velZ = 0;
+  private lastMoveT = 0;
   /** Mouse drag that turns the view (right button or shift). */
   private turning = false;
   private moved = false;
@@ -69,6 +81,9 @@ export class Input {
       /* Some browsers refuse capture for an already-ending pointer; the tap still counts. */
     }
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
+    this.rig.stopFling();
+    this.velX = this.velZ = 0;
+    this.lastMoveT = performance.now();
     if (this.pointers.size === 1) {
       this.moved = false;
       this.multi = false;
@@ -78,8 +93,10 @@ export class Input {
       this.multi = true;
       const [a, b] = [...this.pointers.values()];
       this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
-      this.pinchZoom = this.rig.zoomTarget;
+      this.pinchZoom = this.rig.zoom;
       this.twistAngle = Math.atan2(b.y - a.y, b.x - a.x);
+      this.twistTotal = 0;
+      this.twisting = false;
     }
   };
 
@@ -92,31 +109,62 @@ export class Input {
       }
       return;
     }
-    const dx = e.clientX - p.x;
-    const dy = e.clientY - p.y;
+    let px = p.x, py = p.y;
+    const dx = e.clientX - px;
     p.x = e.clientX;
     p.y = e.clientY;
-    if (Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_SLOP) this.moved = true;
+    if (!this.moved && Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_SLOP) {
+      this.moved = true;
+      // The first few pixels were held back to tell a drag from a tap: catch up from where the finger landed.
+      px = p.sx;
+      py = p.sy;
+    }
     if (this.pointers.size === 2) {
       const [a, b] = [...this.pointers.values()];
+      // The midpoint before this finger moved, and now.
+      const other = a === p ? b : a;
+      const mx0 = (px + other.x) / 2, my0 = (py + other.y) / 2;
+      const mx1 = (a.x + b.x) / 2, my1 = (a.y + b.y) / 2;
+      const grab = this.toWorld(mx0, my0);
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (this.pinchDist > 0) this.rig.setZoom(this.pinchZoom * (d / this.pinchDist));
-      // Twisting two fingers turns the kingdom with them.
+      if (this.pinchDist > 0) this.rig.setZoomNow(this.pinchZoom * (d / this.pinchDist));
+      // Twisting turns the kingdom, once it is clearly a twist and not a wobbly pinch.
       const ang = Math.atan2(b.y - a.y, b.x - a.x);
       let da = ang - this.twistAngle;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       this.twistAngle = ang;
-      if (Math.abs(da) < 0.5) this.rig.rotateBy(-da);
+      this.twistTotal += da;
+      if (!this.twisting && Math.abs(this.twistTotal) > TWIST_START) this.twisting = true;
+      if (this.twisting && Math.abs(da) < 0.5) this.rig.rotateBy(-da);
+      this.rig.apply();
+      // Keep the ground that was between the fingers between them (zooms on that spot, pans with it).
+      const now = this.toWorld(mx1, my1);
+      if (grab && now) {
+        this.rig.panWorld(grab.x - now.x, grab.z - now.z);
+        this.rig.apply();
+      }
       return;
     }
     if (this.turning) {
       if (this.moved) this.rig.rotateBy(-dx * 0.008);
       return;
     }
-    if (this.moved && this.pointers.size === 1 && this.rig.zoom > 1.02) {
-      const upp = this.rig.unitsPerPixel(window.innerHeight);
-      this.rig.panBy(-dx * upp, -dy * upp * 1.2);
+    if (this.moved && this.pointers.size === 1) {
+      // The ground under the finger stays under the finger.
+      const from = this.toWorld(px, py);
+      const to = this.toWorld(p.x, p.y);
+      if (from && to) {
+        const wx = from.x - to.x, wz = from.z - to.z;
+        this.rig.panWorld(wx, wz);
+        this.rig.apply();
+        const t = performance.now();
+        const dt = Math.max(0.008, (t - this.lastMoveT) / 1000);
+        this.lastMoveT = t;
+        // Smoothed velocity for the glide on release.
+        this.velX = this.velX * 0.6 + (wx / dt) * 0.4;
+        this.velZ = this.velZ * 0.6 + (wz / dt) * 0.4;
+      }
     }
   };
 
@@ -124,6 +172,13 @@ export class Input {
     const p = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
     if (!p || !this.enabled) return;
+    // A flick keeps the view gliding (only if the finger was still moving when it lifted).
+    if (this.moved && !this.multi && !this.turning && performance.now() - this.lastMoveT < 80) {
+      const speed = Math.hypot(this.velX, this.velZ);
+      const max = 40;
+      const k = speed > max ? max / speed : 1;
+      if (speed > 1.5) this.rig.fling(this.velX * k, this.velZ * k);
+    }
     if (!this.moved && !this.multi && performance.now() - p.t < TAP_MS) {
       const w = this.toWorld(e.clientX, e.clientY);
       if (w) this.handlers.onTap(w.x, w.z, e.clientX, e.clientY);
@@ -137,6 +192,14 @@ export class Input {
   private wheel = (e: WheelEvent) => {
     e.preventDefault();
     if (!this.enabled) return;
-    this.rig.setZoom(this.rig.zoomTarget * (e.deltaY > 0 ? 0.9 : 1.1));
+    // Zoom towards the mouse pointer.
+    const grab = this.toWorld(e.clientX, e.clientY);
+    this.rig.setZoomNow(this.rig.zoom * (e.deltaY > 0 ? 0.9 : 1.1));
+    this.rig.apply();
+    const now = this.toWorld(e.clientX, e.clientY);
+    if (grab && now) {
+      this.rig.panWorld(grab.x - now.x, grab.z - now.z);
+      this.rig.apply();
+    }
   };
 }

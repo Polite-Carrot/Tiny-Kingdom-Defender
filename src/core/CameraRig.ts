@@ -12,16 +12,21 @@ export interface SafeRect {
 
 const PITCH = THREE.MathUtils.degToRad(58);
 
+/** The siege opens this far in from the whole-board view (1), so the board fills the screen. */
+const DEFAULT_ZOOM = 1.3;
+
 export class CameraRig {
-  zoom = 1;
+  zoom = DEFAULT_ZOOM;
   readonly minZoom = 1;
-  readonly maxZoom = 2.4;
+  readonly maxZoom = 2.6;
   pan = new THREE.Vector2();
   private baseDist = 20;
   private shakeAmt = 0;
   private shakeT = 0;
   private corners: THREE.Vector3[] = [];
-  private targetZoom = 1;
+  private targetZoom = DEFAULT_ZOOM;
+  /** Glide after a flick (world units per second), slowing to a stop. */
+  private vel = new THREE.Vector2();
 
   constructor(private camera: THREE.PerspectiveCamera, private half = 6.9) {
     this.setBounds(half);
@@ -99,15 +104,16 @@ export class CameraRig {
   /** Whether the player has turned, zoomed or panned away from the standard view. */
   isMoved(): boolean {
     const a = Math.atan2(Math.sin(this.yawTarget), Math.cos(this.yawTarget));
-    return Math.abs(a) > 0.02 || this.targetZoom > 1.02 || Math.hypot(this.pan.x, this.pan.y) > 0.05;
+    return Math.abs(a) > 0.02 || Math.abs(this.targetZoom - DEFAULT_ZOOM) > 0.03 || Math.hypot(this.pan.x, this.pan.y) > 0.05;
   }
 
   /** Back to the standard view: facing the gate, zoomed out and centred. */
   recentre(): void {
     // Turn back the short way.
     this.yawTarget = Math.round(this.yawTarget / (Math.PI * 2)) * Math.PI * 2;
-    this.targetZoom = 1;
+    this.targetZoom = DEFAULT_ZOOM;
     this.pan.set(0, 0);
+    this.vel.set(0, 0);
   }
   /** Cinematic focus: glide to a point and zoom in, then ease back when cleared. */
   private focus: { x: number; z: number; zoom: number } | null = null;
@@ -139,6 +145,34 @@ export class CameraRig {
     this.targetZoom = THREE.MathUtils.clamp(z, this.minZoom, this.maxZoom);
   }
 
+  /** Zooms at once (fingers on the screen), not eased. */
+  setZoomNow(z: number): void {
+    this.setZoom(z);
+    this.zoom = this.targetZoom;
+  }
+
+  /** Moves the view by a world-space amount, at once. */
+  panWorld(dx: number, dz: number): void {
+    this.pan.x += dx;
+    this.pan.y += dz;
+    this.clampPan();
+  }
+
+  /** Keeps gliding after the finger lifts (world units per second). */
+  fling(vx: number, vz: number): void {
+    this.vel.set(vx, vz);
+  }
+
+  /** A finger landed: stop any glide. */
+  stopFling(): void {
+    this.vel.set(0, 0);
+  }
+
+  /** Places the camera for the current pan and zoom right away, so the next touch reads the view it sees. */
+  apply(): void {
+    this.update(0);
+  }
+
   get zoomTarget(): number {
     return this.targetZoom;
   }
@@ -152,14 +186,16 @@ export class CameraRig {
   }
 
   private clampPan(): void {
-    const lim = this.half * (1 - 1 / this.zoom) * 1.1;
+    // Zoomed right out you can still nudge the view a little; zoomed in, reach every edge.
+    const lim = this.half * (1 - 1 / this.zoom) * 1.15 + this.half * 0.12;
     this.pan.x = THREE.MathUtils.clamp(this.pan.x, -lim, lim);
     this.pan.y = THREE.MathUtils.clamp(this.pan.y, -lim, lim);
   }
 
   resetView(): void {
-    this.targetZoom = 1;
+    this.targetZoom = this.zoom = DEFAULT_ZOOM;
     this.pan.set(0, 0);
+    this.vel.set(0, 0);
     this.yawTarget = Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
   }
 
@@ -175,6 +211,12 @@ export class CameraRig {
 
   update(dt: number): void {
     this.zoom += (this.targetZoom - this.zoom) * Math.min(1, dt * 12);
+    if (dt > 0 && (this.vel.x || this.vel.y)) {
+      this.pan.x += this.vel.x * dt;
+      this.pan.y += this.vel.y * dt;
+      this.vel.multiplyScalar(Math.exp(-dt * 5));
+      if (this.vel.length() < 0.05) this.vel.set(0, 0);
+    }
     this.clampPan();
     this.shakeT += dt;
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.2);
@@ -193,7 +235,9 @@ export class CameraRig {
     this.focusK += ((this.focus ? 1 : 0) - this.focusK) * Math.min(1, dt * 2.2);
     const k = this.focusK * this.focusK * (3 - 2 * this.focusK);
     const f = this.lastFocus;
-    const zoom = this.zoom + (f.zoom - this.zoom) * k;
+    // The menu's slow orbit always shows the whole kingdom.
+    const base = this.orbit ? 1 : this.zoom;
+    const zoom = base + (f.zoom - base) * k;
     const px = this.pan.x + (f.x - this.pan.x) * k;
     const pz = this.pan.y + (f.z - this.pan.y) * k;
     this.place(this.baseDist / zoom * (this.orbit ? 1.12 : 1), px + sx, pz + sz, 0, this.yaw, pitch);

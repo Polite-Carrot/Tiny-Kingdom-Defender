@@ -8,15 +8,17 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 export type Quality = 'low' | 'high';
 
+// Night is a bright, blue moonlit night: dark enough to feel like night and show off the lanterns,
+// light enough that every tower and enemy reads clearly on a phone.
 const NIGHT = {
-  sky: new THREE.Color('#0d1430'),
-  fog: new THREE.Color('#1a2346'),
+  sky: new THREE.Color('#1b2754'),
+  fog: new THREE.Color('#2c3a6a'),
   duskSky: new THREE.Color('#e88a5a'),
   duskSun: new THREE.Color('#ff9a5a'),
-  moon: new THREE.Color('#a8bcff'),
-  ambient: new THREE.Color('#7f90e0'),
+  moon: new THREE.Color('#c6d4ff'),
+  ambient: new THREE.Color('#a9b8f2'),
   duskAmbient: new THREE.Color('#ffb48a'),
-  ground: new THREE.Color('#2a2440'),
+  ground: new THREE.Color('#4c4a74'),
 };
 
 export class Renderer {
@@ -140,10 +142,10 @@ export class Renderer {
     bg.copy(this.base.sky).lerp(NIGHT.sky, k).lerp(NIGHT.duskSky, dusk * 0.35);
     (this.scene.fog as THREE.Fog).color.copy(this.base.fog).lerp(NIGHT.fog, k).lerp(NIGHT.duskSky, dusk * 0.3);
     this.sun.color.copy(this.base.sun).lerp(NIGHT.duskSun, dusk * 0.9).lerp(NIGHT.moon, k);
-    this.sun.intensity = 1.65 * (1 - 0.5 * k);
+    this.sun.intensity = 1.65 * (1 - 0.3 * k);
     this.hemi.color.copy(this.base.ambient).lerp(NIGHT.duskAmbient, dusk * 0.5).lerp(NIGHT.ambient, k);
     this.hemi.groundColor.set('#6b5a40').lerp(NIGHT.ground, k);
-    this.hemi.intensity = 0.95 * (1 - 0.25 * k);
+    this.hemi.intensity = 0.95 * (1 + 0.05 * k);
     if (this.bloom) this.bloom.strength = 0.32 + 0.3 * k;
     // Weather: thicker, tinted fog and dimmer light; lightning flashes it all bright.
     const fog = this.scene.fog as THREE.Fog;
