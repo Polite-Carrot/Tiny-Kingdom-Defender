@@ -6,7 +6,7 @@ import { Input } from '../core/Input';
 import { SaveSystem, type StorageLike } from '../core/Save';
 import { AudioSystem, type MusicTrack } from '../systems/Audio';
 import { UI } from '../ui/UI';
-import { Hud } from '../ui/Hud';
+import { Hud, type HeroInfo } from '../ui/Hud';
 import { LocalAnalytics } from '../analytics/Analytics';
 import { ConsentedAnalytics } from '../analytics/FirebaseAnalytics';
 import { AdManager } from '../ads/AdManager';
@@ -21,7 +21,7 @@ import { GRID_SIZE } from '../data/base';
 import { gridSize } from './LevelMap';
 import { themeOf, setActiveMap } from './Siege';
 import type { MapId } from '../data/maps';
-import type { HeroId } from '../data/heroes';
+import { HERO_GEAR, HERO_LEVELS, PERKS, PERK_TIERS, gearTierFor, xpForLevel, type HeroId } from '../data/heroes';
 import { setHaptics } from '../core/Haptics';
 import { TitleScreen } from '../ui/Screens';
 import * as Modals from '../ui/Modals';
@@ -80,8 +80,10 @@ export class Game {
       toggleAuto: () => this.battle?.toggleAuto(),
       castSpell: (id) => this.battle?.castSpell(id),
       nextWave: () => this.battle?.nextWave(),
-      selectHero: (slot) => this.battle?.toggleHero(slot),
+      selectHero: (slot) => this.battle?.heroButton(slot),
       placeHero: (slot) => this.battle?.placeHero(slot),
+      moveHero: (slot) => this.battle?.toggleHero(slot),
+      heroInfo: (slot) => this.heroInfo(slot),
       ability: (slot) => this.battle?.ability(slot),
       buildPreview: (id) => this.battle?.buildPreview(id),
       build: (id) => this.battle?.build(id),
@@ -495,6 +497,30 @@ export class Game {
       b.applyMeta();
       if (!this.s.ads.showing) b.paused = false;
     });
+  }
+
+  /** Level, XP and what's next for a hero on the field (the hero card). */
+  private heroInfo(slot: number): HeroInfo {
+    const { meta } = this.s;
+    const h = this.battle?.run.heroes[slot];
+    const id = h?.def.id ?? meta.d.selectedHero;
+    const level = meta.heroLevel(id);
+    const xp = meta.heroXp(id);
+    const atMax = level >= HERO_LEVELS.max;
+    const from = xpForLevel(level);
+    const nextPerk = PERK_TIERS.find((t) => t.level > level);
+    const nextGear = HERO_GEAR.find((g) => g.level > level);
+    const next = [nextPerk && `Lv ${nextPerk.level}: choose a skill`, nextGear && `Lv ${nextGear.level}: ${nextGear.name} gear`]
+      .filter(Boolean)
+      .sort((a, b) => parseInt(a!.slice(3)) - parseInt(b!.slice(3)))[0] ?? null;
+    return {
+      level,
+      xpIn: atMax ? 0 : xp - from,
+      xpNeed: atMax ? 0 : xpForLevel(level + 1) - from,
+      gear: HERO_GEAR[gearTierFor(level)].name,
+      next,
+      perks: meta.heroPerks(id).map((p) => PERKS[p].name),
+    };
   }
 
   /** Debug: hand the current battle to the heuristic AI. */

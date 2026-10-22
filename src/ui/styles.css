@@ -796,3 +796,9 @@ body.landscape .hud.ctx-open .hud-cam { display: none; }
   .modal .modal-content > .ribbon { margin: 0 -12px 8px; padding: 10px 40px; font-size: 19px; }
   .modal .footer { bottom: -12px; margin: 8px -12px -12px; }
 }
+
+/* Hero card: level and XP to the next level. */
+.hero-xp { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: var(--ink-soft); margin-top: 2px; }
+.hero-xp b { color: var(--ink); }
+.hero-xp .hbar { flex: 1; height: 7px; border-radius: 4px; background: rgba(0,0,0,.12); overflow: hidden; min-width: 60px; }
+.hero-xp .hbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); }

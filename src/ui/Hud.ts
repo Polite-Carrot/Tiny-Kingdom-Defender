@@ -21,6 +21,10 @@ export interface HudCallbacks {
   selectHero(slot: number): void;
   /** Build menu: put a waiting hero on the selected pad. */
   placeHero(slot: number): void;
+  /** Hero card: pick the hero up to move them to another pad. */
+  moveHero(slot: number): void;
+  /** Level, XP and unlocks for the hero card. */
+  heroInfo(slot: number): HeroInfo;
   ability(slot: number): void;
   buildPreview(id: TowerId | null): void;
   build(id: TowerId): void;
@@ -37,6 +41,17 @@ export interface HudCallbacks {
   rotateView(): void;
   recentreView(): void;
   viewMoved(): boolean;
+}
+
+export interface HeroInfo {
+  level: number;
+  /** XP into this level, and needed for the next (0 at max level). */
+  xpIn: number;
+  xpNeed: number;
+  gear: string;
+  /** What the next level that unlocks something brings, e.g. "Lv 7: choose a skill". */
+  next: string | null;
+  perks: string[];
 }
 
 const ABILITY_ICON = { arrowRain: 'arrows', taunt: 'shield', meteor: 'meteor', quake: 'quake', holyLight: 'holy', shadowStrike: 'shadow', rapidFire: 'fast' } as const;
@@ -65,7 +80,7 @@ export class Hud {
   private vignette: HTMLElement;
   private fpsEl: HTMLElement;
   private run: Run | null = null;
-  private ctxMode: 'none' | 'build' | 'tower' | 'land' | 'wall' = 'none';
+  private ctxMode: 'none' | 'build' | 'tower' | 'land' | 'wall' | 'hero' = 'none';
   /** A finger is down on the context panel (its redraw waits until it lifts). */
   private ctxPressed = false;
   private ctxTile: [number, number] = [0, 0];
@@ -339,6 +354,8 @@ export class Hud {
           ? String(run.gold >= run.landCost(this.ctxSpot))
           : this.ctxMode === 'wall'
             ? this.wallKey()
+          : this.ctxMode === 'hero'
+            ? this.heroKey()
           : String(t && run.gold >= (run.upgradeCost(t) ?? Infinity));
       const ctxKey = `${this.ctxMode}|${performance.now() < this.sellArmedUntil}|${afford}|${t?.tier}|${t?.branch}|${t?.targetMode}|${t?.synergies.join()}|${this.previewId}`;
       if (t) {
@@ -351,6 +368,7 @@ export class Hud {
         if (this.ctxMode === 'build') this.renderBuild();
         else if (this.ctxMode === 'land') this.renderLand();
         else if (this.ctxMode === 'wall') this.renderWall();
+        else if (this.ctxMode === 'hero') this.renderHero();
         else this.renderTower();
       }
     }
@@ -468,7 +486,17 @@ export class Hud {
     this.renderTower();
   }
 
+  /** Re-render the hero card when its numbers change (level, ability charge, affordability). */
+  private heroKey(): string {
+    const run = this.run!;
+    const h = run.heroes[this.ctxHero];
+    if (!h) return '';
+    const i = this.cb.heroInfo(h.slot);
+    return `${i.level}|${i.xpIn}|${Math.ceil(h.abilityCd / this.speed)}|${run.gold >= run.heroMoveCost(h)}|${h.post}|${i.perks.join()}`;
+  }
+
   closeCtx(): void {
+    this.ctxHero = -1;
     this.ctxMode = 'none';
     this.ctxTower = null;
     this.ctxSpot = -1;
@@ -480,7 +508,54 @@ export class Hud {
     return this.ctxSpot;
   }
 
-  get mode(): 'none' | 'build' | 'tower' | 'land' | 'wall' {
+  /** The hero whose card is open (-1 = none). */
+  private ctxHero = -1;
+
+  openHero(slot: number): void {
+    this.ctxMode = 'hero';
+    this.ctxHero = slot;
+    this.ctxTower = null;
+    this.ctxSpot = this.run?.heroes[slot]?.post ?? -1;
+    this.previewId = null;
+    this.lastCtxKey = '';
+    this.ctx.classList.remove('hidden');
+    this.renderHero();
+  }
+
+  get heroCard(): number {
+    return this.ctxMode === 'hero' ? this.ctxHero : -1;
+  }
+
+  private renderHero(): void {
+    const run = this.run!;
+    const h = run.heroes[this.ctxHero];
+    if (!h) return;
+    const info = this.cb.heroInfo(h.slot);
+    const ab = h.def.ability;
+    const rate = (1 / (h.def.cooldown * (run.heroHasPerk('swift', h) ? 0.8 : 1))).toFixed(1);
+    const range = h.def.global ? 'All map' : run.heroRange(h).toFixed(1);
+    const move = run.heroMoveCost(h);
+    const xpPct = info.xpNeed > 0 ? Math.round((info.xpIn / info.xpNeed) * 100) : 100;
+    const cd = h.abilityCd > 0 ? `Ready in ${Math.ceil(h.abilityCd / this.speed)}s` : 'Ready!';
+    this.ctx.innerHTML = `
+      <div class="ctx-head"><img src="${heroThumb(h.def.id)}" style="width:40px;height:40px;border-radius:50%" alt=""/>
+        <span class="name">${h.def.name} <small class="muted">${h.def.title}</small>
+          <div class="hero-xp"><b>Lv ${info.level}</b> ${info.gear}<div class="hbar"><i style="width:${xpPct}%"></i></div></div></span>
+        <button class="x" aria-label="Close">✕</button></div>
+      <div class="tstats">
+        <div>${Math.round(h.damage)}<small>DAMAGE</small></div>
+        <div>${range}<small>RANGE</small></div>
+        <div>${rate}<small>SHOTS/S</small></div>
+      </div>
+      <div class="ctx-info"><b>${ab.name}:</b> ${ab.description} <span class="muted">· ${cd}</span></div>
+      ${info.perks.length ? `<div class="ctx-info">Skills: <b>${info.perks.join(' · ')}</b></div>` : ''}
+      <div class="ctx-info muted">${info.next ? `Next: ${info.next}. ` : ''}Levels up from the enemies ${h.def.name} defeats.</div>
+      <div class="ctx-row"><button class="btn blue move-btn ${run.gold < move ? 'disabled' : ''}">Move to another pad <span class="cost">${icon('coin')}${move}</span></button></div>`;
+    $(this.ctx, '.x').onclick = () => this.cb.closeCtx();
+    $(this.ctx, '.move-btn').onclick = () => this.cb.moveHero(h.slot);
+  }
+
+  get mode(): 'none' | 'build' | 'tower' | 'land' | 'wall' | 'hero' {
     return this.ctxMode;
   }
 

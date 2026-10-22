@@ -490,10 +490,13 @@ export class Battle {
         tapped = h;
       }
     }
+    // Tapping the pad a hero stands on is tapping the hero.
+    if (!tapped && best >= 0) tapped = run.heroAt(best) ?? null;
     const sel = run.heroes[this.selHero] ?? null;
     if (tapped) {
       if (tapped === sel) this.setHeroSelected(-1), this.view.hideRange(), this.s.audio.play('select');
-      else this.toggleHero(tapped.slot);
+      else if (this.hud.heroCard === tapped.slot) this.deselect();
+      else this.openHeroCard(tapped.slot);
       return;
     }
     // A selected hero can be stationed on any empty pad.
@@ -585,6 +588,12 @@ export class Battle {
       return;
     }
     this.setHeroSelected(-1);
+    // A hero stands here: show the hero, never the build menu.
+    const onPad = this.run.heroAt(spot);
+    if (onPad) {
+      this.openHeroCard(onPad.slot);
+      return;
+    }
     const t = this.run.towerAt(spot);
     this.view.highlightSpot(spot);
     this.s.audio.play('select');
@@ -644,7 +653,31 @@ export class Battle {
     this.placeHeroOn(h, spot);
   }
 
-  /** Selects (or deselects) the hero in a slot. */
+  /** The hero's card: range on the board, level, stats, and Move. */
+  openHeroCard(slot: number): void {
+    const h = this.run.heroes[slot];
+    if (!h || h.post < 0) return;
+    this.setHeroSelected(-1);
+    this.view.highlightSpot(h.post);
+    if (h.def.global) this.view.hideRange();
+    else this.view.showRange(h.x, h.z, this.run.heroRange(h), '#7dff9a');
+    this.hud.openHero(slot);
+    this.s.audio.play('select');
+  }
+
+  /** Hero portrait: place a waiting hero, or show the card of one on the field. */
+  heroButton(slot: number): void {
+    const h = this.run.heroes[slot];
+    if (!h) return;
+    if (h.post >= 0 && this.selHero !== slot) {
+      if (this.hud.heroCard === slot) this.deselect();
+      else this.openHeroCard(slot);
+      return;
+    }
+    this.toggleHero(slot);
+  }
+
+  /** Selects (or deselects) the hero in a slot: the next empty pad tapped is where they go. */
   toggleHero(slot = 0): void {
     const run = this.run;
     const h = run.heroes[slot];
