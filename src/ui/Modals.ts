@@ -533,7 +533,8 @@ function chestSvg(): string {
 
 /** Chest opening: it drops in, rattles harder and harder with light leaking out, then bursts open
  *  and the coins and shards fly out into the reward rows. Tap the chest to skip ahead. */
-export function chestReveal(game: Game, reward: ChestReward): void {
+/** after: runs once the reveal is closed (the Chests screen reopens itself this way). */
+export function chestReveal(game: Game, reward: ChestReward, after?: () => void): void {
   const { audio } = game.s;
   const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   game.s.ui.modal((m, h) => {
@@ -655,7 +656,7 @@ export function chestReveal(game: Game, reward: ChestReward): void {
       }
       h.close();
     };
-  });
+  }, { onClose: () => after?.() });
 }
 
 export function chest(game: Game): void {
@@ -680,7 +681,7 @@ export function chest(game: Game): void {
         const r = meta.openFreeChest();
         if (r) {
           handle?.close();
-          chestReveal(game, r);
+          chestReveal(game, r, () => chest(game));
         }
       };
       slot.append(b);
@@ -689,7 +690,7 @@ export function chest(game: Game): void {
         const r = meta.openFreeChest(true);
         if (r) {
           handle?.close();
-          chestReveal(game, r);
+          chestReveal(game, r, () => chest(game));
         }
       }, 'small'));
     }
@@ -697,7 +698,7 @@ export function chest(game: Game): void {
       const r = meta.openMilestoneChest();
       if (r) {
         handle?.close();
-        chestReveal(game, r);
+        chestReveal(game, r, () => chest(game));
       }
     });
   };
