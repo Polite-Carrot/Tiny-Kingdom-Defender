@@ -802,3 +802,20 @@ body.landscape .hud.ctx-open .hud-cam { display: none; }
 .hero-xp b { color: var(--ink); }
 .hero-xp .hbar { flex: 1; height: 7px; border-radius: 4px; background: rgba(0,0,0,.12); overflow: hidden; min-width: 60px; }
 .hero-xp .hbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); }
+
+/* Locked menu buttons: dimmed, with what opens them written on the button itself. */
+.side-btn.locked, .btn.purple.locked { filter: none; opacity: 1; }
+.side-btn.locked { color: #9a8f80; }
+.side-btn.locked > .ico { filter: grayscale(1); opacity: .45; }
+.btn.purple.locked { filter: grayscale(.85); }
+.lock-tag { display: none; position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); align-items: center; gap: 3px; font-size: 11px; font-weight: 900; background: var(--ink); color: #fff; border-radius: 8px; padding: 1px 7px 1px 4px; white-space: nowrap; z-index: 2; }
+.lock-tag.on { display: inline-flex; }
+.lock-tag .ico { width: 12px !important; height: 12px !important; filter: brightness(0) invert(1); }
+.side-btn.locked .timer { display: none; }
+.lock-info { text-align: center; padding: 4px 8px 10px; }
+.lock-info > b { font-size: 20px; display: block; margin-bottom: 4px; }
+.lock-info p { margin: 0 0 10px; }
+.lock-info .tbar { display: block; height: 10px; border-radius: 6px; background: rgba(0,0,0,.12); overflow: hidden; margin: 0 auto 4px; max-width: 260px; }
+.lock-info .tbar b { display: block; height: 100%; background: var(--gold, #ffc93c); }
+.unlock-state { flex: none; width: 28px; text-align: center; font-weight: 900; font-size: 18px; color: #3a9a3a; }
+.unlock-state .ico { width: 20px; height: 20px; }

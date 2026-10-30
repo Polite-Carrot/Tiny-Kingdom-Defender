@@ -88,12 +88,12 @@ export class TitleScreen {
   private gate(f: keyof typeof UNLOCK_WAVE, fn: () => void): void {
     const meta = this.game.s.meta;
     if (meta.featureUnlocked(f)) fn();
-    else this.game.s.ui.toast(`Unlocks when you reach wave ${UNLOCK_WAVE[f]}`);
+    else Modals.locked(this.game, f);
   }
 
   /** Text for a locked hub tile, or null when open. */
   private lockText(f: keyof typeof UNLOCK_WAVE): string | null {
-    return this.game.s.meta.featureUnlocked(f) ? null : `Reach wave ${UNLOCK_WAVE[f]}`;
+    return this.game.s.meta.featureUnlocked(f) ? null : `Unlocks at wave ${UNLOCK_WAVE[f]}`;
   }
 
   private rewardsHub(): void {
@@ -127,6 +127,7 @@ export class TitleScreen {
       { label: 'Trophies', icon: icon('trophy'), sub: `${d.achievements.length} earned`, open: () => Modals.trophies(g) },
       { label: 'Bestiary', icon: icon('skull'), sub: `${Object.values(d.bestiary).filter((b) => b && b.seen > 0).length} met`, open: () => Modals.bestiary(g) },
       { label: 'Stats', icon: icon('scroll'), sub: `Best wave ${g.s.meta.bestWave()}`, open: () => Modals.stats(g) },
+      { label: 'How to Unlock', icon: icon('lock'), sub: 'Every unlock', open: () => Modals.unlockGuide(g) },
     ]);
   }
 
@@ -168,7 +169,16 @@ export class TitleScreen {
     setDot('.track-btn', !!n.pass);
     setDot('.kingdom-btn', n.town);
     setDot('.challenge-btn', n.challenge);
-    const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => $(this.el, sel).classList.toggle('locked', !meta.featureUnlocked(f));
+    // Locked buttons say what opens them, right on the button.
+    const lock = (sel: string, f: keyof typeof UNLOCK_WAVE) => {
+      const b = $(this.el, sel);
+      const off = !meta.featureUnlocked(f);
+      b.classList.toggle('locked', off);
+      let tag = b.querySelector<HTMLElement>('.lock-tag');
+      if (off && !tag) b.append((tag = el('span', 'lock-tag')));
+      if (tag) tag.innerHTML = off ? `${icon('lock')}Wave ${UNLOCK_WAVE[f]}` : '';
+      tag?.classList.toggle('on', off);
+    };
     lock('.shop', 'shop');
     lock('.heroes', 'heroes');
     lock('.rewards', 'dailyLogin');

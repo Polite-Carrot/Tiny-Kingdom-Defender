@@ -25,7 +25,7 @@ import { BUILDINGS, BUILDING_BY_ID, type BuildingId } from '../data/kingdom';
 import { MASTERY, masteryTitle, towerBonusText } from '../data/mastery';
 import { ageTitle } from '../game/Siege';
 import { MAPS, MAP_BY_ID, type MapDef, type MapId } from '../data/maps';
-import { GRID_SIZE, UNLOCK_WAVE } from '../data/base';
+import { GRID_SIZE, UNLOCK_WAVE, TOWER_UNLOCK_WAVE, BARRICADE } from '../data/base';
 import { SPELLS, SPELL_RULES, spellPower, spellCooldown, type SpellId } from '../data/spells';
 
 // --- Helpers --------------------------------------------------------------------------
@@ -1468,7 +1468,7 @@ export function hub(game: Game, title: string, tiles: HubTile[]): void {
     m.querySelectorAll<HTMLButtonElement>('[data-i]').forEach((b) => (b.onclick = () => {
       const t = tiles[Number(b.dataset.i)];
       if (t.locked) {
-        game.s.ui.toast(t.locked);
+        game.s.ui.toast(`${t.label}: ${t.locked}`);
         return;
       }
       h.close();
@@ -1584,4 +1584,87 @@ export function rewardTrack(game: Game): void {
     };
     render();
   }, { wide: true, onClose: () => refreshCoins(game) });
+}
+
+// --- How to unlock ----------------------------------------------------------------------------------
+
+/** What a feature on the main menu is called, for the lock popup and the guide. */
+const FEATURE_NAMES: Partial<Record<keyof typeof UNLOCK_WAVE, string>> = {
+  dailyLogin: 'Rewards and the Reward Track',
+  shop: 'The Shop',
+  missions: 'Daily Missions',
+  treasury: 'The Treasury',
+  kingdom: 'The Kingdom (town buildings)',
+  chests: 'Chests',
+  challenge: 'The Daily Challenge',
+  heroes: 'Heroes',
+  realms: 'Realms',
+};
+
+/** Tapped something locked: say exactly what opens it, with a way to the full list. */
+export function locked(game: Game, f: keyof typeof UNLOCK_WAVE): void {
+  const best = game.s.meta.bestWave();
+  const need = UNLOCK_WAVE[f];
+  game.s.ui.modal((m, h) => {
+    m.innerHTML = `<div class="ribbon">${icon('lock')} Locked</div>
+      <div class="lock-info">
+        <b>${FEATURE_NAMES[f] ?? f}</b>
+        <p>Unlocks when you reach <b>wave ${need}</b> in any siege. Press Play, build towers and hold back the waves.</p>
+        <div class="tbar"><b style="width:${Math.min(100, Math.round((best / need) * 100))}%"></b></div>
+        <small>Your best: wave ${best} of ${need}</small>
+      </div>
+      <div class="actions"><button class="btn guide">${icon('scroll')} How to unlock everything</button><button class="btn gold ok">OK</button></div>`;
+    $(m, '.ok').onclick = () => h.close();
+    $(m, '.guide').onclick = () => {
+      h.close();
+      setTimeout(() => unlockGuide(game), 120);
+    };
+  });
+}
+
+/**
+ * Every unlock in the game and what opens it. Nothing is bought with money: features open as your
+ * best wave climbs, and heroes, the second hero slot, Lightning and town buildings cost coins
+ * earned in play.
+ */
+export function unlockGuide(game: Game): void {
+  const { meta } = game.s;
+  const best = meta.bestWave();
+  const coinIco = icon('coin', 'inline');
+  type Row = { name: string; how: string; done: boolean; thumb?: string };
+  const waveRow = (name: string, wave: number, thumb?: string, extra = ''): Row => ({
+    name,
+    how: wave <= 0 ? 'Open from the start' : `Reach wave ${wave}${extra}`,
+    done: best >= wave && !extra,
+    thumb,
+  });
+  const features: Row[] = (Object.keys(FEATURE_NAMES) as (keyof typeof UNLOCK_WAVE)[]).map((f) => waveRow(FEATURE_NAMES[f]!, UNLOCK_WAVE[f]));
+  features.push(waveRow('Barricades', BARRICADE.unlockWave));
+  features.push({ name: 'Second hero slot', how: `Reach wave ${UNLOCK_WAVE.heroSlot2}, then buy it in Heroes for ${fmt(HERO_SLOT2_COST)} ${coinIco}`, done: !!meta.d.unlocks.heroSlot2 });
+  features.sort((a, b) => Number(a.how.match(/\d+/)?.[0] ?? 0) - Number(b.how.match(/\d+/)?.[0] ?? 0));
+  const towers: Row[] = TOWER_ORDER.map((id) => id === 'lightning'
+    ? { name: TOWERS[id].name, how: `Reach wave ${UNLOCKS.lightning.requiresWave}, then buy it in the Shop for ${fmt(UNLOCKS.lightning.cost)} ${coinIco}`, done: !!meta.d.unlocks.lightning, thumb: towerThumb(id) }
+    : waveRow(TOWERS[id].name, TOWER_UNLOCK_WAVE[id], towerThumb(id)));
+  const spells: Row[] = SPELLS.map((s) => waveRow(s.name, s.unlockWave));
+  const heroes: Row[] = HERO_ORDER.map((id) => {
+    const cost = HERO_UNLOCK_COST[id] ?? 0;
+    return { name: HEROES[id].name, how: cost ? `Open Heroes (wave ${UNLOCK_WAVE.heroes}), then hire for ${fmt(cost)} ${coinIco}` : 'Your first hero, free', done: meta.d.unlocks.heroes.includes(id), thumb: heroThumb(id) };
+  });
+  const town: Row[] = BUILDINGS.map((b) => ({ name: b.name, how: `Reach wave ${b.unlockWave}, then build for ${fmt(b.cost)} ${coinIco}`, done: meta.d.buildings.includes(b.id) }));
+  const realmRows: Row[] = MAPS.map((def) => waveRow(def.name, def.unlockWave ? Math.max(def.unlockWave, UNLOCK_WAVE.realms) : 0));
+  const section = (title: string, rows: Row[]) => `<div class="stat-section">${title}</div><div class="list">${rows.map((r) => `
+    <div class="list-item ${r.done ? 'built' : 'locked-row'}">${r.thumb ? `<div class="thumb"><img src="${r.thumb}" alt=""/></div>` : ''}
+      <div class="body"><div class="name">${r.name}</div><div class="desc">${r.how}</div></div>
+      <span class="unlock-state">${r.done ? '✓' : icon('lock')}</span></div>`).join('')}</div>`;
+  game.s.ui.modal((m) => {
+    m.innerHTML = `<div class="ribbon">${icon('lock')} How to Unlock</div>
+      <div class="muted" style="text-align:center;margin-bottom:8px">Everything unlocks by playing. Press <b>Play</b> and survive the waves: your <b>best wave</b> in any siege opens new towers, spells and menus. Coins come from waves, chests, missions and the treasury. There is nothing to buy with real money.</div>
+      <div class="stat-grid" style="grid-template-columns:minmax(0,160px);justify-content:center"><div>${best}<small>YOUR BEST WAVE</small></div></div>
+      ${section('Menus and features', features)}
+      ${section('Towers', towers)}
+      ${section('Spells', spells)}
+      ${section('Heroes', heroes)}
+      ${section('Town buildings', town)}
+      ${section('Realms', realmRows)}`;
+  });
 }

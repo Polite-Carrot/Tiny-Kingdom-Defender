@@ -596,7 +596,14 @@ export class Hud {
     this.ctx.querySelectorAll<HTMLButtonElement>('[data-tower]').forEach((b) => {
       b.onclick = () => {
         const id = b.dataset.tower as TowerId;
-        if (!run.isTowerAvailable(id)) return;
+        if (!run.isTowerAvailable(id)) {
+          // Say what opens it.
+          const info = this.ctx.querySelector<HTMLElement>('.ctx-info');
+          if (info) info.textContent = id === 'lightning'
+            ? `${TOWERS[id].name} unlocks at wave ${TOWER_UNLOCK_WAVE[id]}: then buy it in the Shop with coins.`
+            : `${TOWERS[id].name} unlocks when you reach wave ${TOWER_UNLOCK_WAVE[id]}.`;
+          return;
+        }
         if (this.previewId === id) this.cb.build(id);
         else this.cb.buildPreview(id);
       };
